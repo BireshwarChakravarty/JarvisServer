@@ -11,6 +11,10 @@ smart home and terminal. Everything shows on a live, holographic HUD.
 
 ![JARVIS HUD](docs/hud.png)
 
+<img src="docs/hud-listening.png" width="49%" alt="Listening"> <img src="docs/hud-boot.png" width="49%" alt="Boot">
+
+<sub>Speaking · listening (gold = your voice) · ignition. The design rationale is in <a href="DESIGN.md">DESIGN.md</a>.</sub>
+
 </div>
 
 ---
@@ -103,7 +107,7 @@ Run **`jarvis doctor`** at any time to see what's working and what's missing.
 - *"Engage work mode."* · *"House party protocol."* · *"Good night, Jarvis."*
 - *"That's all, thanks."* ends the conversation.
 
-You can also type into the HUD's command bar. Shortcuts: **Space** listens, **Esc** stops, **/** focuses the command bar. **⌘⇧J** shows or hides the HUD.
+You can also type into the HUD's command bar. The HUD's centrepiece is the core: its rings show live audio, work in progress, and a dial of your next 12 hours with meetings drawn on it ([DESIGN.md](DESIGN.md)). Shortcuts: **Space** listens, **Esc** stops, **/** focuses the command bar. **⌘⇧J** shows or hides the HUD.
 
 ---
 
@@ -223,7 +227,7 @@ mcp_servers:
 | `jarvis/vision/` | Camera, faces, presence, gestures |
 | `jarvis/mac/` | AppleScript/JXA, EventKit, Shortcuts, session lock detection, the .app builder |
 | `jarvis/tools/` | Tool registry (schemas, validation, confirmation gating), built-in tools, MCP bridge |
-| `jarvis/hud/` | FastAPI server and the HUD (vanilla JS + canvas, no build step) |
+| `jarvis/hud/` | FastAPI server and the HUD: a WebGL arc-reactor core plus vanilla JS, no build step ([design notes](DESIGN.md)) |
 
 ### Design notes
 - **Latency.** Speech starts when the *first sentence* of the reply is ready, not the whole reply. Effort `low` keeps

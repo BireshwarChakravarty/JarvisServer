@@ -330,6 +330,7 @@ class Brain:
         else:
             msg = "Something went wrong on my end. I've logged the details."
         bus.emit("error", message=str(exc)[:400])
+        bus.emit("reply", text=msg)
         if on_sentence:
             await on_sentence(msg)
         return msg

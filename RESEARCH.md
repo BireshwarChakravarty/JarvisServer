@@ -55,7 +55,11 @@ This build combines the strongest idea from each into one system.
 4. **Spoken confirmation for consequential actions** (sending messages, shell commands, AppleScript). You can answer by voice, with a thumbs up or down, or with the HUD button.
 5. **A HUD wired to the real system**: live mic and voice levels, real CPU, memory and network figures, real calendar, the camera feed with face boxes, and every tool call as it happens.
 
-## 5. Sources
+## 5. Visual design
+
+The HUD's look was researched separately: what the film HUDs' designers (Jayse Hansen, Territory Studio) said about their process, Apple's visionOS glass guidelines, and modern voice-orb patterns. See [DESIGN.md](DESIGN.md).
+
+## 6. Sources
 
 - https://github.com/saimskywalker/J.A.R.V.I.S
 - https://github.com/dhananjay-nautiyal/J.A.R.V.I.S

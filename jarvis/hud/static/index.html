@@ -2,136 +2,118 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
 <title>J.A.R.V.I.S.</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&family=Rajdhani:wght@400;500;600&family=Share+Tech+Mono&display=swap">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@200;300;400;500;600&family=Geist+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="/static/hud.css">
 </head>
-<body>
-<div id="bg-grid"></div>
-<div id="scanlines"></div>
+<body class="booting" data-state="booting">
+<div id="ambient" aria-hidden="true"></div>
+<div id="grain" aria-hidden="true"></div>
 
-<!-- ═══════════════════════ BOOT SEQUENCE ═══════════════════════ -->
-<div id="boot">
-  <div class="boot-inner">
-    <svg class="boot-ring" viewBox="0 0 200 200">
-      <circle cx="100" cy="100" r="86" class="track"/>
-      <circle cx="100" cy="100" r="86" class="prog" id="boot-prog"/>
-      <circle cx="100" cy="100" r="70" class="dash"/>
-    </svg>
-    <div class="boot-title">J.A.R.V.I.S.</div>
-    <div class="boot-sub">JUST A RATHER VERY INTELLIGENT SYSTEM</div>
-    <div id="boot-log"></div>
-  </div>
-</div>
-
-<!-- ═══════════════════════ HUD ═══════════════════════ -->
 <main id="hud">
-  <header id="topbar">
-    <div class="brand">
-      <span class="logo">J.A.R.V.I.S.</span>
-      <span class="ver mono">MK&nbsp;I · v1.0</span>
-    </div>
-    <div class="salute" id="salute">Good evening</div>
-    <div class="clock">
-      <div id="clock-time" class="mono">--:--:--</div>
-      <div id="clock-date">—</div>
-    </div>
+  <!-- ─────────── top left: time is the first thing anyone wants ─────────── -->
+  <header id="chrono" class="zone z-tl">
+    <div id="time" class="time">--:--</div>
+    <div class="date"><span id="date">—</span></div>
+    <div id="salute" class="salute">Good evening</div>
   </header>
 
-  <section id="left" class="col">
-    <div class="panel" id="p-system">
-      <h2><span class="dot"></span>SYSTEM DIAGNOSTICS</h2>
-      <div class="gauges">
-        <div class="gauge" id="g-cpu"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" class="g-track"/><circle cx="50" cy="50" r="42" class="g-val"/></svg><div class="g-num mono">0</div><div class="g-lbl">CPU</div></div>
-        <div class="gauge" id="g-mem"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" class="g-track"/><circle cx="50" cy="50" r="42" class="g-val"/></svg><div class="g-num mono">0</div><div class="g-lbl">MEMORY</div></div>
-        <div class="gauge" id="g-disk"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" class="g-track"/><circle cx="50" cy="50" r="42" class="g-val"/></svg><div class="g-num mono">0</div><div class="g-lbl">DISK</div></div>
-      </div>
-      <canvas id="net-spark" height="48"></canvas>
-      <div class="row mono small"><span>▼ <b id="net-down">0 KB/s</b></span><span>▲ <b id="net-up">0 KB/s</b></span><span id="batt">⚡ --%</span></div>
+  <!-- ─────────── top right: atmospherics glance + link status ─────────── -->
+  <section id="weather" class="zone z-tr">
+    <div class="wx">
+      <svg id="wx-icon" class="wx-icon" viewBox="0 0 48 48" aria-hidden="true"></svg>
+      <div class="wx-temp"><span id="w-temp">--</span><span class="deg">°</span></div>
     </div>
-
-    <div class="panel" id="p-weather">
-      <h2><span class="dot"></span>ATMOSPHERICS <span class="h-right" id="w-loc"></span></h2>
-      <div class="weather">
-        <div class="w-temp"><span id="w-temp">--</span><sup id="w-unit">°</sup></div>
-        <div class="w-meta">
-          <div id="w-cond" class="w-cond">Awaiting telemetry</div>
-          <div class="mono small">H <b id="w-hi">--</b> · L <b id="w-lo">--</b> · RAIN <b id="w-rain">--</b>%</div>
-          <div class="mono small">SUNSET <b id="w-sunset">--:--</b> · WIND <b id="w-wind">--</b></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="panel grow" id="p-agenda">
-      <h2><span class="dot"></span>TODAY'S AGENDA</h2>
-      <ul id="agenda" class="list"><li class="muted">No events loaded</li></ul>
-      <h2 class="sub"><span class="dot amber"></span>TIMERS</h2>
-      <ul id="timers" class="list"><li class="muted">None active</li></ul>
-    </div>
+    <div id="w-cond" class="wx-cond">Awaiting telemetry</div>
+    <div class="wx-meta mono"><span>H <b id="w-hi">--</b></span><span>L <b id="w-lo">--</b></span><span>☂ <b id="w-rain">--</b>%</span></div>
+    <div id="w-loc" class="label"></div>
   </section>
 
-  <section id="center">
-    <div id="reactor-wrap">
-      <canvas id="reactor"></canvas>
-      <div id="state-label" class="mono">STANDBY</div>
-    </div>
-    <div id="dialogue">
-      <div id="you" class="line you"></div>
-      <div id="jarvis" class="line jarvis"></div>
-    </div>
+  <!-- ─────────── left rail: the day ─────────── -->
+  <section id="day" class="zone z-l">
+    <h2 class="label">Today</h2>
+    <ol id="agenda" class="timeline"><li class="empty">Clear schedule</li></ol>
+    <h2 class="label gap" id="timers-h" hidden>Timers</h2>
+    <ul id="timers" class="timers"></ul>
   </section>
 
-  <section id="right" class="col">
-    <div class="panel" id="p-optics">
-      <h2><span class="dot"></span>OPTICS <span class="h-right mono" id="optic-id">NO FEED</span></h2>
-      <div class="optics">
-        <img id="cam" alt="">
-        <canvas id="cam-overlay"></canvas>
-        <div class="optics-empty" id="cam-empty">CAMERA OFFLINE</div>
-        <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
-      </div>
+  <!-- ─────────── centre: JARVIS ─────────── -->
+  <section id="presence">
+    <div id="core">
+      <canvas id="core-gl"></canvas>
+      <canvas id="core-ui"></canvas>
     </div>
-
-    <div class="panel grow" id="p-activity">
-      <h2><span class="dot"></span>ACTIVITY LOG</h2>
-      <ul id="activity" class="list log"></ul>
+    <div id="status" class="status"><span class="pip"></span><span id="status-text">Initialising</span></div>
+    <div id="dialogue" aria-live="polite">
+      <p id="you" class="you"></p>
+      <p id="jarvis" class="jarvis"></p>
     </div>
-
-    <div class="panel" id="p-protocols">
-      <h2><span class="dot amber"></span>PROTOCOLS</h2>
-      <div id="protocols" class="chips"></div>
-    </div>
+    <div id="bootline" class="bootline mono"></div>
   </section>
 
+  <!-- ─────────── right rail: senses & actions ─────────── -->
+  <section id="senses" class="zone z-r">
+    <div class="optics" id="optics">
+      <img id="cam" alt="">
+      <canvas id="cam-overlay"></canvas>
+      <div class="optics-off"><span>Optics offline</span></div>
+      <div class="optics-tag mono" id="optic-id">No feed</div>
+    </div>
+    <h2 class="label gap">Activity</h2>
+    <ol id="activity" class="activity"></ol>
+  </section>
+
+  <!-- ─────────── bottom left: vitals as micro-telemetry ─────────── -->
+  <section id="vitals" class="zone z-bl mono">
+    <div class="vital"><span class="k">CPU</span><span class="bar"><i id="v-cpu"></i></span><span class="n" id="n-cpu">--</span></div>
+    <div class="vital"><span class="k">MEM</span><span class="bar"><i id="v-mem"></i></span><span class="n" id="n-mem">--</span></div>
+    <div class="vital"><span class="k">DSK</span><span class="bar"><i id="v-disk"></i></span><span class="n" id="n-disk">--</span></div>
+    <div class="vital net"><span class="k">NET</span><canvas id="net-spark"></canvas><span class="n" id="n-net">--</span></div>
+    <div class="vital"><span class="k">PWR</span><span class="n wide" id="batt">--</span></div>
+  </section>
+
+  <!-- ─────────── bottom centre: command ─────────── -->
   <footer id="command">
-    <button id="btn-mic" class="round" title="Listen (or say “Hey Jarvis”)">
-      <svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
-    </button>
-    <form id="cmd-form" autocomplete="off">
-      <input id="cmd" placeholder="Type a command — or say “Hey Jarvis”" spellcheck="false">
+    <form id="cmd-form" class="pill glass" autocomplete="off">
+      <button type="button" id="btn-mic" class="ico" aria-label="Listen" title="Listen (Space) — or say “Hey Jarvis”">
+        <svg viewBox="0 0 24 24"><path d="M12 14.5a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5.5a3 3 0 0 0 3 3Z"/><path d="M18 11.5a6 6 0 0 1-12 0M12 17.5V21" fill="none"/></svg>
+      </button>
+      <input id="cmd" placeholder="Ask JARVIS anything…" spellcheck="false" aria-label="Command">
+      <kbd class="hint mono">/</kbd>
+      <button type="button" id="btn-stop" class="ico" aria-label="Stop" title="Stop (Esc)"><svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2.5"/></svg></button>
+      <button type="button" id="btn-mute" class="ico" aria-label="Mute microphone" title="Mute microphone">
+        <svg viewBox="0 0 24 24"><path d="M12 14.5a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5.5a3 3 0 0 0 3 3Z"/><path d="M4 4l16 16" fill="none"/></svg>
+      </button>
     </form>
-    <button id="btn-stop" class="round" title="Stop talking"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg></button>
-    <button id="btn-mute" class="round" title="Mute microphone"><svg viewBox="0 0 24 24"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23A6.9 6.9 0 0 0 19 11ZM15 11.16V5a3 3 0 0 0-5.94-.6L15 10.34v.82ZM4.27 3 3 4.27l6 6V11a3 3 0 0 0 4.4 2.65l1.66 1.66A5 5 0 0 1 7 11H5a7 7 0 0 0 6 6.92V21h2v-2.08a6.9 6.9 0 0 0 3.43-1.39L19.73 21 21 19.73 4.27 3Z"/></svg></button>
-    <div class="link mono" id="link-status"><span class="led"></span><span id="link-text">LINKING…</span></div>
   </footer>
+
+  <!-- ─────────── bottom right: protocols ─────────── -->
+  <section id="protocol-zone" class="zone z-br">
+    <h2 class="label">Protocols</h2>
+    <div id="protocols" class="chips"></div>
+    <div id="link" class="link mono"><span class="led"></span><span id="link-text">Linking</span></div>
+  </section>
 </main>
 
-<!-- ═══════════════════════ CONFIRMATION ═══════════════════════ -->
-<div id="confirm" class="modal hidden">
-  <div class="modal-card">
-    <div class="modal-head mono">⚠ AUTHORIZATION REQUIRED</div>
-    <div class="modal-body" id="confirm-text">—</div>
-    <div class="modal-hint mono">SAY “YES” / “NO” · OR 👍 / 👎 TO THE CAMERA</div>
-    <div class="modal-actions">
-      <button id="confirm-no" class="btn ghost">DENY</button>
-      <button id="confirm-yes" class="btn">AUTHORIZE</button>
+<!-- Dynamic-island style notifications -->
+<div id="island" aria-live="polite"></div>
+
+<!-- Authorization sheet -->
+<div id="confirm" class="sheet-wrap" hidden>
+  <div class="sheet glass" role="dialog" aria-modal="true" aria-labelledby="confirm-text">
+    <div class="label gold">Authorization required</div>
+    <p id="confirm-text" class="sheet-text">—</p>
+    <div class="sheet-hint mono">Say “yes” or “no” · 👍 / 👎 to the camera</div>
+    <div class="sheet-actions">
+      <button id="confirm-no" class="btn ghost">Deny</button>
+      <button id="confirm-yes" class="btn gold">Authorize</button>
     </div>
   </div>
 </div>
-
-<div id="toasts"></div>
 
 <script src="/static/reactor.js"></script>
 <script src="/static/hud.js"></script>
