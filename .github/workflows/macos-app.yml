@@ -96,14 +96,14 @@ jobs:
           api POST /api/setup/profile '{"name":"Tester","title":"sir","city":"London","units":"metric"}'
           api GET  /api/setup/devices
           api POST /api/setup/devices '{"camera_index":0}'
-          api GET  "/api/setup/geocode?q=Kolkata" | head -c 300; echo
+          api GET  "/api/setup/geocode?q=Kolkata"
           api POST /api/setup/permissions/microphone
-          api GET  /api/setup/permissions | head -c 400; echo
+          api GET  /api/setup/permissions
           api POST /api/setup/camera/start
           api POST /api/setup/camera/stop
           api POST /api/setup/speak '{"text":"Good evening. All systems online."}'
-          timeout 40 curl -s -X POST http://127.0.0.1:7777/api/setup/wake-test; echo
-          api GET  /api/setup/models | head -c 400; echo
+          curl -s --max-time 40 -X POST http://127.0.0.1:7777/api/setup/wake-test; echo
+          api GET  /api/setup/models
           code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:7777/api/setup/finish)
           echo "finish without an API key -> HTTP $code (expected 400)"; [ "$code" = "400" ]
           sleep 3; kill -0 $PID || { echo "::error::app died during onboarding calls"; tail -80 "$HOMEDIR/jarvis.log"; exit 1; }
@@ -167,3 +167,31 @@ jobs:
             gh release create "$TAG" --title "JARVIS for Mac" --notes "$NOTES" --latest \
               dist/JARVIS-macOS-AppleSilicon.dmg dist/JARVIS-macOS-AppleSilicon.zip dist/SHA256SUMS.txt
           fi
+
+  # A brand-new Mac runs the exact one-line install a user would, from the published release.
+  verify-install:
+    needs: build
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Install with the one-line installer (from the published release)
+        run: |
+          curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/scripts/install-app.sh" | bash
+          ls -la /Applications/JARVIS.app/Contents/MacOS
+          codesign --verify --deep --verbose=1 /Applications/JARVIS.app && echo "signature ✓"
+      - name: It opens into setup
+        run: |
+          for i in $(seq 1 120); do curl -sf -o /dev/null http://127.0.0.1:7777/api/status && break; sleep 1; done
+          curl -sf http://127.0.0.1:7777/api/status; echo
+          curl -sf http://127.0.0.1:7777/setup | grep -q "Set up JARVIS" && echo "onboarding served ✓"
+          curl -sf http://127.0.0.1:7777/api/setup/state | python3 -c "import sys,json; s=json.load(sys.stdin); print('app at', s['app_path'], '| in Applications:', s['in_applications']); assert s['in_applications']"
+          sleep 10
+          n=$(pgrep -f "/Applications/JARVIS.app/Contents/MacOS" | wc -l | tr -d ' '); echo "processes: $n"; [ "$n" -ge 1 ] && [ "$n" -le 2 ]
+          screencapture -x "$RUNNER_TEMP/first-launch.png" || true
+          osascript -e 'tell application "JARVIS" to quit' || pkill -f "/Applications/JARVIS.app" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: first-launch-screenshot
+          path: ${{ runner.temp }}/first-launch.png
+          if-no-files-found: ignore
