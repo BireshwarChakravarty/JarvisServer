@@ -91,6 +91,23 @@ jobs:
           check_one_instance
           curl -sf http://127.0.0.1:7777/setup | grep -q "Set up JARVIS"
           curl -sf http://127.0.0.1:7777/api/setup/state | python3 -c "import sys,json; s=json.load(sys.stdin); print({k: s[k] for k in ('complete','login_item','app_path')}); assert not s['complete']"
+          echo "drive the onboarding API the way the setup screens do"
+          api() { curl -sf -X "$1" -H 'Content-Type: application/json' ${3:+-d "$3"} "http://127.0.0.1:7777$2"; echo; }
+          api POST /api/setup/profile '{"name":"Tester","title":"sir","city":"London","units":"metric"}'
+          api GET  /api/setup/devices
+          api POST /api/setup/devices '{"camera_index":0}'
+          api GET  "/api/setup/geocode?q=Kolkata" | head -c 300; echo
+          api POST /api/setup/permissions/microphone
+          api GET  /api/setup/permissions | head -c 400; echo
+          api POST /api/setup/camera/start
+          api POST /api/setup/camera/stop
+          api POST /api/setup/speak '{"text":"Good evening. All systems online."}'
+          timeout 40 curl -s -X POST http://127.0.0.1:7777/api/setup/wake-test; echo
+          api GET  /api/setup/models | head -c 400; echo
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:7777/api/setup/finish)
+          echo "finish without an API key -> HTTP $code (expected 400)"; [ "$code" = "400" ]
+          sleep 3; kill -0 $PID || { echo "::error::app died during onboarding calls"; tail -80 "$HOMEDIR/jarvis.log"; exit 1; }
+          check_one_instance
           echo "second launch should hand over to the running instance and exit"
           JARVIS_HOME="$HOMEDIR" "$EXE" & P2=$!; sleep 8; ! kill -0 $P2 2>/dev/null && echo "handed over ✓"
           check_one_instance

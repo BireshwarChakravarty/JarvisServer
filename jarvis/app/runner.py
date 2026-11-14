@@ -30,6 +30,9 @@ def _wait_port(host: str, port: int, timeout: float = 30) -> bool:
 
 def run_app() -> None:
     os.environ.setdefault("JARVIS_APP", "1")
+    # Camera permission is requested natively during onboarding; OpenCV's own request can't spin
+    # the main run loop from a worker thread inside a Cocoa app.
+    os.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "1")
     from jarvis.__main__ import setup_logging
     from jarvis.config import load_config
 
