@@ -477,9 +477,23 @@ def main(argv: list[str] | None = None) -> None:
     os.environ["JARVIS_PID"] = str(os.getpid())
     # The packaged JARVIS.app launches `python -m jarvis` with no arguments.
     if os.environ.get("JARVIS_SELFTEST") == "1" or "--selftest" in argv:
-        from jarvis.app.selftest import run as selftest
+        try:
+            from jarvis.app.selftest import run as selftest
 
-        sys.exit(selftest())
+            code = selftest()
+        except BaseException:  # never let a crash reach the app launcher's modal error dialog
+            import traceback
+
+            report = os.environ.get("JARVIS_SELFTEST_OUT")
+            if report:
+                import json
+
+                with open(report, "w") as fh:
+                    json.dump({"ok": False, "results": [], "crash": traceback.format_exc()}, fh)
+            traceback.print_exc()
+            code = 2
+        sys.stdout.flush()
+        os._exit(code)
     from jarvis.config import running_as_app
 
     if running_as_app() and not [a for a in argv if not a.startswith("-psn")]:

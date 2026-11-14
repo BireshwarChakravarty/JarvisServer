@@ -296,6 +296,9 @@ class Speaker:
             bus.emit("speaking", text=text)
             try:
                 self._play(audio, sr, gen)
+            except Exception as exc:  # no output device, device unplugged … keep the worker alive
+                log.error("audio playback failed: %s", exc)
+                bus.emit("error", message=f"Audio output problem: {exc}")
             finally:
                 self._done_one()
 

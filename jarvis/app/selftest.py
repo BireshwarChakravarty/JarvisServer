@@ -80,7 +80,7 @@ def run() -> int:
     home = Path(os.environ.get("JARVIS_HOME") or tempfile.mkdtemp(prefix="jarvis-selftest-"))
     os.environ["JARVIS_HOME"] = str(home)
     os.environ.setdefault("JARVIS_APP", "1")
-    log(f"JARVIS self-test · python {sys.version.split()[0]} · {sys.executable}", flush=True)
+    log(f"JARVIS self-test · python {sys.version.split()[0]} · {sys.executable}")
     state: dict = {}
 
     @check("imports: core")

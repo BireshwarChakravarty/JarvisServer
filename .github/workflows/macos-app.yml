@@ -70,6 +70,50 @@ jobs:
           fi
           python3 -c "import json,sys; r=json.load(open('$JARVIS_SELFTEST_OUT')); sys.exit(0 if r['ok'] else 1)"
 
+      - name: Launch JARVIS.app like a user (window, server, onboarding, then full boot)
+        timeout-minutes: 10
+        env:
+          HOMEDIR: ${{ runner.temp }}/jarvis-home
+        run: |
+          EXE="$APP/Contents/MacOS/$(ls "$APP/Contents/MacOS" | head -1)"
+          check_one_instance() {
+            n=$(pgrep -f "$APP/Contents/MacOS" | wc -l | tr -d ' ')
+            echo "JARVIS processes: $n"; [ "$n" -le 2 ] || { echo "::error::app relaunch loop ($n processes)"; pgrep -fl JARVIS; exit 1; }
+          }
+          wait_port() { for i in $(seq 1 90); do curl -s -o /dev/null http://127.0.0.1:7777/api/status && return 0; sleep 1; done; return 1; }
+
+          echo "── 1. fresh install: should open onboarding"
+          rm -f "$HOMEDIR/.setup-complete"
+          JARVIS_HOME="$HOMEDIR" "$EXE" > "${{ runner.temp }}/launch1.log" 2>&1 &
+          PID=$!
+          wait_port || { echo "::error::server never came up"; tail -80 "$HOMEDIR/jarvis.log"; exit 1; }
+          sleep 5; kill -0 $PID || { echo "::error::app exited"; tail -80 "$HOMEDIR/jarvis.log"; exit 1; }
+          check_one_instance
+          curl -sf http://127.0.0.1:7777/setup | grep -q "Set up JARVIS"
+          curl -sf http://127.0.0.1:7777/api/setup/state | python3 -c "import sys,json; s=json.load(sys.stdin); print({k: s[k] for k in ('complete','login_item','app_path')}); assert not s['complete']"
+          echo "second launch should hand over to the running instance and exit"
+          JARVIS_HOME="$HOMEDIR" "$EXE" & P2=$!; sleep 8; ! kill -0 $P2 2>/dev/null && echo "handed over ✓"
+          check_one_instance
+          kill $PID; sleep 2; pkill -9 -f "$APP/Contents/MacOS" || true; sleep 2
+
+          echo "── 2. after setup: the assistant itself should boot"
+          printf 'owner:\n  name: Tester\n  title: sir\nlocation:\n  city: London\n' > "$HOMEDIR/config.yaml"
+          date > "$HOMEDIR/.setup-complete"
+          ANTHROPIC_API_KEY=sk-ant-ci-placeholder JARVIS_HOME="$HOMEDIR" "$EXE" > "${{ runner.temp }}/launch2.log" 2>&1 &
+          PID=$!
+          wait_port || { echo "::error::server never came up"; tail -80 "$HOMEDIR/jarvis.log"; exit 1; }
+          for i in $(seq 1 60); do
+            curl -s http://127.0.0.1:7777/api/status | grep -q '"running":true' && break; sleep 1; done
+          sleep 20
+          kill -0 $PID || { echo "::error::app exited"; tail -120 "$HOMEDIR/jarvis.log"; exit 1; }
+          check_one_instance
+          curl -s http://127.0.0.1:7777/api/status; echo
+          curl -sf http://127.0.0.1:7777/ | grep -q "J.A.R.V.I.S."
+          echo "── jarvis.log"; tail -60 "$HOMEDIR/jarvis.log"
+          grep -q "boot: J.A.R.V.I.S. core online" "$HOMEDIR/jarvis.log"
+          ! grep -q "Traceback" "$HOMEDIR/jarvis.log" || { echo "::warning::traceback in log (see above)"; }
+          kill $PID; sleep 2; pkill -9 -f "$APP/Contents/MacOS" || true
+
       - name: Package (ad-hoc signed DMG + zip)
         run: |
           briefcase package macOS app --adhoc-sign -p dmg --no-input
