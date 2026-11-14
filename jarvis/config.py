@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -14,10 +15,23 @@ DEFAULT_CONFIG = PACKAGE_DIR / "config" / "default.yaml"
 
 
 def jarvis_home() -> Path:
-    """Directory for user data (config, memory db, face prints, logs)."""
-    home = Path(os.environ.get("JARVIS_HOME", Path.home() / ".jarvis")).expanduser()
+    """Directory for user data (config, memory db, face prints, models, logs).
+
+    JARVIS_HOME wins; an existing ~/.jarvis is kept for older installs; otherwise the
+    proper macOS location ~/Library/Application Support/JARVIS (or ~/.jarvis elsewhere)."""
+    if os.environ.get("JARVIS_HOME"):
+        home = Path(os.environ["JARVIS_HOME"]).expanduser()
+    elif (Path.home() / ".jarvis").exists() or sys.platform != "darwin":
+        home = Path.home() / ".jarvis"
+    else:
+        home = Path.home() / "Library" / "Application Support" / "JARVIS"
     home.mkdir(parents=True, exist_ok=True)
     return home
+
+
+def running_as_app() -> bool:
+    """True inside the packaged JARVIS.app bundle."""
+    return ".app/Contents/" in (sys.executable or "") or os.environ.get("JARVIS_APP") == "1"
 
 
 def deep_merge(base: dict, override: dict) -> dict:
@@ -85,6 +99,14 @@ class Config:
         return self.home / "protocols.yaml"
 
     @property
+    def setup_complete(self) -> bool:
+        return (self.home / ".setup-complete").exists()
+
+    @property
+    def user_config_path(self) -> Path:
+        return self.home / "config.yaml"
+
+    @property
     def snapshots_dir(self) -> Path:
         d = self.home / "snapshots"
         d.mkdir(exist_ok=True)
@@ -95,10 +117,20 @@ def _load_env(home: Path) -> None:
     try:
         from dotenv import load_dotenv
     except ImportError:  # pragma: no cover
-        return
-    for candidate in (home / ".env", Path.cwd() / ".env"):
-        if candidate.exists():
-            load_dotenv(candidate, override=False)
+        load_dotenv = None
+    if load_dotenv:
+        for candidate in (home / ".env", Path.cwd() / ".env"):
+            if candidate.exists():
+                load_dotenv(candidate, override=False)
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        try:
+            from jarvis.mac.keychain import get_api_key
+
+            key = get_api_key()
+            if key:
+                os.environ["ANTHROPIC_API_KEY"] = key
+        except Exception:
+            pass
 
 
 def load_config(path: str | Path | None = None, overrides: dict | None = None) -> Config:
@@ -115,6 +147,9 @@ def load_config(path: str | Path | None = None, overrides: dict | None = None) -
         source = user_path
 
     # A couple of handy env overrides
+    # The app bundle on macOS uses the bundle-friendly engines (see packaging/)
+    if running_as_app():
+        os.environ.setdefault("JARVIS_APP", "1")
     if os.environ.get("JARVIS_MODEL"):
         data["brain"]["model"] = os.environ["JARVIS_MODEL"]
     if os.environ.get("JARVIS_OWNER"):

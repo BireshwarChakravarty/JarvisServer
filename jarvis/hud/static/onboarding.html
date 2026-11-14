@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Set up JARVIS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@200;300;400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/static/hud.css">
+<link rel="stylesheet" href="/static/onboarding.css">
+</head>
+<body class="ob" data-state="idle">
+<div id="ambient" aria-hidden="true"></div>
+<div id="grain" aria-hidden="true"></div>
+
+<div class="ob-shell">
+  <!-- left: JARVIS himself -->
+  <aside class="ob-presence">
+    <div id="core"><canvas id="core-gl"></canvas><canvas id="core-ui"></canvas></div>
+    <p id="caption" class="ob-caption">Initialising…</p>
+  </aside>
+
+  <!-- right: the steps -->
+  <main class="ob-panel">
+    <nav class="ob-steps" id="steps" aria-label="Setup progress"></nav>
+
+    <!-- 0 · welcome -->
+    <section class="step" data-step="welcome">
+      <p class="eyebrow">J.A.R.V.I.S.</p>
+      <h1 id="hello">Good evening.</h1>
+      <p class="lede">I'm JARVIS, your new assistant. Setup takes about three minutes, and I'll download my voice and hearing in the background while we go.</p>
+      <div class="banner glass" id="move-banner" hidden>
+        <div><b>Move JARVIS to Applications</b><span>So I can start at login and keep my permissions.</span></div>
+        <button class="btn gold" id="move-btn">Move</button>
+      </div>
+      <div class="actions"><button class="btn gold big" data-next>Begin</button></div>
+    </section>
+
+    <!-- 1 · you -->
+    <section class="step" data-step="you" hidden>
+      <p class="eyebrow">Step 1 · You</p>
+      <h1>What should I call you?</h1>
+      <label class="field"><span>First name</span><input id="name" autocomplete="given-name" placeholder="Tony"></label>
+      <div class="field"><span>How should I address you?</span>
+        <div class="seg" id="title-seg">
+          <button data-v="sir" class="on">Sir</button><button data-v="ma'am">Ma'am</button><button data-v="boss">Boss</button><button data-v="__name">By name</button>
+        </div>
+      </div>
+      <label class="field"><span>Where are you? <em>for weather and local time</em></span>
+        <input id="city" autocomplete="off" placeholder="Start typing a city">
+        <ul class="suggest" id="city-suggest" hidden></ul>
+      </label>
+      <p class="err" id="you-err"></p>
+      <div class="actions"><button class="btn ghost" data-back>Back</button><button class="btn gold" id="you-next">Continue</button></div>
+    </section>
+
+    <!-- 2 · brain -->
+    <section class="step" data-step="brain" hidden>
+      <p class="eyebrow">Step 2 · Intelligence</p>
+      <h1>Connect my mind.</h1>
+      <p class="lede">I think with Claude by Anthropic. Paste an API key and I'll keep it in your Mac's Keychain.</p>
+      <div class="keybox" id="key-connected" hidden><span class="tick">✓</span><div><b>Connected</b><span id="key-model">Claude is online</span></div><button class="btn ghost small" id="key-replace">Replace key</button></div>
+      <div id="key-form">
+        <label class="field"><span>Anthropic API key</span>
+          <div class="inline"><input id="key" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false"><button class="btn ghost small" id="key-show" type="button">Show</button></div>
+        </label>
+        <p class="hint">No key yet? <a href="#" id="get-key">Create one at console.anthropic.com</a>: sign in, choose <b>API Keys</b>, then <b>Create Key</b>, and paste it here.</p>
+        <p class="err" id="key-err"></p>
+      </div>
+      <div class="actions"><button class="btn ghost" data-back>Back</button><button class="btn gold" id="key-next">Connect</button></div>
+    </section>
+
+    <!-- 3 · senses -->
+    <section class="step" data-step="senses" hidden>
+      <p class="eyebrow">Step 3 · Senses</p>
+      <h1>Let me see and hear.</h1>
+      <p class="lede">macOS asks you to approve each of these once. Everything stays on this Mac.</p>
+      <div class="actions top"><button class="btn gold" id="allow-all">Allow all</button></div>
+      <div class="perms" id="perms"></div>
+      <p class="hint" id="perm-hint"></p>
+      <div class="actions"><button class="btn ghost" data-back>Back</button><button class="btn gold" id="senses-next">Continue</button></div>
+    </section>
+
+    <!-- 4 · face -->
+    <section class="step" data-step="face" hidden>
+      <p class="eyebrow">Step 4 · Recognition</p>
+      <h1>Let me learn your face.</h1>
+      <p class="lede">So I can greet you when you sit down and tell you apart from visitors. Look at the camera and slowly turn your head a little.</p>
+      <div class="cam glass">
+        <img id="cam" alt="">
+        <canvas id="cam-overlay"></canvas>
+        <div class="cam-off" id="cam-off">Camera off</div>
+        <svg class="ring" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" class="track"/><circle cx="50" cy="50" r="46" class="prog" id="enroll-ring"/></svg>
+      </div>
+      <p class="err" id="face-err"></p>
+      <div class="actions"><button class="btn ghost" data-back>Back</button><button class="btn ghost" id="face-skip">Skip</button><button class="btn gold" id="face-go">Start</button></div>
+    </section>
+
+    <!-- 5 · voice -->
+    <section class="step" data-step="voice" hidden>
+      <p class="eyebrow">Step 5 · Voice</p>
+      <h1>Say “Hey Jarvis”.</h1>
+      <p class="lede">That's how you'll wake me from across the room. You can also hold the right ⌥ Option key, or show me ✌️.</p>
+      <div class="meter"><div class="bars" id="bars"></div><div class="meter-label mono" id="meter-label">Ready</div></div>
+      <p class="err" id="voice-err"></p>
+      <div class="actions"><button class="btn ghost" data-back>Back</button><button class="btn ghost" id="hear-voice">Hear my voice</button><button class="btn gold" id="voice-go">Start listening</button></div>
+    </section>
+
+    <!-- 6 · ready -->
+    <section class="step" data-step="ready" hidden>
+      <p class="eyebrow">Step 6 · Ready</p>
+      <h1>All systems go.</h1>
+      <div class="toggles">
+        <label class="tg"><input type="checkbox" id="opt-login" checked><span class="sw"></span><div><b>Start when I log in</b><span>I'll greet you with a briefing every time.</span></div></label>
+        <label class="tg"><input type="checkbox" id="opt-lock"><span class="sw"></span><div><b>Lock the Mac when I leave</b><span>Uses the camera to notice you've walked away.</span></div></label>
+        <label class="tg"><input type="checkbox" id="opt-sentry"><span class="sw"></span><div><b>Sentry mode</b><span>Photograph unknown faces at your Mac while you're away.</span></div></label>
+      </div>
+      <p class="err" id="ready-err"></p>
+      <div class="actions"><button class="btn ghost" data-back>Back</button><button class="btn gold big" id="launch">Launch JARVIS</button></div>
+    </section>
+  </main>
+</div>
+
+<!-- downloads: always visible until done -->
+<footer class="dl glass" id="dl">
+  <div class="dl-head"><span class="label">Preparing my senses</span><span class="mono" id="dl-total"></span></div>
+  <div class="dl-rows" id="dl-rows"></div>
+</footer>
+
+<script src="/static/reactor.js"></script>
+<script src="/static/onboarding.js"></script>
+</body>
+</html>

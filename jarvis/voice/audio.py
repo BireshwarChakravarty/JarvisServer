@@ -113,8 +113,9 @@ def drain(q: asyncio.Queue) -> None:
 class WakeWord:
     """openWakeWord detector. Ships a pre-trained "hey jarvis" model."""
 
-    def __init__(self, model_name: str = "hey_jarvis", threshold: float = 0.5) -> None:
+    def __init__(self, model_name: str = "hey_jarvis", threshold: float = 0.5, models_dir=None) -> None:
         self.model_name = model_name
+        self.models_dir = models_dir
         self.threshold = threshold
         self._model = None
         self._cooldown_until = 0.0
@@ -130,7 +131,19 @@ class WakeWord:
             from openwakeword.model import Model
 
             is_path = model_name_is_path(self.model_name)
-            if "wakeword_models" in inspect.signature(Model.__init__).parameters:  # openWakeWord ≥ 0.5
+            local = None
+            if self.models_dir is not None and not is_path:
+                from pathlib import Path
+
+                oww = Path(self.models_dir) / "oww"
+                cand = sorted(oww.glob(f"{self.model_name}*.onnx")) if oww.exists() else []
+                if cand and (oww / "melspectrogram.onnx").exists() and (oww / "embedding_model.onnx").exists():
+                    local = (str(cand[0]), str(oww / "melspectrogram.onnx"), str(oww / "embedding_model.onnx"))
+            if local and "wakeword_models" in inspect.signature(Model.__init__).parameters:
+                # downloaded by the app's model manager — nothing written inside the app bundle
+                self._model = Model(wakeword_models=[local[0]], inference_framework="onnx",
+                                    melspec_model_path=local[1], embedding_model_path=local[2])
+            elif "wakeword_models" in inspect.signature(Model.__init__).parameters:  # openWakeWord ≥ 0.5
                 download = getattr(openwakeword.utils, "download_models", None)
                 if download and not is_path:
                     try:

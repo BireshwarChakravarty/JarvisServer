@@ -1,0 +1,109 @@
+name: macOS app
+
+# Builds JARVIS.app on an Apple Silicon Mac, proves it works by running the
+# end-to-end self-test *inside the built bundle*, then publishes a DMG.
+on:
+  push:
+    branches: [claude/eager-newton-yifemd, main]
+    paths-ignore: ["**.md", "docs/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macos-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15          # Apple Silicon (arm64)
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Briefcase
+        run: python -m pip install --upgrade pip "briefcase==0.4.7"
+
+      - name: Unit tests (source)
+        run: |
+          python -m pip install -e ".[dev]"
+          python -m pytest -q
+
+      - name: Create app bundle
+        run: briefcase create macOS app --no-input
+
+      - name: Build app bundle
+        run: briefcase build macOS app --no-input
+
+      - name: Self-test inside JARVIS.app
+        env:
+          JARVIS_SELFTEST: "1"
+          JARVIS_HOME: ${{ runner.temp }}/jarvis-home
+          JARVIS_SELFTEST_OUT: ${{ runner.temp }}/selftest.json
+        run: |
+          APP=$(ls -d build/jarvis/macos/app/*.app | head -1)
+          echo "APP=$APP" >> "$GITHUB_ENV"
+          ls "$APP/Contents/MacOS"
+          EXE="$APP/Contents/MacOS/$(ls "$APP/Contents/MacOS" | head -1)"
+          set +e
+          "$EXE"
+          code=$?
+          set -e
+          echo "exit code: $code"
+          if [ -f "$JARVIS_SELFTEST_OUT" ]; then
+            python - <<'PY'
+          import json, os
+          r = json.load(open(os.environ["JARVIS_SELFTEST_OUT"]))
+          for c in r["results"]:
+              mark = "PASS" if c["ok"] else ("FAIL" if c["required"] else "warn")
+              print(f"{mark:4}  {c['check']:<40} {c['s']:>6}s  {str(c['detail'])[:160]}")
+              if not c["ok"]:
+                  print(c.get("trace", ""))
+          raise SystemExit(0 if r["ok"] else 1)
+          PY
+          else
+            echo "::error::self-test produced no report"
+            log show --last 10m --predicate 'process == "JARVIS"' --style compact | tail -200 || true
+            exit 1
+          fi
+
+      - name: Package (ad-hoc signed DMG + zip)
+        run: |
+          briefcase package macOS app --adhoc-sign -p dmg --no-input
+          mkdir -p dist
+          ls -la dist
+          ditto -c -k --keepParent "$APP" dist/JARVIS-macOS-AppleSilicon.zip
+          DMG=$(ls dist/*.dmg | head -1)
+          mv "$DMG" dist/JARVIS-macOS-AppleSilicon.dmg
+          shasum -a 256 dist/JARVIS-macOS-AppleSilicon.* | tee dist/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jarvis-macos
+          path: |
+            dist/*
+            ${{ runner.temp }}/selftest.json
+          if-no-files-found: ignore
+
+      - name: Publish release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=jarvis-latest
+          git tag -f "$TAG" "$GITHUB_SHA"
+          git push -f origin "refs/tags/$TAG"
+          NOTES="Built from ${GITHUB_SHA::7} and verified by the in-app self-test on Apple Silicon. Download the DMG, open it and drag JARVIS to Applications."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "JARVIS for Mac" --notes "$NOTES" --latest
+            gh release upload "$TAG" dist/JARVIS-macOS-AppleSilicon.dmg dist/JARVIS-macOS-AppleSilicon.zip dist/SHA256SUMS.txt --clobber
+          else
+            gh release create "$TAG" --title "JARVIS for Mac" --notes "$NOTES" --latest \
+              dist/JARVIS-macOS-AppleSilicon.dmg dist/JARVIS-macOS-AppleSilicon.zip dist/SHA256SUMS.txt
+          fi

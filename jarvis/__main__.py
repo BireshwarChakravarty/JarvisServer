@@ -447,7 +447,26 @@ def cmd_devices(args) -> None:
     print(sd.query_devices())
 
 
+def cmd_app(args) -> None:
+    from jarvis.app.runner import run_app
+
+    run_app()
+
+
 def main(argv: list[str] | None = None) -> None:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    # The packaged JARVIS.app launches `python -m jarvis` with no arguments.
+    if os.environ.get("JARVIS_SELFTEST") == "1" or "--selftest" in argv:
+        from jarvis.app.selftest import run as selftest
+
+        sys.exit(selftest())
+    from jarvis.config import running_as_app
+
+    if running_as_app() and not [a for a in argv if not a.startswith("-psn")]:
+        from jarvis.app.runner import run_app
+
+        run_app()
+        return
     parser = argparse.ArgumentParser(prog="jarvis", description="J.A.R.V.I.S. for macOS")
     parser.add_argument("--config", help="path to a config.yaml (default ~/.jarvis/config.yaml)")
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -482,6 +501,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--demo", action="store_true", help="simulated data, no backend")
     p.set_defaults(fn=cmd_hud)
     sub.add_parser("devices", help="list audio devices").set_defaults(fn=cmd_devices)
+    sub.add_parser("app", help="run as the desktop app (window + onboarding)").set_defaults(fn=cmd_app)
 
     args = parser.parse_args(argv)
     if not getattr(args, "fn", None):

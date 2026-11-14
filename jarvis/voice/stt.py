@@ -33,8 +33,9 @@ def is_apple_silicon() -> bool:
 
 
 class Transcriber:
-    def __init__(self, backend: str = "auto", model: str = "large-v3-turbo", language: str = "en",
-                 vocabulary: list[str] | None = None) -> None:
+    def __init__(self, backend: str = "auto", model: str = "small.en", language: str = "en",
+                 vocabulary: list[str] | None = None, models_dir=None) -> None:
+        self.models_dir = models_dir
         self.backend = backend
         self.model_name = model
         self.language = language or None
@@ -47,8 +48,9 @@ class Transcriber:
         with self._lock:
             if self._impl is not None:
                 return self.name
+            local = self._local_model()
             order = [self.backend] if self.backend != "auto" else (
-                ["mlx", "faster-whisper"] if is_apple_silicon() else ["faster-whisper"]
+                ["faster-whisper"] if local else (["mlx", "faster-whisper"] if is_apple_silicon() else ["faster-whisper"])
             )
             for name in order:
                 try:
@@ -60,10 +62,14 @@ class Transcriber:
                     elif name == "faster-whisper":
                         from faster_whisper import WhisperModel
 
-                        size = self.model_name
-                        if not is_apple_silicon() and size.startswith("large"):
+                        size = local or self.model_name
+                        if not local and not is_apple_silicon() and size.startswith("large"):
                             size = "small.en" if (self.language or "en") == "en" else "small"
-                        self._impl = ("fw", WhisperModel(size, device="auto", compute_type="int8"))
+                        import os
+
+                        threads = max(2, min(8, (os.cpu_count() or 4) - 2))
+                        self._impl = ("fw", WhisperModel(size, device="cpu", compute_type="int8",
+                                                         cpu_threads=threads))
                     self.name = name
                     break
                 except Exception as exc:
@@ -72,6 +78,14 @@ class Transcriber:
                 raise RuntimeError("No speech-to-text backend available. pip install 'jarvis-mac[voice,apple]'")
             log.info("STT backend: %s", self.name)
             return self.name
+
+    def _local_model(self) -> str | None:
+        if self.models_dir is None:
+            return None
+        from pathlib import Path
+
+        d = Path(self.models_dir) / f"whisper-{self.model_name}"
+        return str(d) if (d / "model.bin").exists() else None
 
     def warmup(self) -> None:
         try:

@@ -145,9 +145,11 @@ class Jarvis:
         tts_task = asyncio.to_thread(
             make_backend, cfg.get("voice.tts.backend", "auto"), cfg.get("voice.tts.voice", "bm_george"),
             float(cfg.get("voice.tts.speed", 1.0)), cfg.get("voice.tts.say_voice", "Daniel"), cfg.models_dir)
-        self.wake = WakeWord(cfg.get("voice.wake_word", "hey_jarvis"), float(cfg.get("voice.wake_threshold", 0.5)))
-        self.stt = Transcriber(cfg.get("voice.stt.backend", "auto"), cfg.get("voice.stt.model", "large-v3-turbo"),
-                               cfg.get("voice.stt.language", "en"), [cfg.get("owner.name", "")])
+        self.wake = WakeWord(cfg.get("voice.wake_word", "hey_jarvis"), float(cfg.get("voice.wake_threshold", 0.5)),
+                             models_dir=cfg.models_dir)
+        self.stt = Transcriber(cfg.get("voice.stt.backend", "auto"), cfg.get("voice.stt.model", "small.en"),
+                               cfg.get("voice.stt.language", "en"), [cfg.get("owner.name", "")],
+                               models_dir=cfg.models_dir)
         backend, wake_ok, stt_name = await asyncio.gather(
             tts_task, asyncio.to_thread(self.wake.load), asyncio.to_thread(self._load_stt))
         self.speaker = Speaker(backend, cfg.get("voice.output_device"))

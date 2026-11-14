@@ -153,8 +153,9 @@ def _download(urls: str | list[str], dest: Path) -> None:
 def make_backend(kind: str, voice: str, speed: float, say_voice: str, models_dir: Path) -> TTSBackend:
     if kind == "silent":
         return SilentTTS()
-    is_as = platform.system() == "Darwin" and platform.machine() == "arm64"
-    order = [kind] if kind != "auto" else (["kokoro-mlx", "kokoro-onnx", "say"] if is_as else ["kokoro-onnx", "say"])
+    order = [kind] if kind != "auto" else ["kokoro-onnx", "say"]
+    if kind == "auto" and not (models_dir / "kokoro-v1.0.onnx").exists():
+        order = ["say", "kokoro-onnx"]  # don't block on a 300 MB download; setup fetches it
     for name in order:
         try:
             if name == "kokoro-mlx":

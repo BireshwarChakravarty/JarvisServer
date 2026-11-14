@@ -40,11 +40,11 @@ voice:
   push_to_talk_key: "alt_r"  # hold to talk (needs Accessibility permission); null to disable
   max_utterance_seconds: 30
   stt:
-    backend: auto          # auto | mlx | faster-whisper
-    model: "large-v3-turbo"
+    backend: auto          # auto | faster-whisper | mlx
+    model: "small.en"      # small.en is fast and accurate; medium.en is more accurate, slower
     language: "en"
   tts:
-    backend: auto          # auto | kokoro-mlx | kokoro-onnx | say
+    backend: auto          # auto | kokoro-onnx | kokoro-mlx | say
     voice: "bm_george"     # Kokoro British male. Others: bm_lewis, bm_daniel, bf_emma
     speed: 1.05
     say_voice: "Daniel"    # macOS fallback voice (British). Try "Daniel (Enhanced)" if installed.
