@@ -1,0 +1,92 @@
+# ──────────────────────────────────────────────────────────────────────────
+#  J.A.R.V.I.S. default configuration
+#  Copy to ~/.jarvis/config.yaml and override only what you need —
+#  your file is deep-merged on top of this one.
+# ──────────────────────────────────────────────────────────────────────────
+
+owner:
+  name: "Tony"             # your first name
+  title: "sir"             # how JARVIS addresses you: sir / ma'am / boss / your name
+  timezone: ""             # IANA name, e.g. "Asia/Kolkata". Empty = system timezone.
+
+location:
+  city: "London"           # used for weather + context
+  latitude: null           # optional: skip geocoding if set
+  longitude: null
+  units: metric            # metric | imperial
+
+brain:
+  provider: anthropic      # anthropic | ollama (offline, no tools)
+  model: claude-opus-5-5
+  effort: low              # low | medium | high — low keeps spoken replies snappy
+  fast_mode: false         # Claude fast mode (premium pricing, ~2.5x faster output)
+  max_tokens: 8000
+  web_search: true         # Anthropic server-side web search
+  server_fallbacks: true   # retry on another model server-side if a request is declined
+  session_idle_minutes: 15 # start a fresh conversation after this much silence
+  session_max_turns: 40    # roll the conversation into a summary after this many turns
+  ollama:
+    host: "http://localhost:11434"
+    model: "llama3.2"
+
+voice:
+  enabled: true
+  wake_word: "hey_jarvis"  # openWakeWord model name or a path to a custom .onnx/.tflite
+  wake_threshold: 0.5
+  input_device: null       # null = system default; or a name fragment, e.g. "MacBook Pro Microphone"
+  output_device: null
+  follow_up_seconds: 7     # keep listening this long after JARVIS speaks (no wake word needed)
+  barge_in: true           # say "Jarvis" / raise your palm while he talks to interrupt
+  push_to_talk_key: "alt_r"  # hold to talk (needs Accessibility permission); null to disable
+  max_utterance_seconds: 30
+  stt:
+    backend: auto          # auto | mlx | faster-whisper
+    model: "large-v3-turbo"
+    language: "en"
+  tts:
+    backend: auto          # auto | kokoro-mlx | kokoro-onnx | say
+    voice: "bm_george"     # Kokoro British male. Others: bm_lewis, bm_daniel, bf_emma
+    speed: 1.05
+    say_voice: "Daniel"    # macOS fallback voice (British). Try "Daniel (Enhanced)" if installed.
+
+vision:
+  enabled: true
+  camera_index: 0
+  fps: 15
+  face_recognition: true
+  gestures: true
+  greet_on_arrival: true   # greet you when you sit down after being away
+  away_minutes: 10         # how long you must be gone to count as "away"
+  auto_lock_when_away: false
+  sentry_mode: false       # snapshot + notify if an unknown face appears while you're away
+  recognition_threshold: 0.42  # SFace cosine similarity (higher = stricter)
+
+greeting:
+  on_login: true
+  on_unlock: true
+  min_gap_minutes: 45      # don't re-greet more often than this
+  briefing: true
+  news_feeds:
+    - "https://feeds.bbci.co.uk/news/world/rss.xml"
+    - "https://hnrss.org/frontpage"
+
+hud:
+  enabled: true
+  host: "127.0.0.1"
+  port: 7777
+  window: true             # native frameless window (pywebview). false = open in your browser
+  fullscreen: false
+  always_on_top: false
+  toggle_hotkey: "<cmd>+<shift>+j"
+
+safety:
+  confirm_risky_actions: true  # JARVIS asks before sending messages, running shell, etc.
+  allow_shell: true
+  shell_allowlist: []          # e.g. ["git", "brew", "ls"]. Empty = any command (still confirmed)
+
+# Extra tools via Model Context Protocol servers (stdio). Example:
+# mcp_servers:
+#   filesystem:
+#     command: "npx"
+#     args: ["-y", "@modelcontextprotocol/server-filesystem", "/Users/you/Documents"]
+mcp_servers: {}
