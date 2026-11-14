@@ -108,11 +108,18 @@ def run_app() -> None:
     }
     menubar.install_reopen_handler(show)
 
+    def ptt(down: bool):
+        j = sup.jarvis
+        if j is not None:
+            j.ptt_event(down)
+
     def after_start():
         try:
             from PyObjCTools import AppHelper
 
             AppHelper.callAfter(menubar.install, actions)
+            if cfg.get("voice.push_to_talk_key"):
+                AppHelper.callAfter(menubar.install_push_to_talk, ptt)
         except Exception as exc:
             log.info("menu bar skipped: %s", exc)
 

@@ -69,9 +69,37 @@
 
   function busy(btn, on) { btn.disabled = on; btn.classList.toggle("busy", on); }
 
+  /* ───────────── devices (a Mac mini has no built-in mic or camera) ───────────── */
+  async function loadDevices() {
+    try {
+      const d = await api("/api/setup/devices");
+      const mic = $("mic-select"), cam = $("cam-select");
+      mic.innerHTML = ""; cam.innerHTML = "";
+      if (!d.microphones.length) mic.innerHTML = "<option value=''>No microphone found: plug one in</option>";
+      d.microphones.forEach((m) => {
+        const o = document.createElement("option"); o.value = m.name; o.textContent = m.name + (m.default ? " (system default)" : "");
+        if (d.input_device ? d.input_device === m.name : m.default) o.selected = true;
+        mic.appendChild(o);
+      });
+      if (!d.cameras.length) cam.innerHTML = "<option value='0'>Default camera</option>";
+      d.cameras.forEach((c) => {
+        const o = document.createElement("option"); o.value = c.index; o.textContent = c.name;
+        if (c.index === d.camera_index) o.selected = true;
+        cam.appendChild(o);
+      });
+    } catch (e) {}
+  }
+  $("mic-select").onchange = () => api("/api/setup/devices", { input_device: $("mic-select").value }).catch(() => {});
+  $("cam-select").onchange = async () => {
+    await api("/api/setup/devices", { camera_index: Number($("cam-select").value) }).catch(() => {});
+    document.querySelector(".cam").classList.remove("live");
+    startCamera();
+  };
+
   let pollTimer = null;
   function enter(s) {
     if (s === "senses") { renderPerms(S.permissions); pollTimer = setInterval(refreshPerms, 2000); }
+    if (s === "face" || s === "voice") loadDevices();
     if (s === "face") startCamera();
     if (s === "brain") renderKey();
   }
@@ -375,6 +403,8 @@
       face_enrolled: false, login_item: "off", app_path: "/Users/you/Downloads/JARVIS.app", in_applications: false, options: {} });
     if (path === "/api/setup/models") return Promise.resolve(models.map((m) => (m.ready ? m : { ...m, done: Math.min(m.total, m.done + m.total * 0.07) })));
     if (path === "/api/setup/permissions") return Promise.resolve(S.permissions);
+    if (path === "/api/setup/devices") return Promise.resolve({ microphones: [{ name: "Studio Display Microphone", default: true }, { name: "Logitech BRIO" }],
+      cameras: [{ index: 0, name: "Logitech BRIO" }, { index: 1, name: "iPhone Camera" }], input_device: null, camera_index: 0 });
     if (path.startsWith("/api/setup/geocode")) return Promise.resolve([{ name: "London", region: "England", country: "United Kingdom", country_code: "GB" }]);
     return new Promise((res) => setTimeout(() => res({ ok: true, model: "claude-opus-5-5", best: 0.93 }), 900));
   }

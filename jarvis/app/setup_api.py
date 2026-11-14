@@ -269,6 +269,28 @@ def make_router(sup) -> APIRouter:
                                 status_code=400)
         return {"ok": True, "samples": n}
 
+    # ── devices ───────────────────────────────────────────────────────────
+    @r.get("/api/setup/devices")
+    async def devices():
+        from jarvis.mac import devices as dv
+
+        mics, cams = await asyncio.gather(asyncio.to_thread(dv.microphones), asyncio.to_thread(dv.cameras))
+        return {"microphones": mics, "cameras": cams,
+                "input_device": sup.cfg.get("voice.input_device"),
+                "camera_index": int(sup.cfg.get("vision.camera_index", 0))}
+
+    @r.post("/api/setup/devices")
+    async def set_devices(body: dict = Body(...)):
+        patch: dict = {}
+        if "input_device" in body:
+            patch.setdefault("voice", {})["input_device"] = body["input_device"] or None
+        if "camera_index" in body:
+            patch.setdefault("vision", {})["camera_index"] = int(body["camera_index"])
+            sup.release_setup_devices()
+        if patch:
+            _write_user_config(sup.cfg, patch)
+        return {"ok": True}
+
     # ── voice & wake word test ────────────────────────────────────────────
     @r.post("/api/setup/speak")
     async def speak(body: dict = Body(default={})):

@@ -16,6 +16,7 @@ import asyncio
 import datetime as dt
 import json
 import logging
+import os
 import re
 import time
 from typing import Any
@@ -171,7 +172,10 @@ class Jarvis:
         key = cfg.get("voice.push_to_talk_key")
         if key and self.mic:
             self.ptt = PushToTalk(key, self._ptt_press, self._ptt_release)
-            if self.ptt.start():
+            if os.environ.get("JARVIS_APP") == "1":
+                # the app installs a native NSEvent monitor on the main thread (see app/menubar.py)
+                self.boot("Push-to-talk: hold right ⌥")
+            elif self.ptt.start():
                 self.boot(f"Push-to-talk: hold {key}")
 
     def _load_stt(self) -> str | None:
@@ -276,6 +280,17 @@ class Jarvis:
         if self.speaker and self.speaker.speaking:
             self.interrupt()
         self._listen_now.set()
+
+    def ptt_event(self, down: bool) -> None:
+        """Called from the app's main-thread key monitor."""
+        if self.ptt is None:
+            return
+        if down and not self.ptt.down:
+            self.ptt.down = True
+            self._ptt_press()
+        elif not down and self.ptt.down:
+            self.ptt.down = False
+            self._ptt_release()
 
     def _ptt_press(self) -> None:
         if self.loop:

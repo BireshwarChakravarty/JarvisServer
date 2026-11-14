@@ -106,5 +106,39 @@ def install(actions: dict) -> None:
         log.warning("menu bar item unavailable: %s", exc)
 
 
+_monitors: list = []
+RIGHT_OPTION = 61  # kVK_RightOption
+
+
+def install_push_to_talk(on_change) -> None:
+    """Hold right ⌥ to talk. Uses NSEvent monitors on the main thread (pynput's keyboard hook
+    is unsafe inside a Cocoa app on recent macOS). Needs Accessibility for the global monitor;
+    the local monitor works whenever the JARVIS window is focused."""
+    try:
+        import AppKit
+
+        state = {"down": False}
+        mask = AppKit.NSEventMaskFlagsChanged
+
+        def handle(event):
+            try:
+                if event.keyCode() == RIGHT_OPTION:
+                    down = bool(event.modifierFlags() & AppKit.NSEventModifierFlagOption)
+                    if down != state["down"]:
+                        state["down"] = down
+                        on_change(down)
+            except Exception:
+                pass
+
+        def local(event):
+            handle(event)
+            return event
+
+        _monitors.append(AppKit.NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(mask, handle))
+        _monitors.append(AppKit.NSEvent.addLocalMonitorForEventsMatchingMask_handler_(mask, local))
+    except Exception as exc:
+        log.info("push-to-talk unavailable: %s", exc)
+
+
 def quit_app() -> None:
     os._exit(0)

@@ -26,8 +26,11 @@ def run_window(url: str, cfg) -> None:
         background_color="#02060d",
         text_select=False,
     )
+    import os
+    import sys
+
     hotkey = cfg.get("hud.toggle_hotkey")
-    if hotkey:
+    if hotkey and (sys.platform != "darwin" or os.environ.get("JARVIS_ALLOW_PYNPUT") == "1"):
         try:
             from pynput import keyboard
 

@@ -124,3 +124,12 @@ body.settings .ob-steps i { cursor: pointer; }
   .ob-panel { padding-bottom: 0; padding-top: 30px; }
   .dl-rows { grid-template-columns: repeat(2, 1fr); }
 }
+
+.field select {
+  width: 100%; height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--hair-2);
+  background: rgb(255 255 255 / 0.04); color: var(--text); font: 400 14.5px var(--sans); outline: none; appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 20px) 19px, calc(100% - 15px) 19px; background-size: 5px 5px; background-repeat: no-repeat;
+}
+.field select option { background: #0b1118; }
+.field.compact { margin-bottom: 14px; max-width: 420px; }

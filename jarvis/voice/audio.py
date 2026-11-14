@@ -279,6 +279,13 @@ class PushToTalk:
     def start(self) -> bool:
         if not self.key_name:
             return False
+        import os
+        import sys
+
+        if sys.platform == "darwin" and os.environ.get("JARVIS_ALLOW_PYNPUT") != "1":
+            # pynput's keyboard hook calls TSM APIs off the main thread and crashes (SIGTRAP) on
+            # recent macOS. The app uses a native NSEvent monitor instead (jarvis/app/menubar.py).
+            return False
         try:
             from pynput import keyboard
         except Exception:
