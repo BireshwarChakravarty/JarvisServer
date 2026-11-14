@@ -45,50 +45,58 @@ smart home and terminal. Everything shows on a live, holographic HUD.
 
 ---
 
-## Quick start
+## Install (Apple Silicon Mac, macOS 14 or later)
+
+JARVIS is a normal Mac app. Install it **one** of these two ways:
+
+**A. One line (recommended, no security prompts).** Open Terminal, paste this, press Return:
 
 ```bash
-git clone <this repo> JarvisServer && cd JarvisServer
+curl -fsSL https://raw.githubusercontent.com/BireshwarChakravarty/JarvisServer/claude/eager-newton-yifemd/scripts/install-app.sh | bash
 ```
 
-```bash
-./install.sh
-```
+**B. Download.** Get `JARVIS-macOS-AppleSilicon.dmg` from the
+[latest release](https://github.com/BireshwarChakravarty/JarvisServer/releases/tag/jarvis-latest), open it and drag
+JARVIS to Applications. The first time you open it, macOS says it can't verify the developer, because the app isn't
+notarized with a paid Apple Developer ID. Go to **System Settings › Privacy & Security**, scroll down and click
+**Open Anyway**. You only do this once.
 
-The installer:
-1. creates a Python 3.12 environment (via `uv`, or Homebrew Python),
-2. installs everything for your chip (Apple Silicon gets the GPU-accelerated voice and speech models),
-3. runs **`jarvis setup`**, which asks your name, how to address you, and your city, stores your
-   [Anthropic API key](https://console.anthropic.com/settings/keys) in `~/.jarvis/.env`
-   (readable only by you), pre-downloads the models, **adds JARVIS to your Login Items**, and
-   enrolls your face.
+Either way, JARVIS opens straight into a **guided setup**. Nothing else is done by hand:
 
-Then:
-
-```bash
-jarvis
-```
-
-…or log out and back in, and he'll greet you.
-
-> **Requirements:** macOS 13+, Apple Silicon recommended (Intel works on the CPU path), a mic,
-> and optionally a camera (built-in, USB, or your iPhone via Continuity Camera).
-
-### macOS permissions
-macOS asks the first time each one is used. Approve them for **JARVIS** (or your terminal, if you run `jarvis` from one):
-
-| Permission | Why |
+| Step | What happens |
 |---|---|
-| Microphone | Wake word and voice commands |
-| Camera | Face recognition, presence, gestures, "what do you see?" |
-| Automation (System Events, Music, Calendar, Messages, Notes…) | Controlling apps |
-| Calendars · Reminders · Contacts | Briefings, events, reminders, messaging people by name |
-| Accessibility *(System Settings › Privacy & Security › Accessibility)* | Push-to-talk key, typing text, the HUD hotkey |
-| Screen Recording | "What's on my screen?" |
+| Welcome | JARVIS introduces himself. If he isn't in Applications yet he offers to move himself. His voice and hearing start downloading in the background (about 900 MB, once). |
+| You | Your name, how he should address you (sir / ma'am / boss / your name), and your city, with autocomplete. |
+| Intelligence | Paste an Anthropic API key (there's a button that opens the right page). He checks it with a live call and stores it in your **Keychain**. |
+| Senses | One **Allow all** button triggers each macOS permission dialog in turn: microphone, camera, calendars, reminders, contacts, app control. Status updates live. Screen recording and Accessibility are optional. |
+| Recognition | A live camera view learns your face in about 5 seconds. |
+| Voice | Say “Hey Jarvis”. He confirms he heard you and answers in his own voice. |
+| Ready | Start at login (on by default), lock-when-away, sentry mode. **Launch JARVIS** and the HUD takes over. |
 
-Run **`jarvis doctor`** at any time to see what's working and what's missing.
+Change any of it later from **Settings** (the gear on the HUD, or the menu-bar icon). Closing the window keeps JARVIS
+running in the background. Click the Dock or menu-bar icon to bring him back; ⌘Q quits.
 
----
+Every build is made on an Apple Silicon Mac in [CI](.github/workflows/macos-app.yml) and only published after an
+end-to-end **self-test inside the built app** passes. The self-test checks that the native frameworks load, the models
+download, his voice speaks "Hey Jarvis, what time is it in London?", the wake-word engine hears it, Whisper
+transcribes it back correctly, the vision models run, and the setup screens serve.
+
+<details><summary>Developers: run from source</summary>
+
+```bash
+./install.sh        # creates .venv and installs everything
+```
+
+```bash
+jarvis app          # the same window + onboarding as the packaged app
+```
+
+```bash
+jarvis              # classic mode (HUD in a window, setup via `jarvis setup`)
+```
+
+Build the app yourself with `pip install briefcase` and then `briefcase build macOS`.
+</details>
 
 ## Talking to JARVIS
 

@@ -59,7 +59,18 @@ This build combines the strongest idea from each into one system.
 
 The HUD's look was researched separately: what the film HUDs' designers (Jayse Hansen, Territory Studio) said about their process, Apple's visionOS glass guidelines, and modern voice-orb patterns. See [DESIGN.md](DESIGN.md).
 
-## 6. Sources
+## 6. Packaging as a real Mac app
+
+| Question | Finding | Decision |
+|---|---|---|
+| How do you ship a Python app as a `.app`? | PyInstaller, py2app and [Briefcase](https://briefcase.beeware.org/en/latest/reference/platforms/macOS/index.html) all work. py2app traces imports and misses dynamically loaded code ([Glyph](https://blog.glyph.im/2023/03/py-mac-app-for-real.html)). Briefcase writes privacy usage strings and entitlements from config and builds a DMG. | **Briefcase**, Apple Silicon only (`universal_build = false`), macOS 14+ (onnxruntime and PyAV wheels need it). |
+| Which engines can be bundled? | `mlx-whisper` pulls in PyTorch and `mlx-audio` pulls in transformers. `faster-whisper` (CTranslate2), `kokoro-onnx` (bundles espeak-ng) and openWakeWord (ONNX) all ship self-contained arm64 wheels. Checked: all 96 resolved dependencies have Apple Silicon wheels except `proxy-tools`, which we ship as a pre-built wheel. | faster-whisper `small.en` + Kokoro ONNX + openWakeWord. Models are downloaded to Application Support, so the signed bundle is never modified. |
+| Camera and mic prompts | macOS attributes a prompt to the responsible signed app and needs `NS…UsageDescription` keys, or it silently denies. | Usage strings and entitlements in the bundle. Onboarding requests each permission natively (AVFoundation, EventKit, Contacts, AX, CoreGraphics) and shows live status. |
+| Gatekeeper | Sequoia removed the Control-click "Open" override; unnotarized downloads need **System Settings › Open Anyway** ([MacRumors](https://www.macrumors.com/2024/08/06/macos-sequoia-gatekeeper-security-change/), [9to5Mac](https://9to5mac.com/2024/08/13/security-bite-apple-finally-making-it-harder-to-override-gatekeeper-is-a-telling-move/)). Files fetched with `curl` carry no quarantine flag. | Ad-hoc-signed DMG on GitHub Releases, plus a one-line `curl` installer that avoids the prompt. |
+| Launch at login | `SMAppService.mainApp` (macOS 13+) registers the app itself as a login item ([Apple](https://developer.apple.com/documentation/servicemanagement/smappservice/mainapp)). | A toggle in onboarding, with a System Events fallback. |
+| Background behaviour | pywebview lets a `closing` handler cancel the close by returning False; its Cocoa delegate has no Dock-reopen hook. | Closing hides the window. A Dock-reopen handler is added at runtime, plus a menu-bar item. ⌘Q still quits. |
+
+## 7. Sources
 
 - https://github.com/saimskywalker/J.A.R.V.I.S
 - https://github.com/dhananjay-nautiyal/J.A.R.V.I.S

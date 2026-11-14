@@ -8,7 +8,7 @@ body.ob { overflow: hidden; }
 .ob-caption { margin: 6px 0 0; max-width: 460px; min-height: 3em; text-align: center; font: 300 19px/1.45 var(--sans); color: var(--text); opacity: 0.92; }
 
 .ob-panel { position: relative; display: flex; flex-direction: column; justify-content: center; padding-bottom: 18vh; min-height: 0; }
-.ob-steps { position: absolute; top: 0; left: 0; display: flex; gap: 8px; }
+.ob-steps { display: flex; gap: 8px; margin-bottom: 30px; }
 .ob-steps i { width: 26px; height: 3px; border-radius: 2px; background: var(--hair-2); transition: background 0.4s; }
 .ob-steps i.done { background: rgb(143 236 255 / 0.5); }
 .ob-steps i.on { background: var(--ice); box-shadow: 0 0 10px var(--ice); }

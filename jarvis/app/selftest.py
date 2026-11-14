@@ -21,19 +21,48 @@ from pathlib import Path
 RESULTS: list[dict] = []
 
 
-def check(name: str, required: bool = True):
+_LOG = None
+
+
+def log(line: str) -> None:
+    print(line, flush=True)
+    if _LOG:
+        with open(_LOG, "a") as fh:
+            fh.write(line + "\n")
+
+
+def check(name: str, required: bool = True, timeout: float = 180):
+    """Run a check in a worker thread so a hang becomes a named failure, not a stuck build."""
+    import threading
+
     def deco(fn):
         t0 = time.time()
-        try:
-            detail = fn()
-            RESULTS.append({"check": name, "ok": True, "required": required, "detail": detail,
-                            "s": round(time.time() - t0, 2)})
-        except Exception as exc:
-            RESULTS.append({"check": name, "ok": False, "required": required,
-                            "detail": f"{type(exc).__name__}: {exc}", "trace": traceback.format_exc()[-1500:],
-                            "s": round(time.time() - t0, 2)})
-        print(("PASS " if RESULTS[-1]["ok"] else "FAIL ") + name + "  " + str(RESULTS[-1]["detail"])[:300],
-              flush=True)
+        log(f"…    {name}")
+        box: dict = {}
+
+        def target():
+            try:
+                box["detail"] = fn()
+            except BaseException as exc:  # noqa: BLE001
+                box["exc"] = exc
+                box["trace"] = traceback.format_exc()[-1500:]
+
+        th = threading.Thread(target=target, daemon=True)
+        th.start()
+        th.join(timeout)
+        if th.is_alive():
+            res = {"check": name, "ok": False, "required": required, "detail": f"timed out after {timeout:.0f}s"}
+        elif "exc" in box:
+            exc = box["exc"]
+            res = {"check": name, "ok": False, "required": required, "detail": f"{type(exc).__name__}: {exc}",
+                   "trace": box["trace"]}
+        else:
+            res = {"check": name, "ok": True, "required": required, "detail": box.get("detail")}
+        res["s"] = round(time.time() - t0, 2)
+        RESULTS.append(res)
+        log(("PASS " if res["ok"] else ("FAIL " if required else "WARN ")) + name + "  " + str(res["detail"])[:300])
+        if not res["ok"] and res.get("trace"):
+            log(res["trace"])
         return fn
     return deco
 
@@ -46,10 +75,12 @@ def resample(audio, sr_from: int, sr_to: int = 16000):
 
 
 def run() -> int:
+    global _LOG
+    _LOG = os.environ.get("JARVIS_SELFTEST_LOG")
     home = Path(os.environ.get("JARVIS_HOME") or tempfile.mkdtemp(prefix="jarvis-selftest-"))
     os.environ["JARVIS_HOME"] = str(home)
     os.environ.setdefault("JARVIS_APP", "1")
-    print(f"JARVIS self-test · python {sys.version.split()[0]} · {sys.executable}", flush=True)
+    log(f"JARVIS self-test · python {sys.version.split()[0]} · {sys.executable}", flush=True)
     state: dict = {}
 
     @check("imports: core")
@@ -77,6 +108,25 @@ def run() -> int:
         import cv2, mediapipe  # noqa: F401
         return f"opencv {cv2.__version__}, mediapipe {mediapipe.__version__}"
 
+    @check("multiprocessing helpers don't relaunch the app", timeout=60)
+    def _():
+        import multiprocessing
+        import psutil
+        from multiprocessing import resource_tracker
+        lock = multiprocessing.RLock()  # what tqdm does: starts the resource tracker helper
+        time.sleep(2)
+        pid = getattr(resource_tracker._resource_tracker, "_pid", None)
+        if pid is None:
+            return "no resource tracker needed"
+        proc = psutil.Process(pid)
+        cmd = " ".join(proc.cmdline())
+        if "resource_tracker" not in cmd:
+            raise RuntimeError(f"helper process isn't a resource tracker: {cmd[:200]}")
+        kids = [p for p in psutil.Process().children(recursive=True) if p.pid != pid]
+        selftests = [p for p in kids if "JARVIS" in " ".join(p.cmdline()) and p.pid != pid]
+        del lock
+        return f"resource tracker pid {pid} ok; other JARVIS children: {len(selftests)}"
+
     @check("config + data dir")
     def _():
         from jarvis.config import load_config
@@ -84,7 +134,7 @@ def run() -> int:
         state["cfg"] = cfg
         return str(cfg.home)
 
-    @check("model downloads (all groups)")
+    @check("model downloads (all groups)", timeout=1200)
     def _():
         from jarvis.models import ModelManager
         mm = ModelManager(state["cfg"].models_dir, state["cfg"].get("voice.stt.model", "small.en"))
@@ -132,7 +182,7 @@ def run() -> int:
             raise RuntimeError(f"peak score only {best:.2f}")
         return f"peak score {best:.2f} (silence {silence:.2f})"
 
-    @check("ears: Whisper transcribes the speech")
+    @check("ears: Whisper transcribes the speech", timeout=300)
     def _():
         from jarvis.voice.stt import Transcriber
         stt = Transcriber("auto", state["cfg"].get("voice.stt.model", "small.en"), "en", [],
@@ -165,18 +215,20 @@ def run() -> int:
         ge.process(np.zeros((480, 640, 3), np.uint8))
         return "MediaPipe gesture recogniser ran"
 
-    @check("permissions API answers")
+    @check("permissions API answers", timeout=30)
     def _():
         from jarvis.mac import permissions
         return {p["key"]: p["status"] for p in permissions.all_status()}
 
-    @check("login item API answers", required=False)
+    @check("login item API answers", required=False, timeout=20)
     def _():
         from jarvis.mac import login_item
         return login_item.status()
 
-    @check("keychain round-trip", required=False)
+    @check("keychain round-trip", required=False, timeout=20)
     def _():
+        if os.environ.get("CI"):
+            return "skipped on CI (keychain may prompt)"
         from jarvis.mac import keychain
         keychain.SERVICE = "JARVIS selftest"
         keychain.set_api_key("sk-test-123")
@@ -214,5 +266,5 @@ def run() -> int:
     out = os.environ.get("JARVIS_SELFTEST_OUT")
     if out:
         Path(out).write_text(json.dumps(report, indent=2, default=str))
-    print(("\nSELFTEST PASSED" if not failed else f"\nSELFTEST FAILED: {[r['check'] for r in failed]}"), flush=True)
-    return 0 if not failed else 1
+    log("SELFTEST PASSED" if not failed else f"SELFTEST FAILED: {[r['check'] for r in failed]}")
+    os._exit(0 if not failed else 1)  # don't wait on any stuck worker thread

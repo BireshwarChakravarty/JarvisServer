@@ -453,8 +453,28 @@ def cmd_app(args) -> None:
     run_app()
 
 
+def _run_as_python_helper(argv: list[str]) -> bool:
+    """Inside JARVIS.app the launcher runs this module for *every* start of the app binary,
+    including when Python itself re-executes sys.executable as an interpreter (multiprocessing's
+    resource tracker and spawn workers pass `-c <code>`). Behave like `python -c` then, instead of
+    starting a second JARVIS."""
+    if "-c" in argv and argv.index("-c") + 1 < len(argv):
+        i = argv.index("-c")
+        code = argv[i + 1]
+        sys.argv = ["-c"] + argv[i + 2:]
+        exec(compile(code, "<string>", "exec"), {"__name__": "__main__", "__builtins__": __builtins__})
+        return True
+    parent = os.environ.get("JARVIS_PID")
+    if parent and parent != str(os.getpid()) and str(os.getppid()) == parent:
+        return True  # some other helper re-exec'd us without args: never start a second JARVIS
+    return False
+
+
 def main(argv: list[str] | None = None) -> None:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if _run_as_python_helper(argv):
+        return
+    os.environ["JARVIS_PID"] = str(os.getpid())
     # The packaged JARVIS.app launches `python -m jarvis` with no arguments.
     if os.environ.get("JARVIS_SELFTEST") == "1" or "--selftest" in argv:
         from jarvis.app.selftest import run as selftest

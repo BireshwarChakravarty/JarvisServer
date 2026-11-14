@@ -123,8 +123,8 @@ class WakeWord:
 
     def load(self) -> bool:
         try:
-            import inspect
             import os
+            from pathlib import Path
 
             import openwakeword
             import openwakeword.utils
@@ -133,17 +133,19 @@ class WakeWord:
             is_path = model_name_is_path(self.model_name)
             local = None
             if self.models_dir is not None and not is_path:
-                from pathlib import Path
-
                 oww = Path(self.models_dir) / "oww"
                 cand = sorted(oww.glob(f"{self.model_name}*.onnx")) if oww.exists() else []
                 if cand and (oww / "melspectrogram.onnx").exists() and (oww / "embedding_model.onnx").exists():
                     local = (str(cand[0]), str(oww / "melspectrogram.onnx"), str(oww / "embedding_model.onnx"))
-            if local and "wakeword_models" in inspect.signature(Model.__init__).parameters:
-                # downloaded by the app's model manager — nothing written inside the app bundle
-                self._model = Model(wakeword_models=[local[0]], inference_framework="onnx",
-                                    melspec_model_path=local[1], embedding_model_path=local[2])
-            elif "wakeword_models" in inspect.signature(Model.__init__).parameters:  # openWakeWord ≥ 0.5
+            version = tuple(int(x) for x in getattr(openwakeword, "__version__", "0.6.0").split(".")[:2] if x.isdigit())
+            if local:
+                # downloaded by the app's model manager: nothing is written inside the app bundle
+                try:  # openWakeWord >= 0.5
+                    self._model = Model(wakeword_models=[local[0]], inference_framework="onnx",
+                                        melspec_model_path=local[1], embedding_model_path=local[2])
+                except TypeError:  # 0.4 uses its bundled feature models
+                    self._model = Model(wakeword_model_paths=[local[0]])
+            elif version >= (0, 5) or hasattr(openwakeword.utils, "download_models"):
                 download = getattr(openwakeword.utils, "download_models", None)
                 if download and not is_path:
                     try:

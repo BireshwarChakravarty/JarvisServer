@@ -41,36 +41,34 @@ jobs:
         run: briefcase build macOS app --no-input
 
       - name: Self-test inside JARVIS.app
+        timeout-minutes: 30
         env:
           JARVIS_SELFTEST: "1"
           JARVIS_HOME: ${{ runner.temp }}/jarvis-home
           JARVIS_SELFTEST_OUT: ${{ runner.temp }}/selftest.json
+          JARVIS_SELFTEST_LOG: ${{ runner.temp }}/selftest.log
         run: |
           APP=$(ls -d build/jarvis/macos/app/*.app | head -1)
           echo "APP=$APP" >> "$GITHUB_ENV"
-          ls "$APP/Contents/MacOS"
           EXE="$APP/Contents/MacOS/$(ls "$APP/Contents/MacOS" | head -1)"
-          set +e
-          "$EXE"
-          code=$?
-          set -e
+          echo "Running $EXE"
+          : > "$JARVIS_SELFTEST_LOG"
+          "$EXE" > "${{ runner.temp }}/stdout.log" 2>&1 &
+          PID=$!
+          tail -n +1 -f "$JARVIS_SELFTEST_LOG" &
+          TAIL=$!
+          for i in $(seq 1 1500); do kill -0 $PID 2>/dev/null || break; sleep 1; done
+          if kill -0 $PID 2>/dev/null; then echo "::error::self-test still running after 25 min"; kill -9 $PID; fi
+          code=0; wait $PID || code=$?
+          sleep 1; kill $TAIL 2>/dev/null || true
           echo "exit code: $code"
-          if [ -f "$JARVIS_SELFTEST_OUT" ]; then
-            python - <<'PY'
-          import json, os
-          r = json.load(open(os.environ["JARVIS_SELFTEST_OUT"]))
-          for c in r["results"]:
-              mark = "PASS" if c["ok"] else ("FAIL" if c["required"] else "warn")
-              print(f"{mark:4}  {c['check']:<40} {c['s']:>6}s  {str(c['detail'])[:160]}")
-              if not c["ok"]:
-                  print(c.get("trace", ""))
-          raise SystemExit(0 if r["ok"] else 1)
-          PY
-          else
+          echo "--- app stdout/stderr (tail) ---"; tail -60 "${{ runner.temp }}/stdout.log" || true
+          if [ ! -f "$JARVIS_SELFTEST_OUT" ]; then
             echo "::error::self-test produced no report"
-            log show --last 10m --predicate 'process == "JARVIS"' --style compact | tail -200 || true
+            log show --last 30m --predicate 'process == "JARVIS"' --style compact 2>/dev/null | tail -150 || true
             exit 1
           fi
+          python3 -c "import json,sys; r=json.load(open('$JARVIS_SELFTEST_OUT')); sys.exit(0 if r['ok'] else 1)"
 
       - name: Package (ad-hoc signed DMG + zip)
         run: |
@@ -89,6 +87,7 @@ jobs:
           path: |
             dist/*
             ${{ runner.temp }}/selftest.json
+            ${{ runner.temp }}/selftest.log
           if-no-files-found: ignore
 
       - name: Publish release
