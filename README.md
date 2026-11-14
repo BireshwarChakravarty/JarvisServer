@@ -69,8 +69,8 @@ Either way, JARVIS opens straight into a **guided setup**. Nothing else is done 
 | You | Your name, how he should address you (sir / ma'am / boss / your name), and your city, with autocomplete. |
 | Intelligence | Paste an Anthropic API key (there's a button that opens the right page). He checks it with a live call and stores it in your **Keychain**. |
 | Senses | One **Allow all** button triggers each macOS permission dialog in turn: microphone, camera, calendars, reminders, contacts, app control. Status updates live. Screen recording and Accessibility are optional. |
-| Recognition | A live camera view learns your face in about 5 seconds. |
-| Voice | Say “Hey Jarvis”. He confirms he heard you and answers in his own voice. |
+| Recognition | Pick your camera (a Mac mini has none built in), then a live view learns your face in about 5 seconds. |
+| Voice | Pick your microphone, then say “Hey Jarvis”. He confirms he heard you and answers in his own voice. |
 | Ready | Start at login (on by default), lock-when-away, sentry mode. **Launch JARVIS** and the HUD takes over. |
 
 Change any of it later from **Settings** (the gear on the HUD, or the menu-bar icon). Closing the window keeps JARVIS
