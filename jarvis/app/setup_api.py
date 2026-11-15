@@ -52,6 +52,12 @@ def _write_user_config(cfg, patch: dict) -> dict:
     return data
 
 
+def _current_voice(cfg) -> str:
+    if cfg.get("voice.tts.backend") == "say":
+        return f"mac:{cfg.get('voice.tts.say_voice') or 'auto'}"
+    return str(cfg.get("voice.tts.voice") or "jarvis")
+
+
 def _has_key() -> bool:
     if os.environ.get("ANTHROPIC_API_KEY"):
         return True
@@ -374,12 +380,50 @@ def make_router(sup) -> APIRouter:
             _write_user_config(sup.cfg, patch)
         return {"ok": True}
 
+    # ── voice choice ──────────────────────────────────────────────────────
+    @r.get("/api/setup/voices")
+    async def voices():
+        from jarvis.voice.tts import VOICE_PRESETS, best_mac_voice, mac_voices
+
+        installed = await asyncio.to_thread(mac_voices)
+        british = [v["name"] for v in installed if v["lang"] in ("en_GB", "en_IE", "en_AU", "en_IN", "en_ZA")]
+        good = [n for n in british if "(Premium)" in n or "(Enhanced)" in n]
+        return {
+            "current": _current_voice(sup.cfg),
+            "neural_ready": sup.models.ready("voice"),
+            "presets": [{"id": k, "label": v["label"], "about": v["about"]} for k, v in VOICE_PRESETS.items()],
+            "mac": [{"id": f"mac:{n}", "label": n, "about": "Apple voice, built into macOS"} for n in good or british[:4]],
+            "mac_best": best_mac_voice(installed) if installed else None,
+            "mac_has_premium": bool(good),
+        }
+
+    @r.post("/api/setup/voice")
+    async def set_voice(body: dict = Body(...)):
+        from jarvis.voice.tts import VOICE_PRESETS
+
+        vid = str(body.get("voice") or "")
+        if vid.startswith("mac:"):
+            tts = {"backend": "say", "say_voice": vid[4:]}
+        elif vid in VOICE_PRESETS:
+            tts = {"backend": "auto", "voice": vid}
+        else:
+            return JSONResponse({"ok": False, "error": "unknown voice"}, status_code=400)
+        _write_user_config(sup.cfg, {"voice": {"tts": tts}})
+        return {"ok": True, "current": _current_voice(sup.cfg)}
+
+    @r.post("/api/setup/open-voice-settings")
+    async def open_voice_settings():
+        # Spoken Content, where Apple's Premium voices are downloaded (free)
+        subprocess.Popen(["open", "x-apple.systempreferences:com.apple.preference.universalaccess?SpokenContent"])
+        return {"ok": True}
+
     # ── voice & wake word test ────────────────────────────────────────────
     @r.post("/api/setup/speak")
     async def speak(body: dict = Body(default={})):
         sp = await asyncio.to_thread(sup.setup_speaker)
         title = sup.cfg.get("owner.title", "sir")
-        text = body.get("text") or f"Good to meet you, {title}. All systems are ready when you are."
+        text = body.get("text") or (f"Good evening, {title}. I've run the diagnostics and everything checks out. "
+                                    f"Shall I bring the rest of the house online?")
         sp.enqueue(text)
         bus.emit("reply", text=text)
         return {"ok": True, "voice": sp.backend.name}

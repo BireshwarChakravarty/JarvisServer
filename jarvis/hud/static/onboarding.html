@@ -122,18 +122,29 @@
 
     <!-- 5 · voice -->
     <section class="step" data-step="voice" hidden>
-      <p class="eyebrow">Step 5 · Voice</p>
+      <p class="eyebrow">Step 5 · Listening</p>
       <h1>Say “Hey Jarvis”.</h1>
       <p class="lede">That's how you'll wake me from across the room. You can also hold the right ⌥ Option key, or show me ✌️.</p>
       <label class="field compact"><span>Microphone</span><select id="mic-select"></select></label>
       <div class="meter"><div class="bars" id="bars"></div><div class="meter-label mono" id="meter-label">Ready</div></div>
       <p class="err" id="voice-err"></p>
-      <div class="actions"><button class="btn ghost" data-back>Back</button><button class="btn ghost" id="hear-voice">Hear my voice</button><button class="btn gold" id="voice-go">Start listening</button></div>
+      <div class="actions"><button class="btn ghost" data-back>Back</button><button class="btn ghost" id="voice-skip">Skip</button><button class="btn gold" id="voice-go">Start listening</button></div>
     </section>
 
-    <!-- 6 · ready -->
+    <!-- 6 · speech -->
+    <section class="step" data-step="speech" hidden>
+      <p class="eyebrow">Step 6 · Voice</p>
+      <h1>Choose how I sound.</h1>
+      <p class="lede">Tap a voice to hear it. Every one runs entirely on this Mac.</p>
+      <div class="voices" id="voices" role="radiogroup" aria-label="Voice"></div>
+      <p class="hint" id="voice-hint"></p>
+      <p class="err" id="speech-err"></p>
+      <div class="actions"><button class="btn ghost" data-back>Back</button><button class="btn gold" id="speech-next">Continue</button></div>
+    </section>
+
+    <!-- 7 · ready -->
     <section class="step" data-step="ready" hidden>
-      <p class="eyebrow">Step 6 · Ready</p>
+      <p class="eyebrow">Step 7 · Ready</p>
       <h1>All systems go.</h1>
       <div class="toggles">
         <label class="tg"><input type="checkbox" id="opt-login" checked><span class="sw"></span><div><b>Start when I log in</b><span>I'll greet you with a briefing every time.</span></div></label>

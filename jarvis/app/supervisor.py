@@ -86,13 +86,18 @@ class Supervisor:
     def setup_speaker(self):
         from jarvis.voice.tts import Speaker, make_backend
 
-        want = "kokoro-onnx" if self.models.ready("voice") else "say"
-        if self.speaker is None or self.speaker.backend.name != want:
-            backend = make_backend(want, self.cfg.get("voice.tts.voice", "bm_george"),
-                                   float(self.cfg.get("voice.tts.speed", 1.05)),
-                                   self.cfg.get("voice.tts.say_voice", "Daniel"), self.cfg.models_dir)
+        choice = self.cfg.get("voice.tts.backend", "auto")
+        want = "say" if choice == "say" or not self.models.ready("voice") else "kokoro-onnx"
+        key = (want, self.cfg.get("voice.tts.voice"), self.cfg.get("voice.tts.say_voice"), self.cfg.get("voice.tts.speed"))
+        if self.speaker is None or getattr(self, "_speaker_key", None) != key:
+            if self.speaker is not None:
+                self.speaker.stop()
+            backend = make_backend(want, self.cfg.get("voice.tts.voice", "jarvis"),
+                                   float(self.cfg.get("voice.tts.speed", 1.0)),
+                                   self.cfg.get("voice.tts.say_voice", "auto"), self.cfg.models_dir)
             self.speaker = Speaker(backend, self.cfg.get("voice.output_device"))
             self.speaker.start()
+            self._speaker_key = key
         return self.speaker
 
     def release_setup_devices(self) -> None:

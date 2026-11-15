@@ -25,7 +25,7 @@ smart home and terminal. Everything shows on a live, holographic HUD.
 |---|---|
 | 🌅 **Greets you at login** | A greeting that fits the time of day ("Good morning, sir… burning the midnight oil again?") plus a spoken briefing of weather, your next meetings, overdue reminders, unread mail and headlines. Then *"What shall we tackle first?"*, and he listens with no wake word needed. |
 | 🔁 **Notices you're back** | Unlock the Mac or simply sit down in front of the camera after time away, and he welcomes you back. The first return of the day gets the full briefing. |
-| 🎙️ **Hands-free voice** | Wake word "Hey Jarvis" (openWakeWord), or hold **Right ⌥** to talk. Whisper large-v3-turbo transcribes on your Apple GPU. A British **Kokoro** voice (`bm_george`) starts speaking within about a second, sentence by sentence while he's still thinking. |
+| 🎙️ **Hands-free voice** | Wake word "Hey Jarvis" (openWakeWord), or hold **Right ⌥** to talk. Whisper large-v3-turbo transcribes on your Apple GPU. His **JARVIS voice** (a blend of Kokoro's British George and Fable voices, all on-device) starts within about a second and speaks in whole phrases with natural pauses. Times and units are said the way a person would ("nine tomorrow morning"), and if an answer is slow he says "One moment, sir." instead of leaving silence. Pick another voice, or a free Apple Premium voice such as Jamie, in setup. |
 | ✋ **Interrupt anytime** | Say "Jarvis" while he's talking, raise an open palm, or press Esc. After each answer he keeps listening for a few seconds, so follow-ups don't need the wake word. |
 | 👁️ **Sees** | "What am I holding?", "How do I look?", "What's on my screen?", "Read this error": camera frames and screenshots go straight to Claude's vision. |
 | 🧑‍🚀 **Knows you** | Face recognition (OpenCV YuNet + SFace) tells you apart from visitors. Optional **sentry mode** photographs unknown faces while you're away; optional auto-lock when you leave. |
@@ -70,7 +70,8 @@ Either way, JARVIS opens straight into a **guided setup**. Nothing else is done 
 | Intelligence | Paste an Anthropic API key (there's a button that opens the right page). He checks it with a live call and stores it in your **Keychain**. |
 | Senses | One **Allow all** button triggers each macOS permission dialog in turn: microphone, camera, calendars, reminders, contacts, app control. Status updates live. Screen recording and Accessibility are optional. |
 | Recognition | Pick your camera (a Mac mini has none built in), then a live view learns your face in about 5 seconds. |
-| Voice | Pick your microphone, then say “Hey Jarvis”. He confirms he heard you and answers in his own voice. |
+| Listening | Pick your microphone, then say “Hey Jarvis”. He confirms he heard you. |
+| Voice | Tap a voice to hear it: JARVIS (recommended), George, Fable, Lewis, Emma, or an Apple Premium voice you've downloaded. |
 | Ready | Start at login (on by default), lock-when-away, sentry mode. **Launch JARVIS** and the HUD takes over. |
 
 Change any of it later from **Settings** (the gear on the HUD, or the menu-bar icon). Closing the window keeps JARVIS
@@ -163,7 +164,7 @@ brain:
   effort: low              # low = snappiest spoken replies
   fast_mode: false         # up to ~2.5x faster output, premium pricing
 voice:
-  tts: { voice: bm_george }    # or bm_lewis, bf_emma …
+  tts: { voice: jarvis }       # preset (jarvis, george, fable, lewis, emma) or a blend: "bm_george:0.6,bm_fable:0.4"
   push_to_talk_key: alt_r
 vision:
   sentry_mode: true
@@ -215,7 +216,7 @@ mcp_servers:
                           │    └─ prompt-cached, append-only sessions + summaries    │
                           │        │ sentence-by-sentence                            │
                           │        ▼                                                 │
-                          │  Kokoro TTS (bm_george) ─► speaker (interruptible)       │
+                          │  Kokoro TTS (JARVIS blend) ─► speaker (interruptible)    │
                           │                                                          │
                           │  Event bus ─► FastAPI + WebSocket ─► HUD (pywebview)     │
                           └──────────────────────────────────────────────────────────┘

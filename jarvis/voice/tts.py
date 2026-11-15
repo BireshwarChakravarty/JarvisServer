@@ -26,6 +26,7 @@ from pathlib import Path
 import numpy as np
 
 from jarvis.events import bus
+from jarvis.voice.text import speech_form
 
 log = logging.getLogger("jarvis.tts")
 
@@ -33,6 +34,32 @@ KOKORO_ONNX_URLS = {
     "kokoro-v1.0.onnx": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx",
     "voices-v1.0.bin": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
 }
+
+
+# Kokoro voice presets. A spec is one voice ("bm_george") or a weighted blend of style vectors
+# ("bm_george:0.55,bm_fable:0.45"); blending averages the voices' timbre and delivery.
+VOICE_PRESETS = {
+    "jarvis": {"spec": "bm_george:0.5,bm_fable:0.5", "speed": 0.94,
+               "label": "JARVIS", "about": "Calm, dry British butler (a blend of George and Fable)"},
+    "george": {"spec": "bm_george", "speed": 1.0, "label": "George", "about": "Warm, steady British male"},
+    "fable": {"spec": "bm_fable", "speed": 1.0, "label": "Fable", "about": "Brighter, more expressive British male"},
+    "lewis": {"spec": "bm_lewis", "speed": 1.0, "label": "Lewis", "about": "Deeper British male"},
+    "emma": {"spec": "bf_emma", "speed": 1.0, "label": "Emma", "about": "British female (a FRIDAY alternative)"},
+}
+
+
+def parse_voice_spec(spec: str) -> list[tuple[str, float]]:
+    """'bm_george:0.55,bm_fable:0.45' -> [('bm_george', .55), ('bm_fable', .45)] (weights normalised)."""
+    spec = VOICE_PRESETS.get(spec, {}).get("spec", spec)
+    parts = []
+    for item in spec.replace("+", ",").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        name, _, w = item.partition(":")
+        parts.append((name.strip(), float(w) if w else 1.0))
+    total = sum(w for _, w in parts) or 1.0
+    return [(n, w / total) for n, w in parts]
 
 
 class TTSBackend:
@@ -49,8 +76,8 @@ class KokoroMLX(TTSBackend):
     def __init__(self, voice: str, speed: float) -> None:
         from mlx_audio.tts.utils import load_model
 
-        self.voice, self.speed = voice, speed
-        self.lang = "b" if voice.startswith("b") else "a"
+        self.voice, self.speed = parse_voice_spec(voice)[0][0], speed   # MLX takes one voice, not a blend
+        self.lang = "b" if self.voice.startswith("b") else "a"
         self.model = load_model("mlx-community/Kokoro-82M-bf16")
 
     def synth(self, text: str) -> np.ndarray:
@@ -81,11 +108,21 @@ class KokoroONNX(TTSBackend):
                 _download(url, path)
             paths[fname] = path
         self.kokoro = Kokoro(str(paths["kokoro-v1.0.onnx"]), str(paths["voices-v1.0.bin"]))
-        self.voice, self.speed = voice, speed
-        self.lang = "en-gb" if voice.startswith("b") else "en-us"
+        self.speed = speed
+        self.set_voice(voice)
+
+    def set_voice(self, voice: str) -> None:
+        parts = parse_voice_spec(voice)
+        missing = [n for n, _ in parts if n not in self.kokoro.voices]
+        if missing or not parts:
+            log.warning("unknown Kokoro voice %s; using bm_george", missing or voice)
+            parts = [("bm_george", 1.0)]
+        self.voice = voice
+        self.style = sum(self.kokoro.get_voice_style(n) * w for n, w in parts).astype(np.float32)
+        self.lang = "en-gb" if parts[0][0].startswith("b") else "en-us"
 
     def synth(self, text: str) -> np.ndarray:
-        samples, sr = self.kokoro.create(text, voice=self.voice, speed=self.speed, lang=self.lang)
+        samples, sr = self.kokoro.create(text, voice=self.style, speed=self.speed, lang=self.lang)
         self.sample_rate = int(sr)
         return np.asarray(samples, dtype=np.float32)
 
@@ -97,7 +134,7 @@ class MacSay(TTSBackend):
     def __init__(self, voice: str, speed: float) -> None:
         if not shutil.which("say"):
             raise RuntimeError("`say` not found")
-        self.voice = voice
+        self.voice = best_mac_voice() if voice in (None, "", "auto") else voice
         self.rate = int(180 * speed)
 
     def synth(self, text: str) -> np.ndarray:
@@ -118,6 +155,35 @@ class MacSay(TTSBackend):
             return np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
         finally:
             Path(path).unlink(missing_ok=True)
+
+
+# Apple's downloadable neural voices sound far better than the compact defaults.
+# Best British male first. (System Settings > Accessibility > Spoken Content > Manage Voices.)
+MAC_VOICE_PREFERENCE = ["Jamie (Premium)", "Jamie (Enhanced)", "Daniel (Premium)", "Daniel (Enhanced)",
+                        "Oliver (Premium)", "Oliver (Enhanced)", "Arthur (Premium)", "Arthur (Enhanced)",
+                        "Jamie", "Daniel", "Oliver", "Arthur"]
+
+
+def mac_voices() -> list[dict]:
+    """Installed `say` voices: [{'name', 'lang'}]."""
+    if not shutil.which("say"):
+        return []
+    try:
+        out = subprocess.run(["say", "-v", "?"], capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return []
+    import re
+    voices = []
+    for line in out.splitlines():
+        m = re.match(r"^(.+?)\s{2,}([a-z]{2}[_-][A-Z]{2})\s+#", line)
+        if m:
+            voices.append({"name": m.group(1).strip(), "lang": m.group(2).replace("-", "_")})
+    return voices
+
+
+def best_mac_voice(installed: list[dict] | None = None) -> str:
+    names = {v["name"] for v in (installed if installed is not None else mac_voices())}
+    return next((v for v in MAC_VOICE_PREFERENCE if v in names), "Daniel")
 
 
 class SilentTTS(TTSBackend):
@@ -153,6 +219,8 @@ def _download(urls: str | list[str], dest: Path) -> None:
 def make_backend(kind: str, voice: str, speed: float, say_voice: str, models_dir: Path) -> TTSBackend:
     if kind == "silent":
         return SilentTTS()
+    voice = voice or "jarvis"
+    speed = float(speed or 1.0) * VOICE_PRESETS.get(voice, {}).get("speed", 1.0)   # presets carry their own pace
     order = [kind] if kind != "auto" else ["kokoro-onnx", "say"]
     if kind == "auto" and not (models_dir / "kokoro-v1.0.onnx").exists():
         order = ["say", "kokoro-onnx"]  # don't block on a 300 MB download; setup fetches it
@@ -170,6 +238,29 @@ def make_backend(kind: str, voice: str, speed: float, say_voice: str, models_dir
     return SilentTTS()
 
 
+def breath_after(text: str) -> float:
+    """The pause a person leaves after a phrase: longer after a full stop than after a comma."""
+    t = text.rstrip().rstrip("\"')]")
+    if t.endswith("?"):
+        return 0.32
+    if t.endswith((".", "!", "…")):
+        return 0.26
+    if t.endswith((",", ";", ":")):
+        return 0.12
+    return 0.08
+
+
+def shape_audio(audio: np.ndarray, sr: int, pause: float) -> np.ndarray:
+    """Clip-safe, 6 ms fades so chunk joins never click, then the breath that follows the phrase."""
+    a = np.clip(np.asarray(audio, dtype=np.float32), -1, 1).copy()
+    f = min(int(sr * 0.006), len(a) // 2)
+    if f > 0:
+        ramp = np.linspace(0, 1, f, dtype=np.float32)
+        a[:f] *= ramp
+        a[-f:] *= ramp[::-1]
+    return np.concatenate([a, np.zeros(int(sr * pause), dtype=np.float32)])
+
+
 # ═══════════════════════════════ the speaker ═════════════════════════════════
 class Speaker:
     def __init__(self, backend: TTSBackend, output_device: str | None = None) -> None:
@@ -183,6 +274,7 @@ class Speaker:
         self._idle = threading.Event()
         self._idle.set()
         self._stop_play = threading.Event()
+        self._playing = threading.Event()
         self._threads: list[threading.Thread] = []
         self._sd = None
         try:
@@ -263,22 +355,47 @@ class Speaker:
                 self._idle.set()
                 bus.emit("level", source="tts", value=0.0)
 
+    # Kokoro's prosody is best on phrase-sized input (~100-200 tokens): one sentence at a time
+    # restarts the intonation every few words. The first sentence still goes alone so JARVIS starts
+    # talking at once; whatever has queued up behind it while it was being voiced is merged.
+    PHRASE_CHARS = 220
+
+    def _take_phrase(self, gen: int, text: str) -> tuple[str, int]:
+        parts, n = [text], 1
+        while sum(len(p) for p in parts) < self.PHRASE_CHARS:
+            try:
+                g, nxt = self._text_q.get_nowait()
+            except queue.Empty:
+                break
+            if g != gen:
+                continue  # stale (interrupted); _gen moved on
+            if sum(len(p) for p in parts) + len(nxt) > self.PHRASE_CHARS * 1.4:
+                self._text_q.queue.appendleft((g, nxt))  # too long to merge: keep it for next time
+                break
+            parts.append(nxt)
+            n += 1
+        return " ".join(parts), n
+
     def _synth_worker(self) -> None:
         while True:
             gen, text = self._text_q.get()
             if gen != self._gen:
                 continue
+            count = 1
+            if self._playing.is_set() or not self._audio_q.empty():   # merging can't delay the start
+                text, count = self._take_phrase(gen, text)
             try:
                 t0 = time.perf_counter()
-                audio = self.backend.synth(text)
+                audio = self.backend.synth(speech_form(text))
                 log.debug("synth %.0f ms for %d chars", (time.perf_counter() - t0) * 1000, len(text))
             except Exception as exc:
                 log.error("TTS failed: %s", exc)
-                self._done_one()
+                for _ in range(count):
+                    self._done_one()
                 continue
             if gen != self._gen:
                 continue
-            self._audio_q.put((gen, text, audio, self.backend.sample_rate))
+            self._audio_q.put((gen, text, audio, self.backend.sample_rate, count))
 
     def _device_index(self):
         if not self.output_device or self._sd is None:
@@ -289,20 +406,23 @@ class Speaker:
 
     def _play_worker(self) -> None:
         while True:
-            gen, text, audio, sr = self._audio_q.get()
+            gen, text, audio, sr, count = self._audio_q.get()
             if gen != self._gen:
                 continue
             self._stop_play.clear()
+            self._playing.set()
             bus.emit("speaking", text=text)
             try:
-                self._play(audio, sr, gen)
+                self._play(audio, sr, gen, pause=breath_after(text))
             except Exception as exc:  # no output device, device unplugged … keep the worker alive
                 log.error("audio playback failed: %s", exc)
                 bus.emit("error", message=f"Audio output problem: {exc}")
             finally:
-                self._done_one()
+                self._playing.clear()
+                for _ in range(count):
+                    self._done_one()
 
-    def _play(self, audio: np.ndarray, sr: int, gen: int) -> None:
+    def _play(self, audio: np.ndarray, sr: int, gen: int, pause: float = 0.08) -> None:
         block = int(sr * 0.04)
         if self._sd is None:
             # headless: emulate playback time so the state machine behaves the same
@@ -312,9 +432,7 @@ class Speaker:
                 chunk = audio[i:i + block]
                 bus.emit("level", source="tts", value=float(min(1.0, np.sqrt(np.mean(chunk ** 2)) * 6)) if len(chunk) else 0.0)
             return
-        audio = np.clip(audio, -1, 1).astype(np.float32)
-        # a touch of tail silence keeps the last syllable from clipping
-        audio = np.concatenate([audio, np.zeros(int(sr * 0.08), dtype=np.float32)])
+        audio = shape_audio(audio, sr, pause)
         with self._sd.OutputStream(samplerate=sr, channels=1, dtype="float32",
                                    device=self._device_index(), blocksize=block) as stream:
             for i in range(0, len(audio), block):

@@ -452,17 +452,47 @@ class Jarvis:
         self._cancel_turn = cancel
         self._turn_active = True
 
+        first = asyncio.Event()
+
         async def on_sentence(sentence: str) -> None:
+            first.set()
             bus.emit("state", state="speaking")
             if self.speaker:
                 self.speaker.enqueue(sentence)
 
+        filler = asyncio.create_task(self._filler(first, cancel)) if (
+            self.speaker and source in ("voice", "hud", "protocol") and self.cfg.get("voice.tts.fillers", True)) else None
         try:
             reply = await self.brain.respond(text, on_sentence=on_sentence, context=await self._live_context(),
                                              images=images, cancel=cancel)
         finally:
             self._turn_active = False
+            if filler:
+                filler.cancel()
         return reply
+
+    # A person answers within a second or so, even if only to say they're on it. When the model is
+    # slow to its first word (a tool call, a web search) JARVIS says so instead of leaving silence.
+    FILLERS = ["One moment, {t}.", "Right away, {t}.", "Just a moment.", "Bear with me, {t}.", "Let me see.",
+               "Give me a second, {t}.", "On it."]
+    STILL = ["Still working on it, {t}.", "Nearly there.", "This is taking a little longer than I'd like, {t}."]
+
+    async def _filler(self, first: asyncio.Event, cancel: asyncio.Event) -> None:
+        import random
+
+        t = self.cfg.get("owner.title", "sir")
+        for delay, lines in ((1.3, self.FILLERS), (9.0, self.STILL)):
+            try:
+                await asyncio.wait_for(first.wait(), delay)
+                return
+            except asyncio.TimeoutError:
+                pass
+            if cancel.is_set() or (self.speaker and self.speaker.speaking):
+                return
+            pool = [x for x in lines if x != getattr(self, "_last_filler", None)]
+            self._last_filler = line = random.choice(pool)
+            self.speaker.enqueue(line.format(t=t))
+            bus.emit("filler", text=line.format(t=t))
 
     def queue_request(self, text: str, source: str = "protocol") -> None:
         self._requests.put_nowait((text, source))

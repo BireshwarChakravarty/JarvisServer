@@ -8,6 +8,7 @@ const PAGES = [
   ['setup-welcome', '/setup?demo', 2500],
   ['setup-brain', '/setup?demo#brain', 2500],
   ['setup-senses', '/setup?demo#senses', 2500],
+  ['setup-speech', '/setup?demo#speech', 2500],
   ['setup-ready', '/setup?demo#ready', 2500],
 ];
 

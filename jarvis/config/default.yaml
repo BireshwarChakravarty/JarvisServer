@@ -48,9 +48,10 @@ voice:
     language: "en"
   tts:
     backend: auto          # auto | kokoro-onnx | kokoro-mlx | say
-    voice: "bm_george"     # Kokoro British male. Others: bm_lewis, bm_daniel, bf_emma
-    speed: 1.05
-    say_voice: "Daniel"    # macOS fallback voice (British). Try "Daniel (Enhanced)" if installed.
+    voice: "jarvis"        # preset (jarvis | george | fable | lewis | emma), a Kokoro voice, or a blend "bm_george:0.6,bm_fable:0.4"
+    speed: 1.0             # measured, unhurried
+    say_voice: "auto"      # Apple voice: auto picks the best British male installed (Jamie/Daniel Premium first)
+    fillers: true          # "One moment, sir." when an answer takes a while
 
 vision:
   enabled: true

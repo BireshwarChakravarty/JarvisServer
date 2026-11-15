@@ -5,7 +5,7 @@
   const reactor = new Reactor($("core-gl"), $("core-ui"));
   reactor.setState("idle");
 
-  const STEPS = ["welcome", "you", "brain", "senses", "face", "voice", "ready"];
+  const STEPS = ["welcome", "you", "brain", "senses", "face", "voice", "speech", "ready"];
   const CAPTIONS = {
     welcome: () => greeting() + " I'm JARVIS.",
     you: () => "First, the essentials.",
@@ -13,6 +13,7 @@
     senses: () => "I'll ask macOS for each permission. Approve them in the dialogs.",
     face: () => "Hold still. This will only take a moment.",
     voice: () => "Go on, say my name.",
+    speech: () => "I can sound however you like.",
     ready: () => "Everything's in place.",
   };
   let S = null, step = "welcome", title = "sir", city = null, settings = false;
@@ -102,6 +103,7 @@
     if (s === "face" || s === "voice") loadDevices();
     if (s === "face") startCamera();
     if (s === "brain") loadBrain();
+    if (s === "speech") loadVoices();
   }
   function leave(s) {
     if (s === "senses") clearInterval(pollTimer);
@@ -376,7 +378,47 @@
     } catch (e) { $("voice-err").textContent = e.message; reactor.setState("idle"); m.classList.remove("live"); }
     busy($("voice-go"), false);
   };
-  $("hear-voice").onclick = () => { reactor.setState("speaking"); speak(); setTimeout(() => reactor.setState("idle"), 3500); };
+  $("voice-skip").onclick = nextStep;
+
+  /* ───────────── speech: pick a voice, hear it ───────────── */
+  let voiceSel = null;
+  const sample = () => `Good evening, ${S.profile.title || "sir"}. I've run the diagnostics and everything checks out. Shall I bring the rest of the house online?`;
+  async function loadVoices() {
+    const v = await api("/api/setup/voices").catch(() => null);
+    if (!v) return;
+    voiceSel = v.current;
+    const box = $("voices"); box.innerHTML = "";
+    const add = (o, kind) => {
+      const b = document.createElement("button");
+      b.className = "voice"; b.type = "button"; b.dataset.v = o.id; b.setAttribute("role", "radio");
+      b.innerHTML = `<span class="pdot"></span><div><b></b><span></span></div><i class="vplay" aria-hidden="true"></i>`;
+      b.querySelector("b").textContent = o.label + (o.id === "jarvis" ? "" : "");
+      b.querySelector("div span").textContent = o.about;
+      if (o.id === "jarvis") b.querySelector("b").insertAdjacentHTML("beforeend", ' <em class="ptag">Recommended</em>');
+      if (kind === "neural" && !v.neural_ready) b.disabled = true;
+      b.onclick = () => pickVoice(o.id);
+      box.appendChild(b);
+    };
+    v.presets.forEach((o) => add(o, "neural"));
+    v.mac.forEach((o) => add(o, "mac"));
+    markVoice();
+    $("voice-hint").innerHTML = !v.neural_ready ? "My neural voices are still downloading; the Apple voices work right away."
+      : v.mac_has_premium ? "" : 'Prefer an Apple voice? Download a free Premium one (Jamie is excellent) in <a href="#" id="get-voices">Spoken Content settings</a>, then come back.';
+    const gv = $("get-voices"); if (gv) gv.onclick = (e) => { e.preventDefault(); api("/api/setup/open-voice-settings", {}).catch(() => {}); };
+  }
+  function markVoice() {
+    document.querySelectorAll("#voices .voice").forEach((b) => { const on = b.dataset.v === voiceSel; b.classList.toggle("on", on); b.setAttribute("aria-checked", on); });
+  }
+  async function pickVoice(id) {
+    voiceSel = id; markVoice(); $("speech-err").textContent = "";
+    document.querySelectorAll("#voices .voice").forEach((b) => b.classList.toggle("playing", b.dataset.v === id));
+    try {
+      await api("/api/setup/voice", { voice: id });
+      reactor.setState("speaking"); caption(sample()); await speak(sample());
+      setTimeout(() => { reactor.setState("idle"); document.querySelectorAll("#voices .voice").forEach((b) => b.classList.remove("playing")); }, 7000);
+    } catch (e) { $("speech-err").textContent = e.message; }
+  }
+  $("speech-next").onclick = nextStep;
 
   /* ───────────── ready ───────────── */
   $("launch").onclick = async () => {
@@ -480,9 +522,20 @@
       claude: { installed: true, version: "2.1.325 (Claude Code)", logged_in: false }, codex: { installed: false } });
     if (path === "/api/setup/devices") return Promise.resolve({ microphones: [{ name: "Studio Display Microphone", default: true }, { name: "Logitech BRIO" }],
       cameras: [{ index: 0, name: "Logitech BRIO" }, { index: 1, name: "iPhone Camera" }], input_device: null, camera_index: 0 });
+    if (path === "/api/setup/voices") return Promise.resolve({ current: "jarvis", neural_ready: true, mac_has_premium: true,
+      presets: [["jarvis", "JARVIS", "Calm, dry British butler (a blend of George and Fable)"], ["george", "George", "Warm, steady British male"],
+        ["fable", "Fable", "Brighter, more expressive British male"], ["lewis", "Lewis", "Deeper British male"], ["emma", "Emma", "British female (a FRIDAY alternative)"]]
+        .map(([id, label, about]) => ({ id, label, about })),
+      mac: [{ id: "mac:Jamie (Premium)", label: "Jamie (Premium)", about: "Apple voice, built into macOS" }] });
     if (path.startsWith("/api/setup/geocode")) return Promise.resolve([{ name: "London", region: "England", country: "United Kingdom", country_code: "GB" }]);
     return new Promise((res) => setTimeout(() => res({ ok: true, model: "claude-opus-5-5", best: 0.93 }), 900));
   }
+
+  // the sticky Back/Continue bar gets its backdrop only when the step actually overflows
+  const panel = document.querySelector(".ob-panel");
+  const markOverflow = () => panel.classList.toggle("overflowing", panel.scrollHeight > panel.clientHeight + 2);
+  new ResizeObserver(markOverflow).observe(panel);
+  new MutationObserver(() => requestAnimationFrame(markOverflow)).observe(panel, { subtree: true, childList: true, attributes: true, attributeFilter: ["hidden"] });
 
   if (DEMO) window.__goStep = (st) => go(st);
   init().catch((e) => caption("I couldn't reach my core: " + e.message));
