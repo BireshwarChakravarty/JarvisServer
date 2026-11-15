@@ -142,8 +142,20 @@ def wake_display(seconds: int = 5) -> None:
 
 
 def lock_screen() -> str:
+    """Lock now. First choice: the login framework's SACLockScreenImmediate, the same call the
+    system's Lock Screen menu item makes; it needs no Accessibility or Automation permission.
+    Fallback: the ⌃⌘Q shortcut via System Events (needs those permissions)."""
     require_mac()
-    # Ctrl+Cmd+Q is the system lock shortcut
+    import ctypes
+
+    try:
+        login = ctypes.CDLL("/System/Library/PrivateFrameworks/login.framework/Versions/Current/login")
+        fn = login.SACLockScreenImmediate
+        fn.restype = ctypes.c_int
+        if fn() == 0:
+            return "Screen locked."
+    except Exception as exc:
+        log.info("SACLockScreenImmediate unavailable (%s); using the keyboard shortcut", exc)
     osascript('tell application "System Events" to keystroke "q" using {control down, command down}')
     return "Screen locked."
 

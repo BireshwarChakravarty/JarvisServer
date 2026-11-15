@@ -293,8 +293,32 @@
       const btn = row.querySelector(".st");
       btn.textContent = LABEL[p.status] || "Allow";
       btn.onclick = () => requestPerm(p.key, btn);
+      // Screen Recording (and sometimes Accessibility) only reach a running app after a relaunch:
+      // once you've been sent to System Settings for one of them, offer that instead of "Allow"
+      if (p.status !== "granted" && RELAUNCH_KEYS.includes(p.key) && asked.has(p.key)) {
+        btn.textContent = "Relaunch to apply"; btn.classList.add("relaunch");
+        btn.onclick = relaunch;
+        row.querySelector("span").textContent = "Switched JARVIS on in System Settings? Relaunch so macOS hands it over.";
+      }
       box.appendChild(row);
     });
+    const hint = $("perm-hint");
+    if (S.signing === "adhoc") {
+      hint.innerHTML = "Installed by dragging from the disk image, so macOS will forget these permissions with every update. "
+        + "Install with the one-line installer instead and they stick.";
+    } else if (S.signing === "local") {
+      hint.textContent = "These stay granted across updates.";
+    }
+  }
+  const RELAUNCH_KEYS = ["screen", "accessibility"];
+  const store = { get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } },
+                  set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} },
+                  del: (k) => { try { localStorage.removeItem(k); } catch (e) {} } };
+  const asked = new Set(JSON.parse(store.get("jarvis-asked", "[]")));
+  async function relaunch() {
+    caption("Relaunching to pick up the new permissions…");
+    store.set("jarvis-resume-step", step);
+    await api("/api/app/restart", {}).catch(() => {});
   }
   async function refreshPerms() {
     try { S.permissions = await api("/api/setup/permissions"); renderPerms(S.permissions); } catch (e) {}
@@ -302,6 +326,7 @@
   async function requestPerm(key, btn) {
     const p = S.permissions.find((x) => x.key === key);
     if (p && p.status === "granted") return;
+    asked.add(key); store.set("jarvis-asked", JSON.stringify([...asked]));
     if (btn) busy(btn, true);
     try {
       if (p && p.status === "denied") await api(`/api/setup/permissions/${key}/settings`, {});
@@ -435,18 +460,18 @@
     } catch (e) { $("speech-err").textContent = e.message; }
   }
   $("speech-next").onclick = nextStep;
-  // Air mouse: in Settings it switches on/off immediately (no restart); during setup it's saved at Launch
-  const AIR_D = "Hold ☝️ to drive the pointer with your fingertip. Pinch to click, ✋ to stop.";
-  $("opt-airmouse").onchange = async () => {
-    if (!settings) return;
-    const on = $("opt-airmouse").checked;
+  // Hand control: a live switch (nothing saved; it always starts off)
+  const HAND_D = "Every gesture and the air mouse, only while this is on. Ask me any time: “hand control on”.";
+  $("opt-hand").onchange = async () => {
+    const on = $("opt-hand").checked;
     try {
-      const r = await api("/api/setup/air-mouse", { enabled: on });
-      $("airmouse-d").textContent = r.needs_permission
-        ? "On. macOS needs one approval: allow JARVIS under Accessibility in the window that just opened."
-        : on ? "On. " + AIR_D : AIR_D;
-      caption(on ? "Air mouse ready. Hold up one finger when you want the pointer." : "Air mouse off.");
-    } catch (e) { $("opt-airmouse").checked = !on; caption(e.message); }
+      const r = await api("/api/setup/hand-control", { enabled: on });
+      $("opt-hand").checked = !!r.enabled;
+      $("hand-d").textContent = r.needs_permission
+        ? "On. For the air mouse, allow JARVIS under Accessibility in the window that just opened."
+        : r.enabled ? "On. Show me your hand; hold up one finger for the pointer." : HAND_D;
+      caption(r.message || "");
+    } catch (e) { $("opt-hand").checked = !on; caption(e.message); }
   };
   $("watch-unlock").onclick = (e) => { e.preventDefault(); e.stopPropagation(); api("/api/setup/open-unlock-settings", {}).catch(() => {}); };
 
@@ -456,12 +481,12 @@
     try {
       if (settings) {
         await api("/api/setup/login-item", { enabled: $("opt-login").checked });
-        await api("/api/setup/finish", { login_item: $("opt-login").checked, auto_lock_when_away: $("opt-lock").checked, sentry_mode: $("opt-sentry").checked, air_mouse: $("opt-airmouse").checked });
+        await api("/api/setup/finish", { login_item: $("opt-login").checked, auto_lock_when_away: $("opt-lock").checked, sentry_mode: $("opt-sentry").checked });
         caption("Settings saved. Restarting to apply them.");
         await api("/api/app/restart", {}).catch(() => (location.href = "/"));
         return;
       }
-      await api("/api/setup/finish", { login_item: $("opt-login").checked, auto_lock_when_away: $("opt-lock").checked, sentry_mode: $("opt-sentry").checked, air_mouse: $("opt-airmouse").checked });
+      await api("/api/setup/finish", { login_item: $("opt-login").checked, auto_lock_when_away: $("opt-lock").checked, sentry_mode: $("opt-sentry").checked });
       reactor.setState("working"); caption("Bringing all systems online…");
       setTimeout(() => (location.href = "/"), 2200);
     } catch (e) { $("ready-err").textContent = e.message; busy($("launch"), false); }
@@ -529,11 +554,14 @@
     $("opt-login").checked = S.login_item ? S.login_item !== "off" || !settings : true;
     $("opt-lock").checked = !!S.options.auto_lock_when_away;
     $("opt-sentry").checked = !!S.options.sentry_mode;
-    $("opt-airmouse").checked = !!S.options.air_mouse;
+    $("opt-hand").checked = !!S.options.hand_control;
+    $("hand-row").hidden = !settings;   // only meaningful while JARVIS is running
     if (settings) { $("launch").textContent = "Save & restart"; $("hello").textContent = "Settings"; }
     models = S.models; renderDownloads();
     connect();
-    go(settings ? "you" : "welcome");
+    const resume = store.get("jarvis-resume-step", null);   // back from a permission relaunch
+    store.del("jarvis-resume-step");
+    go(resume && STEPS.includes(resume) ? resume : settings ? "you" : "welcome");
   }
 
   /* ───────────── demo (/setup?demo) for previews ───────────── */
@@ -546,7 +574,7 @@
     if (path === "/api/setup/state") return Promise.resolve({ complete: false, profile: { name: "", title: "sir", city: "" }, has_key: false, permissions: perms,
       models: [{ key: "wake", title: "Wake word", total: 3.7e6, done: 3.7e6, ready: true }, { key: "ears", title: "Speech recognition", total: 4.9e8, done: 2.1e8 },
         { key: "voice", title: "Voice", total: 3.5e8, done: 3.5e8, ready: true }, { key: "eyes", title: "Vision", total: 4.7e7, done: 0 }],
-      face_enrolled: false, login_item: "off", app_path: "/Users/you/Downloads/JARVIS.app", in_applications: false, options: { air_mouse: false } });
+      face_enrolled: false, login_item: "off", app_path: "/Users/you/Downloads/JARVIS.app", in_applications: false, options: { hand_control: false } });
     if (path === "/api/setup/models") return Promise.resolve(models.map((m) => (m.ready ? m : { ...m, done: Math.min(m.total, m.done + m.total * 0.07) })));
     if (path === "/api/setup/permissions") return Promise.resolve(S.permissions);
     if (path === "/api/setup/brain") return Promise.resolve({ provider: "claude-code", has_key: false, claude_model: "",

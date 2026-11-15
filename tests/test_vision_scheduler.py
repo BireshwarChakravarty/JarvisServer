@@ -31,6 +31,20 @@ def test_presence_arrival_departure_and_sentry():
     assert events[-1] == ("stranger",)
 
 
+def test_leaving_is_about_you_not_any_face():
+    events = []
+    p = Presence("Tony", gone_after=5, on_arrive=lambda a: events.append(("arrive", round(a))),
+                 on_leave=lambda: events.append(("leave",)))
+    t = time.time()
+    p.update([face("Tony")], t); p.update([face("Tony")], t + 0.5)
+    for i in range(1, 12):                      # you walk off; a poster/visitor stays in view
+        p.update([face(None)], t + 0.5 + i)
+    assert ("leave",) in events and not p.present
+    # back after a two-minute coffee: reported at once (the caller wakes a locked screen)
+    p.update([face("Tony")], t + 120); p.update([face("Tony")], t + 120.5)
+    assert events[-1][0] == "arrive" and 100 < events[-1][1] < 130
+
+
 def test_presence_without_enrolment_treats_any_face_as_owner():
     arrived = []
     p = Presence("Tony", away_after=0, on_arrive=lambda a: arrived.append(a))

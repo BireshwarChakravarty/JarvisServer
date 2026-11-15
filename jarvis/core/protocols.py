@@ -26,9 +26,16 @@ DEFAULT_PROTOCOLS = """\
 #    say: <text>               wait: <seconds>         notify: <text>
 #    applescript: <script>     shell: <command>        (confirmed before running)
 #    ask: <request>            hand a request to JARVIS's brain after the protocol
+#    timer: <minutes>          or {minutes: 25, label: "Focus sprint"}
+#    hand_control: true|false  gestures and air mouse on/off
+#    quit_apps: [names]        hide_others: true         sleep_display: true
+#  Your own protocols go in this file; built-in ones are always available too
+#  (yours win on a name clash; add `disabled: true` to hide a built-in).
+#  `pinned: true` puts a protocol on the HUD.
 # ─────────────────────────────────────────────────────────────────────────
 
 work_mode:
+  pinned: true
   aliases: ["work mode", "focus mode", "let's get to work"]
   description: "Clear the decks for deep work."
   say: "Work mode engaged. I'll keep distractions at bay."
@@ -39,6 +46,7 @@ work_mode:
     - ask: "Give me a ten second rundown of my next three calendar events."
 
 house_party_protocol:
+  pinned: true
   aliases: ["house party protocol", "party mode"]
   description: "Lights, music, volume. Party."
   say: "House party protocol, initiated."
@@ -49,6 +57,7 @@ house_party_protocol:
     # - shortcut: "Party Lights"   # a HomeKit scene in the Shortcuts app
 
 wind_down:
+  pinned: true
   aliases: ["wind down", "end of day", "clean slate protocol"]
   description: "Close out the day."
   say: "Winding down. Well done today."
@@ -57,12 +66,91 @@ wind_down:
     - ask: "Summarise what's on my calendar tomorrow morning and any reminders I haven't finished."
 
 good_night:
+  pinned: true
   aliases: ["good night", "goodnight", "lights out"]
   description: "Lock up for the night."
   say: "Good night. I'll keep an eye on things."
   steps:
     - media: pause
     - wait: 2
+    - lock_screen: true
+
+morning_protocol:
+  aliases: ["good morning", "morning protocol", "morning briefing", "start my day"]
+  description: "Ease into the day with a proper briefing."
+  say: "Good morning. Let's see what the day has in store."
+  steps:
+    - volume: 35
+    - ask: "Give me my morning briefing: the weather and whether I need a jacket, my first three events, how many unread emails, and any reminders due today."
+
+meeting_mode:
+  aliases: ["meeting mode", "i'm going into a meeting", "going into a meeting"]
+  description: "Quiet the Mac and brief you on the next meeting."
+  say: "Meeting mode. I'll keep quiet."
+  steps:
+    - media: pause
+    - volume: 15
+    - ask: "What's my next meeting, when does it start, who's in it, and is there a video link?"
+
+presentation_mode:
+  aliases: ["presentation mode", "showtime", "screen share mode"]
+  description: "Make the screen presentable before you share it."
+  say: "Clearing the stage."
+  steps:
+    - media: pause
+    - quit_apps: ["Messages", "Mail", "Slack", "WhatsApp"]
+    - hide_others: true
+    - volume: 50
+
+focus_sprint:
+  aliases: ["focus sprint", "pomodoro", "sprint mode", "start a sprint"]
+  description: "Twenty-five minutes of deep work, then I'll call time."
+  say: "Twenty-five minutes, starting now. I'll tell you when to stop."
+  steps:
+    - volume: 25
+    - music: "Deep Focus"
+    - timer: {minutes: 25, label: "Focus sprint"}
+
+break_time:
+  aliases: ["break time", "take a break", "coffee break"]
+  description: "Five minutes away from the screen."
+  say: "Go and stretch your legs. I'll call you back in five."
+  steps:
+    - media: pause
+    - timer: {minutes: 5, label: "Break"}
+    - sleep_display: true
+
+declutter:
+  aliases: ["declutter", "clean up my screen", "clear my screen"]
+  description: "Hide every window except JARVIS."
+  say: "Tidying up."
+  steps:
+    - hide_others: true
+
+movie_night:
+  aliases: ["movie night", "cinema mode", "movie mode"]
+  description: "Dim things down and let you drive with your hands from the sofa."
+  say: "Movie night. Use your hands to pause or change the volume."
+  steps:
+    - dark_mode: true
+    - brightness: 45
+    - volume: 60
+    - hand_control: true
+
+hands_on:
+  aliases: ["hands on", "gesture mode", "hand control protocol"]
+  description: "Switch on hand control: gestures and the air mouse."
+  steps:
+    - hand_control: true
+
+lockdown:
+  aliases: ["lockdown", "lock it down", "i'm heading out", "be right back"]
+  description: "Pause everything, mute, and lock the Mac."
+  say: "Locking down."
+  steps:
+    - media: pause
+    - volume: 0
+    - wait: 1
     - lock_screen: true
 """
 
@@ -80,14 +168,18 @@ class Protocols:
         self.reload()
 
     def reload(self) -> None:
+        builtin = yaml.safe_load(DEFAULT_PROTOCOLS) or {}
         try:
-            self.data = yaml.safe_load(self.path.read_text()) or {}
+            mine = yaml.safe_load(self.path.read_text()) or {}
         except Exception as exc:
             log.error("couldn't parse %s: %s", self.path, exc)
-            self.data = {}
+            mine = {}
+        merged = {**builtin, **{k: v for k, v in mine.items() if isinstance(v, dict)}}
+        self.data = {k: v for k, v in merged.items() if not v.get("disabled")}
 
     def list(self) -> list[dict]:
-        return [{"name": k, "description": v.get("description", ""), "aliases": v.get("aliases", [])}
+        return [{"name": k, "description": v.get("description", ""), "aliases": v.get("aliases", []),
+                 "pinned": bool(v.get("pinned"))}
                 for k, v in self.data.items()]
 
     def _names(self, key: str, proto: dict) -> set[str]:
@@ -151,10 +243,30 @@ class Protocols:
             "applescript": ("run_applescript", lambda v: {"script": str(v)}),
             "shell": ("run_shell", lambda v: {"command": str(v)}),
             "lock_screen": ("system_action", lambda v: {"action": "lock_screen"}),
+            "sleep_display": ("system_action", lambda v: {"action": "sleep_display"}),
         }
         if kind == "wait":
             await asyncio.sleep(float(value))
             return "ok"
+        if kind == "timer":
+            spec = value if isinstance(value, dict) else {"minutes": value}
+            if getattr(ctx, "scheduler", None) is None:
+                return "no scheduler"
+            ctx.scheduler.add_timer(60 * float(spec.get("minutes", 5)), str(spec.get("label", "")))
+            return f"{spec.get('minutes')} minute timer set"
+        if kind == "hand_control":
+            if ctx.orchestrator is None:
+                return "not running"
+            return ctx.orchestrator.set_hand_control(bool(value))
+        if kind == "quit_apps":
+            done = []
+            for name in value if isinstance(value, list) else [value]:
+                r = await registry.call("quit_application", {"name": str(name)}, ctx)
+                done.append(f"{name}: {r.summary}")
+            return "; ".join(done)
+        if kind == "hide_others":
+            r = await registry.call("hide_other_apps", {}, ctx)
+            return r.summary
         if kind == "say":
             await ctx.say(str(value))
             return "said"

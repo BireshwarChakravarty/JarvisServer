@@ -59,7 +59,7 @@ vision:
   fps: 30                 # smoother hand tracking; recognition is throttled separately
   face_recognition: true
   gestures: true
-  air_mouse: false         # ☝️ hold to drive the Mac's pointer with your fingertip; pinch = click
+  hand_control_idle_minutes: 10   # hand control (all gestures + air mouse) is off until you ask; it turns itself off after this long without a hand
   wake_on_return: true     # back at a locked Mac: wake the screen, ready for Touch ID / Apple Watch
   greet_on_arrival: true   # greet you when you sit down after being away
   away_minutes: 10         # how long you must be gone to count as "away"

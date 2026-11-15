@@ -118,9 +118,21 @@ def run_app() -> None:
         "listen": lambda: (show(), hud({"type": "listen"})),
         "mute": lambda: hud({"type": "mute", "muted": True}),
         "unmute": lambda: hud({"type": "mute", "muted": False}),
+        "hands": lambda: hud({"type": "hand_control"}),
+        "update": lambda: update_now(),
         "settings": lambda: (sup.show_window("/setup"), show()),
         "quit": menubar.quit_app,
     }
+    def update_now():
+        from jarvis.app.updater import start_update
+        from jarvis.mac.system import notify
+
+        try:
+            notify("JARVIS", "Updating to the latest version. I'll be back in a minute or two.")
+        except Exception:
+            pass
+        start_update(cfg.home)
+
     menubar.install_reopen_handler(show)
 
     def ptt(down: bool):

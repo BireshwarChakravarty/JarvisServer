@@ -112,10 +112,12 @@ def make_router(sup) -> APIRouter:
             "login_item": await asyncio.to_thread(login_item.status),
             "app_path": str(bundle) if bundle else None,
             "in_applications": bool(bundle and str(bundle).startswith(("/Applications/", str(Path.home() / "Applications")))),
+            "signing": await asyncio.to_thread(permissions.signing_kind, bundle),
             "options": {
                 "sentry_mode": bool(cfg.get("vision.sentry_mode", False)),
                 "auto_lock_when_away": bool(cfg.get("vision.auto_lock_when_away", False)),
-                "air_mouse": bool(cfg.get("vision.air_mouse", False)),
+                "hand_control": bool(sup.jarvis is not None and getattr(sup.jarvis, "gestures", None) is not None
+                                     and sup.jarvis.gestures.enabled),
                 "voice": cfg.get("voice.tts.voice", "bm_george"),
             },
         }
@@ -419,21 +421,25 @@ def make_router(sup) -> APIRouter:
         _write_user_config(sup.cfg, {"voice": {"tts": tts}})
         return {"ok": True, "current": _current_voice(sup.cfg)}
 
-    @r.post("/api/setup/air-mouse")
-    async def air_mouse(body: dict = Body(...)):
-        """Settings toggle: takes effect at once, no restart. Driving the pointer needs Accessibility."""
+    @r.post("/api/setup/hand-control")
+    async def hand_control(body: dict = Body(...)):
+        """Live switch (nothing saved: hand control always starts off). The air mouse inside it needs
+        Accessibility to move the pointer, so ask for it the first time."""
         from jarvis.mac import permissions
 
         enabled = bool(body.get("enabled"))
-        _write_user_config(sup.cfg, {"vision": {"air_mouse": enabled}})
         j = sup.jarvis
-        if j is not None and getattr(j, "gestures", None) is not None:
-            j.gestures.set_air_mouse(enabled)
-        access = await asyncio.to_thread(permissions.status, "accessibility")
-        if enabled and access not in ("granted", "unavailable"):
-            await asyncio.to_thread(permissions.request, "accessibility")
-            return {"ok": True, "enabled": True, "needs_permission": True}
-        return {"ok": True, "enabled": enabled, "needs_permission": False}
+        if j is None:
+            return JSONResponse({"ok": False, "error": "JARVIS isn't running yet."}, status_code=400)
+        message = j.set_hand_control(enabled)
+        on = bool(getattr(j, "gestures", None) is not None and j.gestures.enabled)
+        needs = False
+        if on:
+            access = await asyncio.to_thread(permissions.status, "accessibility")
+            if access not in ("granted", "unavailable"):
+                await asyncio.to_thread(permissions.request, "accessibility")
+                needs = True
+        return {"ok": True, "enabled": on, "message": message, "needs_permission": needs}
 
     @r.post("/api/setup/open-unlock-settings")
     async def open_unlock_settings():
@@ -546,7 +552,6 @@ def make_router(sup) -> APIRouter:
         _write_user_config(sup.cfg, {"vision": {
             "sentry_mode": bool(body.get("sentry_mode", False)),
             "auto_lock_when_away": bool(body.get("auto_lock_when_away", False)),
-            "air_mouse": bool(body.get("air_mouse", sup.cfg.get("vision.air_mouse", False))),
         }})
         if "login_item" in body:
             from jarvis.mac import login_item

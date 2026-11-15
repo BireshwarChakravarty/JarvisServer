@@ -207,3 +207,4 @@ body.settings .ob-steps i { cursor: pointer; }
   animation: vbars 0.8s ease-in-out infinite alternate; transform-origin: bottom; }
 @keyframes vbars { to { transform: scaleY(0.45); } }
 .tg a { color: var(--ice); text-underline-offset: 2px; }
+.perm .st.relaunch { color: var(--gold); border-color: rgb(255 196 108 / 0.5); }

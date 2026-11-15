@@ -44,6 +44,13 @@ def quit_application(ctx, name: str):
     return mac.quit_app(name)
 
 
+@tool("Hide every app's windows except JARVIS (like ⌥⌘H from everywhere). Nothing is closed.", category="apps")
+def hide_other_apps(ctx):
+    mac.osascript('tell application "System Events" to set visible of (every process whose visible is true '
+                  'and name is not "JARVIS") to false')
+    return "Other apps hidden."
+
+
 @tool("List the applications currently running, plus which one is frontmost.", category="apps")
 def list_running_apps(ctx):
     return {"running": mac.running_apps(), "frontmost": mac.frontmost_app()}
@@ -448,6 +455,29 @@ async def run_protocol(ctx, name: str):
 def list_protocols(ctx):
     ctx.protocols.reload()
     return ctx.protocols.list()
+
+
+# ═══════════════════════════════ hand control ════════════════════════════════
+@tool("Turn hand control on or off. Hand control covers every gesture: held poses (✋ stop, 👍/👎 yes/no, "
+      "✌️ listen, 🤟 play/pause), swipes for tracks, pinch-and-drag for volume, and the air mouse (hold ☝️ to "
+      "drive the pointer, pinch to click). It is off unless the user asks for it.",
+      {"on": _p("true to turn on, false to turn off", B)}, ["on"], category="self")
+async def hand_control(ctx, on: bool):
+    orch = ctx.orchestrator
+    if orch is None:
+        return "No orchestrator attached."
+    return orch.set_hand_control(bool(on))
+
+
+@tool("Update JARVIS to the latest version: downloads the newest verified build, installs it (keeping "
+      "every permission) and restarts. JARVIS goes quiet for a minute or two.", category="self", confirm=True,
+      confirm_message="update myself and restart")
+async def update_jarvis(ctx):
+    from jarvis.app.updater import start_update
+
+    await ctx.say("Updating now. I'll be back in a minute or two.")
+    start_update(ctx.cfg.home)
+    return "Update started; JARVIS will restart when it's installed."
 
 
 # ═══════════════════════════════ self control ════════════════════════════════

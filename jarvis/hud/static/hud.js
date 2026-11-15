@@ -258,15 +258,43 @@
   }
 
   /* ───────────── protocols ───────────── */
+  // Pinned protocols as chips; everything else one tap away under "More"
   function setProtocols(items) {
+    items = items || [];
     const box = $("protocols"); box.innerHTML = "";
-    (items || []).forEach((p) => {
+    let pinned = items.filter((p) => p.pinned);
+    if (!pinned.length) pinned = items.slice(0, 4);
+    const chip = (p) => {
       const b = document.createElement("button"); b.className = "chip";
       b.textContent = p.name.replace(/_/g, " "); b.title = p.description || "";
-      b.onclick = () => send({ type: "protocol", name: p.name });
-      box.appendChild(b);
+      b.onclick = () => { closeMore(); send({ type: "protocol", name: p.name }); };
+      return b;
+    };
+    pinned.forEach((p) => box.appendChild(chip(p)));
+    const rest = items.filter((p) => !pinned.includes(p));
+    if (!rest.length) return;
+    const more = document.createElement("button");
+    more.className = "chip more"; more.textContent = `More · ${rest.length}`;
+    more.setAttribute("aria-expanded", "false");
+    const sheet = document.createElement("div"); sheet.className = "proto-sheet glass"; sheet.hidden = true;
+    sheet.setAttribute("role", "menu");
+    rest.forEach((p) => {
+      const row = document.createElement("button"); row.className = "proto-row"; row.setAttribute("role", "menuitem");
+      row.innerHTML = "<b></b><span></span>";
+      row.querySelector("b").textContent = p.name.replace(/_/g, " ");
+      row.querySelector("span").textContent = p.description || "";
+      row.onclick = () => { closeMore(); send({ type: "protocol", name: p.name }); };
+      sheet.appendChild(row);
     });
+    more.onclick = (ev) => { ev.stopPropagation(); const open = sheet.hidden; sheet.hidden = !open; more.setAttribute("aria-expanded", open); };
+    box.appendChild(more); box.appendChild(sheet);
   }
+  function closeMore() {
+    document.querySelectorAll(".proto-sheet").forEach((s) => (s.hidden = true));
+    document.querySelectorAll(".chip.more").forEach((m) => m.setAttribute("aria-expanded", "false"));
+  }
+  document.addEventListener("click", (e) => { if (!e.target.closest(".proto-sheet")) closeMore(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMore(); });
 
   /* ───────────── optics ───────────── */
   function startCamera() {
@@ -373,6 +401,12 @@
       case "spin": reactor.nudge(e.dx); break;
       case "dial": reactor.setDial(e.phase === "end" ? null : e.value);
         if (e.phase === "end" && e.value != null && !e.replay) island(`Volume ${e.value}%`); break;
+      case "hand_control":
+        document.body.classList.toggle("hands", !!e.on);
+        $("btn-hand").classList.toggle("on", !!e.on); $("btn-hand").setAttribute("aria-pressed", !!e.on);
+        if (!e.replay && e.reason === "idle") island("Hand control off: no hands for a while");
+        if (!e.on) moveHand({ visible: false });
+        break;
       case "airmouse": document.body.classList.toggle("airmouse", !!e.active); if (!e.replay) island(e.active ? "☝️ Air mouse on · pinch to click · ✋ to stop" : "Air mouse off"); break;
       case "attention": document.body.classList.toggle("unattended", !e.looking); break;
       case "confirm": $("confirm-text").textContent = e.action; $("confirm").hidden = false; break;
@@ -404,6 +438,7 @@
   $("btn-mic").onclick = () => send({ type: "listen" });
   $("btn-stop").onclick = () => send({ type: "stop" });
   $("btn-mute").onclick = () => send({ type: "mute", muted: !muted });
+  $("btn-hand").onclick = () => send({ type: "hand_control" });   // toggles
   $("confirm-yes").onclick = () => send({ type: "confirm", approved: true });
   $("confirm-no").onclick = () => send({ type: "confirm", approved: false });
   document.addEventListener("keydown", (ev) => {
@@ -432,7 +467,12 @@
         { title: "Board call — Stark Industries", time: span(210, 270), start: at(210).toISOString(), end: at(270).toISOString() },
       ] });
       handle({ type: "alarms", alarms: [{ message: "Tea", when: Date.now() / 1000 + 244 }] });
-      setProtocols([{ name: "work_mode" }, { name: "house_party_protocol" }, { name: "wind_down" }, { name: "good_night" }]);
+      setProtocols([{ name: "work_mode", pinned: true }, { name: "house_party_protocol", pinned: true }, { name: "wind_down", pinned: true },
+        { name: "good_night", pinned: true }, { name: "morning_protocol", description: "Ease into the day with a proper briefing." },
+        { name: "meeting_mode", description: "Quiet the Mac and brief you on the next meeting." },
+        { name: "focus_sprint", description: "Twenty-five minutes of deep work, then I'll call time." },
+        { name: "movie_night", description: "Dim things down and let you drive with your hands from the sofa." },
+        { name: "lockdown", description: "Pause everything, mute, and lock the Mac." }]);
     }, 2300);
     setInterval(() => handle({ type: "stats", cpu: 14 + Math.random() * 22, mem: 58 + Math.random() * 5, disk: 47,
       net_down: Math.random() * 900e3, net_up: Math.random() * 120e3, battery: 82, charging: true }), 1500);

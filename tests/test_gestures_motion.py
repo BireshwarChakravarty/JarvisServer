@@ -182,13 +182,44 @@ def test_air_mouse_can_be_switched_at_runtime():
     assert eng.airmouse is None
 
 
-def test_air_mouse_settings_toggle(cfg):
+def test_hand_control_is_off_until_asked_and_turns_itself_off():
+    import time
+    from pathlib import Path
+
+    import numpy as np
+
+    from jarvis.vision.gestures import GestureEngine
+
+    idled = []
+    eng = GestureEngine(Path("."), lambda g, a: None, idle_off=600, on_idle_off=lambda: idled.append(1))
+    assert eng.enabled is False
+    eng.process(np.zeros((8, 8, 3), np.uint8))          # off: does nothing at all (no model needed)
+    eng.set_enabled(True)
+    assert eng.enabled and eng.airmouse is not None      # the air mouse comes with it
+    eng._enabled_at = eng._seen = time.monotonic() - 601  # ten minutes without a hand
+    eng.process(np.zeros((8, 8, 3), np.uint8))
+    assert not eng.enabled and eng.airmouse is None and idled == [1]
+
+
+def test_hand_control_settings_switch(cfg):
+    from types import SimpleNamespace
+
     from tests.test_app_setup import make_client
 
-    _, client = make_client(cfg)
-    assert client.get("/api/setup/state").json()["options"]["air_mouse"] is False
-    r = client.post("/api/setup/air-mouse", json={"enabled": True}).json()
-    assert r["ok"] and r["enabled"] and cfg.get("vision.air_mouse") is True
-    assert client.get("/api/setup/state").json()["options"]["air_mouse"] is True
-    client.post("/api/setup/air-mouse", json={"enabled": False})
-    assert cfg.get("vision.air_mouse") is False
+    sup, client = make_client(cfg)
+    assert client.get("/api/setup/state").json()["options"]["hand_control"] is False
+    assert client.post("/api/setup/hand-control", json={"enabled": True}).status_code == 400   # not running yet
+
+    state = {"on": False}
+    gestures = SimpleNamespace(enabled=False)
+
+    def set_hand_control(on):
+        gestures.enabled = on
+        return "Hand control on." if on else "Hand control off."
+
+    sup.jarvis = SimpleNamespace(gestures=gestures, set_hand_control=set_hand_control)
+    r = client.post("/api/setup/hand-control", json={"enabled": True}).json()
+    assert r["ok"] and r["enabled"] and r["message"] == "Hand control on."
+    assert client.get("/api/setup/state").json()["options"]["hand_control"] is True
+    assert client.post("/api/setup/hand-control", json={"enabled": False}).json()["enabled"] is False
+    assert "hand_control" not in (cfg.data.get("vision") or {})       # nothing persisted: starts off next time

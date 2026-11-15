@@ -221,3 +221,20 @@ def open_settings(key: str) -> None:
         return
     subprocess.run(["/usr/bin/open", f"x-apple.systempreferences:com.apple.preference.security?{pane}"],
                    capture_output=True)
+
+
+def signing_kind(bundle) -> str:
+    """How the installed app is signed: "local" (this Mac's stable JARVIS identity: permissions
+    survive updates), "adhoc" (each update looks like a new app to macOS), or "unknown"."""
+    if not IS_MAC or not bundle:
+        return "unknown"
+    try:
+        out = subprocess.run(["/usr/bin/codesign", "-dvv", str(bundle)], capture_output=True, text=True,
+                             timeout=20).stderr
+    except Exception:
+        return "unknown"
+    if "Authority=JARVIS Local Code Signing" in out:
+        return "local"
+    if "Signature=adhoc" in out:
+        return "adhoc"
+    return "unknown"

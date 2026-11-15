@@ -236,11 +236,11 @@ class Jarvis:
                           enrolled or None)
         if cfg.get("vision.gestures", True):
             self.gestures = GestureEngine(cfg.models_dir, self._on_gesture_thread, on_motion=self._on_motion_thread,
-                                          air_mouse=bool(cfg.get("vision.air_mouse", False)))
+                                          idle_off=60 * float(cfg.get("vision.hand_control_idle_minutes", 10)))
             if await asyncio.to_thread(self.gestures.load):
                 self.camera.add_processor(self.gestures.process)
                 self.capabilities["gestures"] = True
-                self.boot("Gesture control online")
+                self.boot("Hand control ready · off until you ask")
 
     def _threadsafe(self, coro) -> None:
         if self.loop:
@@ -618,18 +618,21 @@ class Jarvis:
             data = await gather(self.cfg, self.memory, "login" if kind == "login" else "return") \
                 if self.cfg.get("greeting.briefing", True) else {"part_of_day": part_of_day()}
             bus.emit("briefing", data=data)
-            if kind == "login":
-                note = (f"{title} has just logged in to their Mac. Greet them for the {data['part_of_day'].replace('_', ' ')} "
-                        "in character, then give a crisp spoken briefing using only the genuinely noteworthy items "
-                        "from this data (skip anything empty or dull; at most three calendar items). Keep it under "
-                        "70 words. End by asking what they'd like to do today. Briefing data: "
-                        + json.dumps(data, default=str))
-            else:
-                note = (f"{title} is back at the Mac after about {_human_duration(away_for or 0)} away. Welcome them "
-                        "back in one short line, mention only something important coming up soon (if anything), and "
-                        "ask what's next. Under 35 words. Data: " + json.dumps(data, default=str))
+            # Fresh every time: a different angle, what changed, and his own recent lines to avoid
+            from jarvis.core import greeting_style as gs
+
+            data = gs.trim(data)
+            recent = self.memory.get(gs.RECENT_KEY, []) or []
+            delta = gs.changes(data, self.memory.get(gs.SNAPSHOT_KEY))
+            since = time.time() - last if last else None
+            angle = gs.pick_angle(data, delta, away_for if away_for is not None else since, recent)
+            note = (gs.instructions(title, "login" if kind == "login" else "return", data, delta, angle, recent,
+                                    _human_duration(away_for or since or 0))
+                    + " Briefing data: " + json.dumps(data, default=str))
+            spoken: list[str] = []
 
             async def on_sentence(s: str) -> None:
+                spoken.append(s)
                 bus.emit("state", state="speaking")
                 if self.speaker:
                     self.speaker.enqueue(s)
@@ -645,6 +648,11 @@ class Jarvis:
                 if self.speaker:
                     self.speaker.stop()
                     self.speaker.enqueue(line)
+                reply = line
+            try:
+                gs.remember(self.memory, " ".join(spoken) or reply or "", angle, data)
+            except Exception:
+                log.debug("couldn't record greeting", exc_info=True)
             if self.speaker:
                 await self.speaker.wait_done(timeout=90)
             if self.mic is not None and not self.mic.muted:
@@ -680,15 +688,30 @@ class Jarvis:
                 if self.speaker and self.cfg.get("vision.greet_on_arrival", True):
                     self.speaker.enqueue(f"Welcome back, {self.cfg.get('owner.title', 'sir')}.")
             return   # the full briefing follows when you unlock (on_unlock)
-        if self.cfg.get("vision.greet_on_arrival", True):
+        if away_for >= 60 * float(self.cfg.get("vision.away_minutes", 10)) and self.cfg.get("vision.greet_on_arrival", True):
             await self.greet(self._return_kind(away_for), away_for)
 
     async def on_departure(self) -> None:
         self.memory.log_event("departure")
-        if self.cfg.get("vision.auto_lock_when_away", False):
-            from jarvis.mac.system import lock_screen
+        if not self.cfg.get("vision.auto_lock_when_away", False):
+            return
+        from jarvis.mac.session import idle_seconds, screen_locked
+        from jarvis.mac.system import lock_screen
 
-            await asyncio.to_thread(lock_screen)
+        if screen_locked():
+            return
+        idle = idle_seconds()
+        if idle is not None and idle < 15:
+            # someone is typing or moving the mouse right now: you're here, just out of the camera's view
+            log.info("walk-away lock skipped: keyboard/mouse active %.0fs ago", idle)
+            return
+        try:
+            result = await asyncio.to_thread(lock_screen)
+            log.info("walk-away lock: %s", result)
+            bus.emit("announce", text="Locked the Mac: you walked away.", priority="normal")
+        except Exception as exc:
+            log.warning("walk-away lock failed: %s", exc)
+            bus.emit("alert", message=f"Couldn't lock the Mac: {exc}")
 
     async def on_stranger(self) -> None:
         if not self.cfg.get("vision.sentry_mode", False) or self.camera is None:
@@ -757,6 +780,21 @@ class Jarvis:
             asyncio.get_running_loop().call_later(0.2, self.interrupt)
             return "OK."
         return f"Unknown action {action}"
+
+    def set_hand_control(self, on: bool) -> str:
+        """Hand control (poses, swipes, pinch dial, air mouse) runs only when you ask for it."""
+        g = self.gestures
+        if g is None or not g.available:
+            return ("Hand control needs the camera and the gesture model; neither is running right now."
+                    if on else "Hand control is already off.")
+        if bool(on) == g.enabled:
+            return "Hand control is already on." if on else "Hand control is already off."
+        g.set_enabled(on)
+        if on:
+            mins = int(g.idle_off // 60)
+            return (f"Hand control on. Show me your hand. Hold up one finger for the pointer. "
+                    f"I'll switch it off after {mins} minutes without seeing a hand.")
+        return "Hand control off."
 
     def _on_gesture_thread(self, gesture: str, action: str) -> None:
         if self.loop:
@@ -838,6 +876,12 @@ class Jarvis:
         elif kind == "greet":
             self.memory.set("last_greeting", 0)
             asyncio.create_task(self.greet("login"))
+        elif kind == "hand_control":
+            on = msg.get("on")
+            if on is None and self.gestures is not None:
+                on = not self.gestures.enabled
+            reply = self.set_hand_control(bool(on))
+            bus.emit("announce", text=reply, priority="normal")
         elif kind == "protocol" and msg.get("name"):
             self.queue_request(f"Run the {msg['name']} protocol.", source="hud")
 

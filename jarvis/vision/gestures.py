@@ -43,7 +43,8 @@ class GestureEngine:
     def __init__(self, models_dir: Path, on_gesture: Callable[[str, str], None],
                  fps: float = 10.0, hold_frames: int = 5, cooldown: float = 2.0,
                  on_motion: Callable[[MotionEvent], None] | None = None,
-                 tracking_fps: float = 24.0, air_mouse: bool = False) -> None:
+                 tracking_fps: float = 24.0, idle_off: float = 600.0,
+                 on_idle_off: Callable[[], None] | None = None) -> None:
         self.models_dir = models_dir
         self.on_gesture = on_gesture
         self.on_motion = on_motion
@@ -52,7 +53,13 @@ class GestureEngine:
         self._seen = -10.0
         self.tracking_interval = 1.0 / tracking_fps   # a hand in view: run fast so the cursor keeps up
         self.airmouse = None
-        self.set_air_mouse(air_mouse)
+        # Hand control is OFF until you ask for it (voice, HUD ✋ button, menu bar or Settings).
+        # Everything (poses, swipes, the pinch dial, the air mouse) runs only while it's on, and it
+        # switches itself off after idle_off seconds without seeing a hand.
+        self.enabled = False
+        self.idle_off = idle_off
+        self.on_idle_off = on_idle_off
+        self._enabled_at = 0.0
         self.interval = 1.0 / fps                      # nobody there: idle along
         self.hold_frames = hold_frames
         self.cooldown = cooldown
@@ -94,6 +101,11 @@ class GestureEngine:
 
     def process(self, frame: np.ndarray) -> None:
         now = time.monotonic()
+        if not self.enabled:
+            return
+        if self.idle_off and now - max(self._seen, self._enabled_at) > self.idle_off:
+            self.set_enabled(False, reason="idle")
+            return
         interval = self.tracking_interval if now - self._seen < 1.5 else self.interval
         if not self.available or now - self._last < interval:
             return
@@ -123,6 +135,27 @@ class GestureEngine:
             bus.emit("gesture", gesture=label, action=action)
             log.info("gesture %s → %s", label, action)
             self.on_gesture(label, action)
+
+    def set_enabled(self, on: bool, reason: str = "asked") -> None:
+        """Turn hand control on or off (thread-safe enough: flags only)."""
+        on = bool(on)
+        if on == self.enabled:
+            return
+        self.enabled = on
+        if on:
+            self._enabled_at = time.monotonic()
+            self.set_air_mouse(True)
+        else:
+            self.set_air_mouse(False)           # releases a held click, restores the capsule
+            self._history.clear()
+            self.motion = HandMotion()
+            if self._was_visible:
+                bus.emit("hand", visible=False, x=0.5, y=0.5, pinch=False)
+                self._was_visible = False
+        bus.emit("hand_control", on=on, reason=reason)
+        log.info("hand control %s (%s)", "on" if on else "off", reason)
+        if not on and reason == "idle" and self.on_idle_off:
+            self.on_idle_off()
 
     def set_air_mouse(self, enabled: bool) -> None:
         """Turn the air mouse feature on or off while running (Settings toggle)."""

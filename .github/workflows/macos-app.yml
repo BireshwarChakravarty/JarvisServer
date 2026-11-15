@@ -186,6 +186,24 @@ jobs:
           curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/scripts/install-app.sh" | bash
           ls -la /Applications/JARVIS.app/Contents/MacOS
           codesign --verify --deep --verbose=1 /Applications/JARVIS.app && echo "signature ✓"
+          codesign -dvv /Applications/JARVIS.app 2>&1 | grep -E "Authority|Signature|Identifier"
+          codesign -dvv /Applications/JARVIS.app 2>&1 | grep -q "Authority=JARVIS Local Code Signing" && echo "signed with this Mac's JARVIS identity ✓"
+          codesign -d -r- /Applications/JARVIS.app 2>&1 | grep designated | tee "$RUNNER_TEMP/req1.txt"
+          grep -q "cdhash" "$RUNNER_TEMP/req1.txt" && { echo "designated requirement is still cdhash-based"; exit 1; } || true
+      - name: An update keeps the same identity (so macOS keeps your permissions)
+        run: |
+          sleep 5; osascript -e 'tell application "JARVIS" to quit' || pkill -f "/Applications/JARVIS.app" || true; sleep 3
+          curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/scripts/install-app.sh" | bash
+          codesign -d -r- /Applications/JARVIS.app 2>&1 | grep designated | tee "$RUNNER_TEMP/req2.txt"
+          diff "$RUNNER_TEMP/req1.txt" "$RUNNER_TEMP/req2.txt" && echo "same designated requirement across updates ✓"
+      - name: A fresh install wipes everything first, then opens into setup
+        run: |
+          sleep 5
+          mkdir -p "$HOME/Library/Application Support/JARVIS" && echo "owner: {name: Test}" > "$HOME/Library/Application Support/JARVIS/config.yaml"
+          curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/scripts/install-app.sh" | bash -s -- --fresh
+          for i in $(seq 1 120); do curl -sf -o /dev/null http://127.0.0.1:7777/api/status && break; sleep 1; done
+          curl -sf http://127.0.0.1:7777/api/setup/state | python3 -c "import sys,json; s=json.load(sys.stdin); assert not s['complete'] and not s['profile']['name'], s; print('fresh: setup starts from scratch ✓')"
+          osascript -e 'tell application "JARVIS" to quit' || pkill -f "/Applications/JARVIS.app" || true
       - name: It opens into setup
         run: |
           for i in $(seq 1 120); do curl -sf -o /dev/null http://127.0.0.1:7777/api/status && break; sleep 1; done

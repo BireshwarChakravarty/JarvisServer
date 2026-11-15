@@ -30,7 +30,7 @@ smart home and terminal. Everything shows on a live, holographic HUD.
 | 👁️ **Sees** | "What am I holding?", "How do I look?", "What's on my screen?", "Read this error": camera frames and screenshots go straight to Claude's vision. |
 | 🧑‍🚀 **Knows you** | Face recognition (OpenCV YuNet + SFace) tells you apart from visitors. Optional **sentry mode** photographs unknown faces while you're away; optional auto-lock when you leave. |
 | 🤚 **Gestures** | Hold a pose: ✋ stop · 👍 / 👎 answer a confirmation · ✌️ start listening · 🤟 play/pause music. Or move: **swipe ← →** for the previous or next track · **flick ↑** to bring up the HUD · **pinch and drag up or down** to turn the volume like a dial · **pinch and drag sideways** to spin the hologram core. A reticle on the HUD follows your hand, so you can see what he sees. |
-| 🖱️ **Air mouse** (opt-in) | Turn on `vision.air_mouse`, then hold ☝️ for half a second: the Mac's pointer follows your fingertip, a pinch clicks (pinch and move drags), ✋ stops. |
+| 🖱️ **Air mouse** | Part of hand control: hold ☝️ for half a second and the Mac's pointer follows your fingertip, a pinch clicks (pinch and move drags), ✋ stops. |
 | 🫧 **Mini JARVIS** | Minimise or close the window (or ⌘H) and a small floating capsule stays on screen: his state, the line he's saying, your next meeting. It floats over every Space and full-screen apps, never takes focus, opens top-centre clear of notifications and the Dock, and remembers where you drag it. Click it to bring the HUD back. |
 | 🔐 **Walk away, come back** | With "Lock the Mac when I leave" on, he locks when you walk off and wakes the screen when he recognises you again. Unlocking stays with macOS (Apple Watch, Touch ID or your password): he never stores or types your password. |
 | 👁️ **Attention** | He notices whether you're facing the screen: the HUD's side panels rest when you look away and wake when you look back. |
@@ -50,7 +50,35 @@ smart home and terminal. Everything shows on a live, holographic HUD.
 ---
 
 
+## Built-in protocols
+
+Say *"Jarvis, engage …"* (or any alias) or tap one on the HUD (**More** lists them all).
+
+| Protocol | Say | What happens |
+|---|---|---|
+| Work mode | "work mode" | Volume 25, Calendar, focus music, a rundown of your next events |
+| House party | "house party protocol" | Dark mode, volume 70, party music |
+| Wind down | "wind down" | Pause music; tomorrow morning and open reminders |
+| Good night | "good night" | Pause, then lock the Mac |
+| Morning | "good morning" | Weather (jacket or not), first events, unread mail, reminders |
+| Meeting mode | "I'm going into a meeting" | Pause, volume 15, who's in your next meeting and its link |
+| Presentation mode | "showtime" | Quit Messages, Mail, Slack, WhatsApp; hide every other window |
+| Focus sprint | "pomodoro" | Focus music and a 25-minute timer |
+| Break time | "take a break" | Pause, a 5-minute timer, display off |
+| Declutter | "clear my screen" | Hide every window except JARVIS |
+| Movie night | "movie night" | Dark mode, dimmer screen, volume 60, hand control on |
+| Hands on | "gesture mode" | Hand control on |
+| Lockdown | "be right back" | Pause, mute, lock |
+
+Make your own in `protocols.yaml` in JARVIS's data folder (the file explains every step type).
+Yours sit alongside the built-ins; add `disabled: true` to hide one, `pinned: true` to put one on the HUD.
+
 ## Gesture guide
+
+**Hand control is off until you ask for it.** Say *"Jarvis, hand control on"*, click the ✋ button
+on the HUD's command bar, use **Hand Control On / Off** in the menu bar, or flip it in Settings. It
+covers everything below, including the air mouse, and switches itself off after 10 minutes without
+seeing a hand (or say *"hand control off"*).
 
 JARVIS watches for one hand in front of the camera. A ring on the HUD follows your fingertip so you
 can see what he sees (it turns gold while you pinch). Gestures work from your normal seat, about an
@@ -76,7 +104,7 @@ arm's length from the camera; keep your hand in the middle of the camera's view 
 | Pinch thumb and index, drag up or down | Volume dial: up is louder. A gold arc around the core shows the level |
 | Pinch, drag sideways | Spin the hologram core |
 
-**Air mouse** (switch it on in Settings › Ready › Air mouse; needs the Accessibility permission)
+**Air mouse** (part of hand control; moving the pointer needs the Accessibility permission)
 
 | Do this | What happens |
 |---|---|
@@ -102,6 +130,17 @@ JARVIS is a normal Mac app. Install it **one** of these two ways:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/BireshwarChakravarty/JarvisServer/claude/eager-newton-yifemd/scripts/install-app.sh | bash
+```
+
+**Updating:** choose **Update JARVIS…** in the menu-bar icon, or say *"update yourself"*. It runs the
+same installer, which keeps every permission.
+
+**Start completely fresh:** this removes JARVIS, its settings, face data, memory and downloaded
+models, and every permission it was given, then installs clean (Claude Code and your Claude sign-in
+are separate and left alone):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/BireshwarChakravarty/JarvisServer/claude/eager-newton-yifemd/scripts/install-app.sh | bash -s -- --fresh
 ```
 
 **B. Download.** Get `JARVIS-macOS-AppleSilicon.dmg` from the

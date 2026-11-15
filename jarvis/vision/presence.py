@@ -32,31 +32,34 @@ class Presence:
         self.recognition = True  # False when no face is enrolled: any face counts as the owner
 
     def update(self, faces: list, now: float | None = None) -> None:
-        """faces: list of objects with .name (None = unknown)."""
+        """faces: list of objects with .name (None = unknown).
+
+        Leaving is about *you*: once your face hasn't been seen for gone_after seconds you've left,
+        even if someone else (or a poster, a photo, the TV) is still in view. Arriving takes two
+        consecutive sightings of you. Every return is reported with how long you were away; the
+        caller decides what to do (wake a locked screen at once, greet only after a longer absence).
+        """
         now = now or time.time()
         anyone = bool(faces)
         owner_here = any(f.name == self.owner for f in faces) or (anyone and not self.recognition)
         unknown_only = anyone and not owner_here and all(f.name is None for f in faces)
+        if anyone:
+            self.last_seen = now
 
         if owner_here:
             self._owner_streak += 1
             self.owner_seen = now
+            if not self.present and self._owner_streak >= 2:
+                self._arrive(now)
         else:
             self._owner_streak = 0
-
-        if anyone:
-            self.last_seen = now
-            # the owner (2 consecutive sightings) or another *known* person counts as arrival
-            if not self.present and ((owner_here and self._owner_streak >= 2) or
-                                     (not owner_here and not unknown_only)):
-                self._arrive(now)
-        elif self.present and now - self.last_seen > self.gone_after:
-            self.present = False
-            self.left_at = self.last_seen
-            bus.emit("presence", present=False)
-            log.info("user left")
-            if self.on_leave:
-                self.on_leave()
+            if self.present and now - (self.owner_seen or self.last_seen) > self.gone_after:
+                self.present = False
+                self.left_at = self.owner_seen or now
+                bus.emit("presence", present=False)
+                log.info("user left%s", " (someone else is still in view)" if anyone else "")
+                if self.on_leave:
+                    self.on_leave()
 
         # sentry: an unknown face for several consecutive updates while the owner is away
         if unknown_only and not self.present:
@@ -74,7 +77,7 @@ class Presence:
         self.present = True
         bus.emit("presence", present=True, away_for=int(away_for))
         log.info("user arrived after %.0fs away", away_for)
-        if away_for >= self.away_after and self.on_arrive:
+        if self.on_arrive:
             self.on_arrive(away_for)
 
     @property

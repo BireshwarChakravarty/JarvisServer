@@ -290,6 +290,14 @@ def run() -> int:
         vf = AppKit.NSScreen.mainScreen().visibleFrame() if AppKit.NSScreen.mainScreen() else None
         return f"AppKit + Quartz symbols present; visible frame {vf.size.width:.0f}x{vf.size.height:.0f}" if vf else "symbols present"
 
+    @check("lock: the permission-free lock call is available (not called)")
+    def _():
+        import ctypes
+        login = ctypes.CDLL("/System/Library/PrivateFrameworks/login.framework/Versions/Current/login")
+        if not hasattr(login, "SACLockScreenImmediate"):
+            raise RuntimeError("SACLockScreenImmediate missing: locking would fall back to ⌃⌘Q")
+        return "SACLockScreenImmediate present"
+
     @check("setup + HUD server")
     def _():
         from fastapi.testclient import TestClient

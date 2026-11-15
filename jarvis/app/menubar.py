@@ -89,8 +89,10 @@ def install(actions: dict) -> None:
             ("Listen", "listen", ""),
             ("Mute Microphone", "mute", ""),
             ("Unmute Microphone", "unmute", ""),
+            ("Hand Control On / Off", "hands", ""),
             (None, None, None),
             ("Settings…", "settings", ","),
+            ("Update JARVIS…", "update", ""),
             (None, None, None),
             ("Quit JARVIS", "quit", "q"),
         ):
