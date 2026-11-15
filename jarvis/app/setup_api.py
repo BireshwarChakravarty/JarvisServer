@@ -115,6 +115,7 @@ def make_router(sup) -> APIRouter:
             "options": {
                 "sentry_mode": bool(cfg.get("vision.sentry_mode", False)),
                 "auto_lock_when_away": bool(cfg.get("vision.auto_lock_when_away", False)),
+                "air_mouse": bool(cfg.get("vision.air_mouse", False)),
                 "voice": cfg.get("voice.tts.voice", "bm_george"),
             },
         }
@@ -418,6 +419,22 @@ def make_router(sup) -> APIRouter:
         _write_user_config(sup.cfg, {"voice": {"tts": tts}})
         return {"ok": True, "current": _current_voice(sup.cfg)}
 
+    @r.post("/api/setup/air-mouse")
+    async def air_mouse(body: dict = Body(...)):
+        """Settings toggle: takes effect at once, no restart. Driving the pointer needs Accessibility."""
+        from jarvis.mac import permissions
+
+        enabled = bool(body.get("enabled"))
+        _write_user_config(sup.cfg, {"vision": {"air_mouse": enabled}})
+        j = sup.jarvis
+        if j is not None and getattr(j, "gestures", None) is not None:
+            j.gestures.set_air_mouse(enabled)
+        access = await asyncio.to_thread(permissions.status, "accessibility")
+        if enabled and access not in ("granted", "unavailable"):
+            await asyncio.to_thread(permissions.request, "accessibility")
+            return {"ok": True, "enabled": True, "needs_permission": True}
+        return {"ok": True, "enabled": enabled, "needs_permission": False}
+
     @r.post("/api/setup/open-unlock-settings")
     async def open_unlock_settings():
         # Touch ID & Password, where "Use Apple Watch to unlock" lives (Apple's secure auto-unlock)
@@ -529,6 +546,7 @@ def make_router(sup) -> APIRouter:
         _write_user_config(sup.cfg, {"vision": {
             "sentry_mode": bool(body.get("sentry_mode", False)),
             "auto_lock_when_away": bool(body.get("auto_lock_when_away", False)),
+            "air_mouse": bool(body.get("air_mouse", sup.cfg.get("vision.air_mouse", False))),
         }})
         if "login_item" in body:
             from jarvis.mac import login_item

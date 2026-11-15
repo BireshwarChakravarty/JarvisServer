@@ -166,3 +166,29 @@ def test_air_mouse_modes():
     for _ in range(14):
         step("Open_Palm", hand(0.5, 0.5))
     assert not am.active and changes == [True, False]
+
+
+def test_air_mouse_can_be_switched_at_runtime():
+    from pathlib import Path
+
+    from jarvis.vision.gestures import GestureEngine
+
+    eng = GestureEngine(Path("."), lambda g, a: None)
+    assert eng.airmouse is None
+    eng.set_air_mouse(True)
+    assert eng.airmouse is not None
+    eng.airmouse.active = True
+    eng.set_air_mouse(False)
+    assert eng.airmouse is None
+
+
+def test_air_mouse_settings_toggle(cfg):
+    from tests.test_app_setup import make_client
+
+    _, client = make_client(cfg)
+    assert client.get("/api/setup/state").json()["options"]["air_mouse"] is False
+    r = client.post("/api/setup/air-mouse", json={"enabled": True}).json()
+    assert r["ok"] and r["enabled"] and cfg.get("vision.air_mouse") is True
+    assert client.get("/api/setup/state").json()["options"]["air_mouse"] is True
+    client.post("/api/setup/air-mouse", json={"enabled": False})
+    assert cfg.get("vision.air_mouse") is False

@@ -49,6 +49,51 @@ smart home and terminal. Everything shows on a live, holographic HUD.
 
 ---
 
+
+## Gesture guide
+
+JARVIS watches for one hand in front of the camera. A ring on the HUD follows your fingertip so you
+can see what he sees (it turns gold while you pinch). Gestures work from your normal seat, about an
+arm's length from the camera; keep your hand in the middle of the camera's view and in decent light.
+
+**Hold a pose** (keep your hand still for about half a second)
+
+| Pose | What it does |
+|---|---|
+| ✋ Open palm | Stop: he stops talking. If he's asking "Shall I…?", it means no. Otherwise it pauses music |
+| 👍 Thumb up | Yes, to a "Shall I…?" question |
+| 👎 Thumb down | No, to a "Shall I…?" question |
+| ✌️ Victory | Start listening, no wake word needed |
+| 🤟 "I love you" sign | Play or pause music |
+
+**Move your hand**
+
+| Motion | What it does |
+|---|---|
+| Swipe → (quick sweep to your right, open hand) | Next track |
+| Swipe ← (quick sweep to your left) | Previous track |
+| Flick ↑ (quick upward flick) | Bring the JARVIS window to the front |
+| Pinch thumb and index, drag up or down | Volume dial: up is louder. A gold arc around the core shows the level |
+| Pinch, drag sideways | Spin the hologram core |
+
+**Air mouse** (switch it on in Settings › Ready › Air mouse; needs the Accessibility permission)
+
+| Do this | What happens |
+|---|---|
+| ☝️ Point up, hold half a second | Air mouse on: the Mac's pointer follows your fingertip |
+| Pinch | Click |
+| Pinch, move, release | Drag |
+| ✋ Open palm, hold half a second (or take your hand away for 2 s) | Air mouse off |
+
+While the air mouse is on, swipes and the volume dial pause so nothing fights over your hand.
+
+**Tips**
+
+- Swipes need speed: a sweep of about a fifth of the camera's width in under half a second. Slow drifting never counts.
+- Poses only count while your hand is still, so a swipe can't be read as ✋ "stop".
+- After a swipe there's a short pause (under a second) before the next one counts.
+- If nothing reacts, check the HUD: no ring means the camera can't see your hand (move it into the middle, add light).
+
 ## Install (Apple Silicon Mac, macOS 14 or later)
 
 JARVIS is a normal Mac app. Install it **one** of these two ways:

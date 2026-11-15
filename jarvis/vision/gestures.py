@@ -52,16 +52,7 @@ class GestureEngine:
         self._seen = -10.0
         self.tracking_interval = 1.0 / tracking_fps   # a hand in view: run fast so the cursor keeps up
         self.airmouse = None
-        if air_mouse:
-            from jarvis.vision.airmouse import AirMouse
-
-            def changed(on: bool) -> None:
-                bus.emit("airmouse", active=on)
-                from jarvis.app.mini import click_through
-
-                click_through(on)   # the floating capsule must never catch a hand-made click
-
-            self.airmouse = AirMouse(on_change=changed)
+        self.set_air_mouse(air_mouse)
         self.interval = 1.0 / fps                      # nobody there: idle along
         self.hold_frames = hold_frames
         self.cooldown = cooldown
@@ -132,6 +123,25 @@ class GestureEngine:
             bus.emit("gesture", gesture=label, action=action)
             log.info("gesture %s → %s", label, action)
             self.on_gesture(label, action)
+
+    def set_air_mouse(self, enabled: bool) -> None:
+        """Turn the air mouse feature on or off while running (Settings toggle)."""
+        if not enabled:
+            if self.airmouse is not None and self.airmouse.active:
+                self.airmouse._set(False)          # release any held click, restore the capsule
+            self.airmouse = None
+            return
+        if self.airmouse is not None:
+            return
+        from jarvis.vision.airmouse import AirMouse
+
+        def changed(on: bool) -> None:
+            bus.emit("airmouse", active=on)
+            from jarvis.app.mini import click_through
+
+            click_through(on)   # the floating capsule must never catch a hand-made click
+
+        self.airmouse = AirMouse(on_change=changed)
 
     def handle_motion(self, now: float, lms: list | None, label: str = "None") -> bool:
         """Feed one frame's landmarks to the motion tracker; publish the cursor and motion events.

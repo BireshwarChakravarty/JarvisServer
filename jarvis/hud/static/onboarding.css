@@ -206,3 +206,4 @@ body.settings .ob-steps i { cursor: pointer; }
 .voice.playing .vplay { width: 14px; height: 12px; border: 0; background: linear-gradient(90deg, var(--ice) 0 3px, transparent 3px 5.5px, var(--ice) 5.5px 8.5px, transparent 8.5px 11px, var(--ice) 11px 14px);
   animation: vbars 0.8s ease-in-out infinite alternate; transform-origin: bottom; }
 @keyframes vbars { to { transform: scaleY(0.45); } }
+.tg a { color: var(--ice); text-underline-offset: 2px; }

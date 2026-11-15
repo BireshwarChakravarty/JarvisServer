@@ -435,6 +435,19 @@
     } catch (e) { $("speech-err").textContent = e.message; }
   }
   $("speech-next").onclick = nextStep;
+  // Air mouse: in Settings it switches on/off immediately (no restart); during setup it's saved at Launch
+  const AIR_D = "Hold ☝️ to drive the pointer with your fingertip. Pinch to click, ✋ to stop.";
+  $("opt-airmouse").onchange = async () => {
+    if (!settings) return;
+    const on = $("opt-airmouse").checked;
+    try {
+      const r = await api("/api/setup/air-mouse", { enabled: on });
+      $("airmouse-d").textContent = r.needs_permission
+        ? "On. macOS needs one approval: allow JARVIS under Accessibility in the window that just opened."
+        : on ? "On. " + AIR_D : AIR_D;
+      caption(on ? "Air mouse ready. Hold up one finger when you want the pointer." : "Air mouse off.");
+    } catch (e) { $("opt-airmouse").checked = !on; caption(e.message); }
+  };
   $("watch-unlock").onclick = (e) => { e.preventDefault(); e.stopPropagation(); api("/api/setup/open-unlock-settings", {}).catch(() => {}); };
 
   /* ───────────── ready ───────────── */
@@ -443,12 +456,12 @@
     try {
       if (settings) {
         await api("/api/setup/login-item", { enabled: $("opt-login").checked });
-        await api("/api/setup/finish", { login_item: $("opt-login").checked, auto_lock_when_away: $("opt-lock").checked, sentry_mode: $("opt-sentry").checked });
+        await api("/api/setup/finish", { login_item: $("opt-login").checked, auto_lock_when_away: $("opt-lock").checked, sentry_mode: $("opt-sentry").checked, air_mouse: $("opt-airmouse").checked });
         caption("Settings saved. Restarting to apply them.");
         await api("/api/app/restart", {}).catch(() => (location.href = "/"));
         return;
       }
-      await api("/api/setup/finish", { login_item: $("opt-login").checked, auto_lock_when_away: $("opt-lock").checked, sentry_mode: $("opt-sentry").checked });
+      await api("/api/setup/finish", { login_item: $("opt-login").checked, auto_lock_when_away: $("opt-lock").checked, sentry_mode: $("opt-sentry").checked, air_mouse: $("opt-airmouse").checked });
       reactor.setState("working"); caption("Bringing all systems online…");
       setTimeout(() => (location.href = "/"), 2200);
     } catch (e) { $("ready-err").textContent = e.message; busy($("launch"), false); }
@@ -516,6 +529,7 @@
     $("opt-login").checked = S.login_item ? S.login_item !== "off" || !settings : true;
     $("opt-lock").checked = !!S.options.auto_lock_when_away;
     $("opt-sentry").checked = !!S.options.sentry_mode;
+    $("opt-airmouse").checked = !!S.options.air_mouse;
     if (settings) { $("launch").textContent = "Save & restart"; $("hello").textContent = "Settings"; }
     models = S.models; renderDownloads();
     connect();
@@ -532,7 +546,7 @@
     if (path === "/api/setup/state") return Promise.resolve({ complete: false, profile: { name: "", title: "sir", city: "" }, has_key: false, permissions: perms,
       models: [{ key: "wake", title: "Wake word", total: 3.7e6, done: 3.7e6, ready: true }, { key: "ears", title: "Speech recognition", total: 4.9e8, done: 2.1e8 },
         { key: "voice", title: "Voice", total: 3.5e8, done: 3.5e8, ready: true }, { key: "eyes", title: "Vision", total: 4.7e7, done: 0 }],
-      face_enrolled: false, login_item: "off", app_path: "/Users/you/Downloads/JARVIS.app", in_applications: false, options: {} });
+      face_enrolled: false, login_item: "off", app_path: "/Users/you/Downloads/JARVIS.app", in_applications: false, options: { air_mouse: false } });
     if (path === "/api/setup/models") return Promise.resolve(models.map((m) => (m.ready ? m : { ...m, done: Math.min(m.total, m.done + m.total * 0.07) })));
     if (path === "/api/setup/permissions") return Promise.resolve(S.permissions);
     if (path === "/api/setup/brain") return Promise.resolve({ provider: "claude-code", has_key: false, claude_model: "",
