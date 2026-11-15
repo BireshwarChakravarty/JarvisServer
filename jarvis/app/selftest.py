@@ -240,8 +240,8 @@ def run() -> int:
             return pts
         got, moves = [], []
         ge = GestureEngine(state["cfg"].models_dir, lambda g, a: got.append(a), on_motion=moves.append)
-        for i in range(6):
-            ge.handle_motion(i / 12, hand(0.70 - 0.06 * i, 0.5))
+        for i in range(6):   # the camera mirrors frames: image-right is the user's right
+            ge.handle_motion(i / 12, hand(0.30 + 0.06 * i, 0.5))
         frames = [hand(0.5, 0.6, True)] * 3 + [hand(0.5, 0.6 - 0.03 * i, True) for i in range(1, 7)] + [None]
         for i, f in enumerate(frames):
             ge.handle_motion(5 + i / 12, f)
