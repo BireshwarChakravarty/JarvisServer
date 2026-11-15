@@ -52,6 +52,13 @@ def _write_user_config(cfg, patch: dict) -> dict:
     return data
 
 
+def recommended_model(subscription: str) -> str:
+    """Pro's allowance is the smallest, and Sonnet answers fastest: a better voice assistant there.
+    Max has room for Opus, so leave its default alone."""
+    sub = (subscription or "").lower()
+    return "sonnet" if "pro" in sub and "max" not in sub else ""
+
+
 def _current_voice(cfg) -> str:
     if cfg.get("voice.tts.backend") == "say":
         return f"mac:{cfg.get('voice.tts.say_voice') or 'auto'}"
@@ -201,8 +208,8 @@ def make_router(sup) -> APIRouter:
             asyncio.to_thread(brain_setup.status, "claude", cfg.get("brain.claude_path")),
             asyncio.to_thread(brain_setup.status, "codex", cfg.get("brain.codex_path")))
         return {"provider": cfg.get("brain.provider", "anthropic"), "claude": claude, "codex": codex,
-                "has_key": _has_key(),
-            "provider": cfg.get("brain.provider", "anthropic"), "claude_model": cfg.get("brain.claude_model") or ""}
+                "has_key": _has_key(), "claude_model": cfg.get("brain.claude_model") or "",
+                "recommended_model": recommended_model(claude.get("subscription", ""))}
 
     @r.post("/api/setup/brain")
     async def brain_choose(body: dict = Body(...)):

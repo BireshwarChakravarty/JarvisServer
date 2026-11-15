@@ -170,6 +170,10 @@
     try { B = await api("/api/setup/brain"); } catch (e) { B = { provider: "claude-code", claude: {}, codex: {}, has_key: S.has_key }; }
     provider = B.provider === "anthropic" && !B.has_key ? "claude-code" : B.provider;
     if (B.claude_model) $("claude-model").value = B.claude_model;
+    else if (B.recommended_model) {   // signed in with Pro: Sonnet is quicker and easier on your allowance
+      $("claude-model").value = B.recommended_model;
+      api("/api/setup/brain", { provider, claude_model: B.recommended_model }).catch(() => {});
+    }
     renderBrain();
   }
   function ready(p) {
@@ -220,7 +224,14 @@
       else caption(action === "install" ? "Installed." : "Signed in. Let's make sure I can think.");
     } catch (e) { $("key-err").textContent = e.message; }
     $("cli-input-row").hidden = true; busy(btn, false); renderBrain();
-    if (action === "login" && ready(provider)) $("cs-test-btn").click();
+    if (action === "login" && ready(provider)) {
+      const fresh = await api("/api/setup/brain").catch(() => null);   // now we know the plan: Pro → Sonnet
+      if (fresh && fresh.recommended_model && !$("claude-model").value) {
+        $("claude-model").value = fresh.recommended_model;
+        await api("/api/setup/brain", { provider, claude_model: fresh.recommended_model }).catch(() => {});
+      }
+      $("cs-test-btn").click();
+    }
   }
   $("cs-install-btn").onclick = () => cliAction("install", $("cs-install-btn"));
   $("cs-login-btn").onclick = () => cliAction("login", $("cs-login-btn"));

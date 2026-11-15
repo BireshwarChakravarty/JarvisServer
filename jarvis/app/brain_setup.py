@@ -48,6 +48,7 @@ def status(which: str, configured_path: str | None = None) -> dict:
             # claude.ai / oauth_token = your subscription; api_key/console = pay-per-use billing
             out["plan"] = out["logged_in"] and data.get("authMethod") in ("claude.ai", "oauth_token")
             out["detail"] = data.get("email") or data.get("subscriptionType") or ""
+            out["subscription"] = str(data.get("subscriptionType") or "").lower()   # e.g. "pro", "max"
         except Exception:
             out["detail"] = txt.strip()[:200]
     else:

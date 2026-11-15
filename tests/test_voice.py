@@ -91,3 +91,10 @@ def test_filler_covers_slow_starts_only():
     assert said == []
     asyncio.run(run(1.6))      # a slow one: exactly one acknowledgement
     assert len(said) == 1 and said[0] in [f.format(t="sir") for f in Orchestrator.FILLERS]
+
+
+def test_pro_plan_gets_sonnet_by_default():
+    from jarvis.app.setup_api import recommended_model
+
+    assert recommended_model("pro") == "sonnet" and recommended_model("Claude Pro") == "sonnet"
+    assert recommended_model("max") == "" and recommended_model("") == ""
