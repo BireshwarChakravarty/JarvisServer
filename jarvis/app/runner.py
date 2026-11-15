@@ -28,6 +28,29 @@ def _wait_port(host: str, port: int, timeout: float = 30) -> bool:
     return False
 
 
+def allow_app_termination() -> None:
+    """Never stand in the way of the app quitting.
+
+    pywebview answers macOS's applicationShouldTerminate: by asking each window's `closing` handler,
+    and ours says "hide, don't close" so the red button keeps JARVIS running in the background. That
+    answer also reached shutdown, restart and log-out, so macOS showed "JARVIS interrupted shut down…
+    try again". Closing a window and quitting the app are different questions: the red button goes
+    through windowShouldClose: (still hides), while app termination now always proceeds."""
+    try:
+        import Foundation
+        from webview.platforms import cocoa
+
+        from jarvis.app import menubar
+
+        def applicationShouldTerminate_(self, app):
+            menubar.mark_terminating()
+            return Foundation.YES
+
+        cocoa.BrowserView.AppDelegate.applicationShouldTerminate_ = applicationShouldTerminate_
+    except Exception as exc:
+        log.warning("couldn't install the quit fix: %s", exc)
+
+
 def run_app() -> None:
     os.environ.setdefault("JARVIS_APP", "1")
     # Camera permission is requested natively during onboarding; OpenCV's own request can't spin
@@ -71,6 +94,8 @@ def run_app() -> None:
     import webview
 
     from jarvis.app import menubar
+
+    allow_app_termination()
 
     window = webview.create_window(
         "JARVIS", f"http://{host}:{port}/",

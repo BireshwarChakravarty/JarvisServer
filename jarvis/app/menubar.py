@@ -184,7 +184,12 @@ def install_quit_handlers() -> None:
 _quit_target = None
 
 
-def _really_quit() -> None:
+def mark_terminating() -> None:
+    """From here on, closing means quitting (the app is shutting down)."""
     global _terminating
     _terminating = True
+
+
+def _really_quit() -> None:
+    mark_terminating()
     quit_app()

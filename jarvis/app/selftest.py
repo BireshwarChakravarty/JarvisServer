@@ -298,6 +298,21 @@ def run() -> int:
             raise RuntimeError("SACLockScreenImmediate missing: locking would fall back to ⌃⌘Q")
         return "SACLockScreenImmediate present"
 
+    @check("shutdown: JARVIS never refuses to quit (restart, shut down, log out)")
+    def _():
+        import Foundation
+        from webview.platforms import cocoa
+
+        from jarvis.app import menubar
+        from jarvis.app.runner import allow_app_termination
+        allow_app_termination()
+        delegate = cocoa.BrowserView.AppDelegate.alloc().init()
+        answer = delegate.applicationShouldTerminate_(None)
+        if answer != Foundation.YES or not menubar.is_quit_shortcut():
+            raise RuntimeError(f"applicationShouldTerminate answered {answer!r}: macOS would cancel shutdown")
+        menubar._terminating = False
+        return "applicationShouldTerminate → YES"
+
     @check("setup + HUD server")
     def _():
         from fastapi.testclient import TestClient
