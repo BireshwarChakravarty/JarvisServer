@@ -370,6 +370,16 @@ real Anthropic SDK against a local mock of the Messages API**.
 See [RESEARCH.md](RESEARCH.md) for the projects surveyed and what was taken from each.
 
 ### Troubleshooting
+- **A permission shows ON in System Settings but JARVIS says it's missing.** That copy was installed by
+  dragging from the disk image, so macOS treats each update as a new app. Reinstall with the one-line
+  installer (or **Update JARVIS…** in the menu bar): it signs JARVIS with this Mac's own identity so
+  permissions stick from then on.
+- **Screen Recording is allowed but "What's on my screen?" still fails.** macOS only hands that
+  permission to a running app after a relaunch: use **Relaunch to apply** in Settings › Senses.
+- **He doesn't lock when you walk away.** Turn on Settings › Ready › *Lock the Mac when I leave*, make sure
+  he has learned your face (Settings › Recognition), and note he won't lock while the keyboard or mouse is
+  in use. He wakes the screen when you return; unlocking stays with Touch ID, Apple Watch or your password.
+- **Gestures do nothing.** Hand control is off until you ask: say "hand control on" or press ✋ on the HUD.
 - **He doesn't hear "Hey Jarvis".** Run `jarvis doctor`, check the Microphone permission, and try `voice.wake_threshold: 0.35`.
   Holding Right ⌥ always works.
 - **Calendar is empty.** Inside JARVIS.app he uses EventKit (grant Calendars). From a terminal he uses AppleScript
