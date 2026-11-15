@@ -23,6 +23,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+from jarvis.aio import spawn
 from jarvis.core.persona import build_system_prompt, context_line
 from jarvis.events import bus
 from jarvis.voice.text import SentenceSplitter, clean_for_speech
@@ -201,7 +202,7 @@ class ClaudeCodeBrain(_CLIBrain):
 
     def reset(self) -> None:
         super().reset()
-        asyncio.ensure_future(self._stop())
+        spawn(self._stop())
 
     async def respond(self, text: str | None, *, on_sentence: SentenceCallback | None = None,
                       context: dict | None = None, event_note: str | None = None,

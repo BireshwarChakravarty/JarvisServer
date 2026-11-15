@@ -44,8 +44,15 @@
   const speak = (text) => api("/api/setup/speak", text ? { text } : {}).catch(() => {});
 
   /* ───────────── navigation ───────────── */
+  const STEP_NAMES = { welcome: "Welcome", you: "You", brain: "Intelligence", senses: "Senses", face: "Recognition",
+    voice: "Listening", speech: "Voice", ready: "Ready" };
   function renderSteps() {
     $("steps").innerHTML = "";
+    const n = STEPS.indexOf(step) + 1;
+    $("steps").setAttribute("role", "progressbar");
+    $("steps").setAttribute("aria-valuemin", "1"); $("steps").setAttribute("aria-valuemax", String(STEPS.length));
+    $("steps").setAttribute("aria-valuenow", String(n));
+    $("steps").setAttribute("aria-valuetext", `Step ${n} of ${STEPS.length}: ${STEP_NAMES[step] || step}`);
     STEPS.forEach((s, i) => {
       const dot = document.createElement("i");
       const cur = STEPS.indexOf(step);
@@ -561,7 +568,8 @@
     connect();
     const resume = store.get("jarvis-resume-step", null);   // back from a permission relaunch
     store.del("jarvis-resume-step");
-    go(resume && STEPS.includes(resume) ? resume : settings ? "you" : "welcome");
+    const linked = location.hash.slice(1);                     // e.g. /setup#senses from the HUD
+    go(resume && STEPS.includes(resume) ? resume : STEPS.includes(linked) ? linked : settings ? "you" : "welcome");
   }
 
   /* ───────────── demo (/setup?demo) for previews ───────────── */

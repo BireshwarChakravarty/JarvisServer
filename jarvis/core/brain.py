@@ -17,8 +17,9 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable
 
+from jarvis.aio import spawn
 from jarvis.core.persona import build_system_prompt, context_line
 from jarvis.events import bus
 from jarvis.voice.text import SentenceSplitter, clean_for_speech
@@ -94,14 +95,14 @@ class Brain:
             old = self.session
             self.session = self._new_session()
             if old is not None and old.turns > 0:
-                asyncio.create_task(self._summarise(old))
+                spawn(self._summarise(old))
         return self.session  # type: ignore[return-value]
 
     def reset(self) -> None:
         old = self.session
         self.session = None
         if old is not None and old.turns > 0:
-            asyncio.create_task(self._summarise(old))
+            spawn(self._summarise(old))
 
     def _seed_block(self) -> str | None:
         """Long-term memory, injected once at the top of a new conversation."""
@@ -276,7 +277,7 @@ class Brain:
     async def _execute(self, block: Any) -> dict:
         name, args = block.name, block.input
         if name in self.extra_handlers:
-            from jarvis.tools.registry import ToolResult, validate, _normalise
+            from jarvis.tools.registry import ToolResult, _normalise
 
             bus.emit("tool", name=name, status="start", args=args, category="mcp")
             try:

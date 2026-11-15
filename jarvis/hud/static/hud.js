@@ -375,7 +375,13 @@
         if (!booted) $("bootline").textContent = e.message;
         if (!e.replay) activityRow("sys", e.message);
         break;
-      case "capabilities": if (e.camera) startCamera(); break;
+      case "capabilities":
+        if (e.camera) startCamera();
+        else if (e.camera === false) {   // say why, and offer the fix, instead of a dead end
+          $("optics-msg").textContent = "Camera unavailable";
+          $("optics-fix").hidden = false;
+        }
+        break;
       case "state": setState(e.state); if (e.state !== "booting") setTimeout(finishBoot, 1200); break;
       case "level":
         if (e.source === "tts" || state === "listening") reactor.setLevel(e.value, e.source);

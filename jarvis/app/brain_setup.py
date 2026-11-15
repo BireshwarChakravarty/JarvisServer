@@ -8,6 +8,7 @@ import logging
 import re
 import subprocess
 
+from jarvis.aio import spawn
 from jarvis.core.cli_brains import child_env, find_binary
 from jarvis.events import bus
 
@@ -81,7 +82,7 @@ class CLISession:
         self.proc = await asyncio.create_subprocess_exec(
             *cmd, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
             env=child_env({"BROWSER": "open"}))
-        asyncio.ensure_future(self._pump())
+        spawn(self._pump())
 
     async def _pump(self) -> None:
         assert self.proc is not None

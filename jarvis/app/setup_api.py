@@ -16,6 +16,7 @@ import yaml
 from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
 
+from jarvis.aio import spawn
 from jarvis.events import bus
 
 log = logging.getLogger("jarvis.setup")
@@ -559,7 +560,7 @@ def make_router(sup) -> APIRouter:
             await asyncio.to_thread(login_item.set_enabled, bool(body["login_item"]))
         (sup.cfg.home / ".setup-complete").write_text(time.strftime("%Y-%m-%d %H:%M:%S"))
         if sup.jarvis is None:
-            asyncio.get_running_loop().call_later(0.8, lambda: asyncio.ensure_future(sup.start_jarvis(greet=True)))
+            asyncio.get_running_loop().call_later(0.8, lambda: spawn(sup.start_jarvis(greet=True)))
         return {"ok": True, "redirect": "/"}
 
     @r.post("/api/app/show")

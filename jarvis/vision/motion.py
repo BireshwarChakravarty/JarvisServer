@@ -187,7 +187,7 @@ def attention(landmarks: list | tuple, box_w: float) -> float:
     YuNet landmarks: right eye, left eye, nose tip, mouth corners. The nose sits midway between
     the eyes when you face the screen and swings towards one eye as you turn away.
     """
-    (rex, rey), (lex, ley), (nx, ny) = landmarks[0], landmarks[1], landmarks[2]
+    (rex, rey), (lex, ley), (nx, _ny) = landmarks[0], landmarks[1], landmarks[2]
     eye_dist = math.dist((rex, rey), (lex, ley))
     if eye_dist < 0.15 * box_w:          # eyes nearly on top of each other: head turned right away
         return 0.0

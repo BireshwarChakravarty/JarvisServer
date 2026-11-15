@@ -21,7 +21,8 @@ import re
 import time
 from typing import Any
 
-from jarvis.core.brain import Brain
+from jarvis.aio import spawn
+from jarvis.core.brain import Brain  # noqa: F401  (import registers the brain module)
 from jarvis.core.briefing import gather, offline_extras
 from jarvis.core.memory import Memory
 from jarvis.core.persona import fallback_greeting, part_of_day
@@ -142,7 +143,7 @@ class Jarvis:
 
         import os
 
-        has_key = provider_ok = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")) \
+        has_key = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")) \
             or cfg.get("brain.provider") in ("claude-code", "codex")
         provider = cfg.get("brain.provider", "anthropic")
         self.capabilities["brain"] = {
@@ -853,13 +854,13 @@ class Jarvis:
                 self.interrupt()
                 self._interrupt.set()
             else:
-                asyncio.create_task(registry.call("media_control", {"action": "pause"}, self.ctx))
+                spawn(registry.call("media_control", {"action": "pause"}, self.ctx))
         elif action == "listen":
             self.trigger_listen()
         elif action == "media_toggle":
-            asyncio.create_task(registry.call("media_control", {"action": "toggle"}, self.ctx))
+            spawn(registry.call("media_control", {"action": "toggle"}, self.ctx))
         elif action in ("next", "previous"):
-            asyncio.create_task(registry.call("media_control", {"action": action}, self.ctx))
+            spawn(registry.call("media_control", {"action": action}, self.ctx))
         elif action == "show_hud":
             if self.show_window:
                 self.show_window()
@@ -867,7 +868,7 @@ class Jarvis:
     # pinch-and-drag: vertical is a volume dial, sideways spins the hologram (the HUD does that part)
     def _on_motion_thread(self, ev) -> None:
         if self.loop:
-            self.loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self._on_motion(ev)))
+            self.loop.call_soon_threadsafe(lambda: spawn(self._on_motion(ev)))
 
     async def _on_motion(self, ev) -> None:
         from jarvis.mac import system as mac
@@ -958,7 +959,7 @@ class Jarvis:
                     pass
             bus.emit("stats", **stats)
             if tick % 150 == 1:  # every 5 min: weather + agenda panels
-                asyncio.create_task(self._refresh_panels())
+                spawn(self._refresh_panels())
 
     async def _refresh_panels(self) -> None:
         from jarvis.core.briefing import _events_today, _weather

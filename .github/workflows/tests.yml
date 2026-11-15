@@ -11,5 +11,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: pip install -e ".[dev]"
+      - run: pip install -e ".[dev]" ruff
+      - name: Lint (undefined names, unused code, syntax)
+        run: ruff check jarvis --select F,E9
       - run: pytest -q

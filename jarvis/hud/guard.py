@@ -48,7 +48,7 @@ def _origin_ok(origin: str | None, host: str) -> bool:
         return False
     if not host:
         return True
-    (o_name, o_port), (h_name, h_port) = _split(netloc), _split(host)
+    (_, o_port), (_, h_port) = _split(netloc), _split(host)
     return o_port == h_port               # 127.0.0.1 vs localhost on the same port is still us
 
 

@@ -3,11 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
-import os
-import platform
 import shlex
 import subprocess
-import time
 from pathlib import Path
 
 from jarvis.mac import pim, system as mac

@@ -15,6 +15,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from jarvis.aio import spawn
 from jarvis.events import bus
 
 log = logging.getLogger("jarvis.hud")
@@ -113,7 +114,7 @@ def create_app(jarvis=None, supervisor=None) -> FastAPI:
         }
         await socket.send_text(json.dumps(hello, default=str))
         if j is not None:
-            asyncio.ensure_future(j._refresh_panels())
+            spawn(j._refresh_panels())
 
         async def pump():
             while True:

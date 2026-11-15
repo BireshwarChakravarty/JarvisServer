@@ -24,7 +24,6 @@ import threading
 import time
 import webbrowser
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
 
 from jarvis import __version__
 from jarvis.config import jarvis_home, load_config
