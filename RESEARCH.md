@@ -69,6 +69,18 @@ This build combines the strongest idea from each into one system.
 | The film's workshop holograms are grabbed and turned by hand | Pinch and drag sideways spins the HUD core with inertia; pinch and drag vertically is a volume dial drawn around the core |
 | Face landmarks give head yaw cheaply (nose against the eye midpoint) | An attention estimate with hysteresis: the HUD's periphery rests when you look away |
 
+### Round three: what your first real session showed
+
+| Finding | What it changed |
+|---|---|
+| The camera already mirrors frames like a selfie; the motion code mirrored them again, so the hand cursor ran the wrong way and swipes were reversed | Fixed at the source, with tests that use real camera orientation. The cursor now follows the index fingertip through an interaction box, smoothed with the [1€ filter](https://gery.casiez.net/1euro/) (as air-mouse projects such as [slastra/pointer](https://github.com/slastra/pointer) do), and recognition runs at 24 fps while a hand is in view |
+| Recognition ran on the capture thread, so slow frames queued up and the cursor trailed your hand | Capture and recognition now run on separate threads; recognition always takes the newest frame and skips stale ones |
+| The camera preview looked black and white: the HUD desaturated it, twice | True colour, plus a gamma lift for dim rooms on the preview only (recognition sees the raw frame) |
+| Captions trimmed old words off the front, so the text started mid-sentence. Broadcast guidance ([BBC subtitle guidelines](https://clevercast.com/bbc-subtitling-guidelines)): about two lines, break at sentence and phrase boundaries | Whole sentences only: the current one bright, the previous one dimmed, revealed as the voice reaches them |
+| A floating PiP needs a window that is non-activating, joins all Spaces and floats over full-screen apps ([Apple developer forums](https://developer.apple.com/forums/thread/826308), [floating panel patterns](https://cindori.com/developer/floating-panel)); pywebview 6 exposes `on_top`, `transparent`, `frameless`, `focus=False` and the native `NSWindow` | The mini capsule: canJoinAllSpaces + fullScreenAuxiliary + stationary, status-window level, `setCanHide_(False)` so ⌘H leaves it up, click-through while the air mouse is on |
+| Unlocking from a webcam: macOS blocks synthetic input on the lock screen, the sanctioned route is an authorization plug-in ([Apple developer forums](https://developer.apple.com/forums/thread/62687)), and 2D face matching is fooled by a photo ([liveness research](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4327091/)) | No password typing. On return he wakes the display for [Apple Watch unlock](https://support.apple.com/en-us/HT206995), Touch ID or your password, then briefs you once you're in |
+| Security review: the local server didn't check `Origin` or `Host`, so any web page could open its WebSocket and send commands (cross-site WebSocket hijacking), or read it via DNS rebinding | A guard on every request: localhost-only Host, same-origin Origin on WebSocket and POSTs, Fetch-Metadata refusal of cross-site requests (including camera embeds) |
+
 ## 4. Gaps no surveyed project filled, built here
 
 1. **A greeting that depends on the time of day and comes with a briefing.** At login, or the first time you're back at the Mac that day, you get the weather, your next meetings, overdue reminders, unread mail and headlines in under 70 spoken words. It then asks what you'd like to do today and listens without needing the wake word.

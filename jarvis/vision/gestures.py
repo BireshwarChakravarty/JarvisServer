@@ -41,14 +41,28 @@ ACTIONS = {
 
 class GestureEngine:
     def __init__(self, models_dir: Path, on_gesture: Callable[[str, str], None],
-                 fps: float = 12.0, hold_frames: int = 5, cooldown: float = 2.0,
-                 on_motion: Callable[[MotionEvent], None] | None = None) -> None:
+                 fps: float = 10.0, hold_frames: int = 5, cooldown: float = 2.0,
+                 on_motion: Callable[[MotionEvent], None] | None = None,
+                 tracking_fps: float = 24.0, air_mouse: bool = False) -> None:
         self.models_dir = models_dir
         self.on_gesture = on_gesture
         self.on_motion = on_motion
         self.motion = HandMotion()
         self._was_visible = False
-        self.interval = 1.0 / fps
+        self._seen = -10.0
+        self.tracking_interval = 1.0 / tracking_fps   # a hand in view: run fast so the cursor keeps up
+        self.airmouse = None
+        if air_mouse:
+            from jarvis.vision.airmouse import AirMouse
+
+            def changed(on: bool) -> None:
+                bus.emit("airmouse", active=on)
+                from jarvis.app.mini import click_through
+
+                click_through(on)   # the floating capsule must never catch a hand-made click
+
+            self.airmouse = AirMouse(on_change=changed)
+        self.interval = 1.0 / fps                      # nobody there: idle along
         self.hold_frames = hold_frames
         self.cooldown = cooldown
         self._recognizer = None
@@ -89,7 +103,8 @@ class GestureEngine:
 
     def process(self, frame: np.ndarray) -> None:
         now = time.monotonic()
-        if not self.available or now - self._last < self.interval:
+        interval = self.tracking_interval if now - self._seen < 1.5 else self.interval
+        if not self.available or now - self._last < interval:
             return
         self._last = now
         rgb = frame[:, :, ::-1].copy()
@@ -101,7 +116,11 @@ class GestureEngine:
             if top.score >= 0.6:
                 label = top.category_name
         lms = [(p.x, p.y) for p in result.hand_landmarks[0]] if getattr(result, "hand_landmarks", None) else None
-        self.handle_motion(now, lms)
+        if lms:
+            self._seen = now
+        if self.handle_motion(now, lms, label):
+            self._history.clear()
+            return                    # the air mouse owns the hand: no other gestures
         if not self.motion.still():
             label = "Moving"          # a hand in motion is never a held pose
         self._history.append(label)
@@ -114,12 +133,16 @@ class GestureEngine:
             log.info("gesture %s → %s", label, action)
             self.on_gesture(label, action)
 
-    def handle_motion(self, now: float, lms: list | None) -> None:
-        """Feed one frame's landmarks to the motion tracker; publish hand position and events."""
+    def handle_motion(self, now: float, lms: list | None, label: str = "None") -> bool:
+        """Feed one frame's landmarks to the motion tracker; publish the cursor and motion events.
+        Returns True when the air mouse has taken over the hand."""
         st = self.motion.update(now, lms)
         if st.visible or self._was_visible:
-            bus.emit("hand", visible=st.visible, x=round(st.x, 3), y=round(st.y, 3), pinch=st.pinch)
+            # x/y: the cursor in window fractions (y down), already mirrored and smoothed
+            bus.emit("hand", visible=st.visible, x=round(st.px, 4), y=round(st.py, 4), pinch=st.pinch)
         self._was_visible = st.visible
+        if self.airmouse is not None and self.airmouse.update(now, label, st):
+            return True
         for ev in st.events:
             if ev.kind == "swipe":
                 action = SWIPES.get(ev.direction)
@@ -129,3 +152,4 @@ class GestureEngine:
                     self.on_gesture(f"Swipe_{ev.direction}", action)
             elif self.on_motion:
                 self.on_motion(ev)
+        return False

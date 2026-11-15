@@ -1,8 +1,13 @@
 """Hand *motion* gestures, on top of MediaPipe's static poses.
 
 Pure geometry on the 21 hand landmarks (normalised image coordinates), so it is unit-testable
-without a camera. Everything is expressed from the user's point of view: the Mac camera is not
-mirrored, so moving your hand to your right moves it left in the image.
+without a camera. Everything is expressed from the user's point of view. JARVIS's Camera already
+mirrors frames like a selfie view (mirrored=True), so image-right is the user's right; pass
+mirrored=False for a raw, un-mirrored camera.
+
+The cursor follows the index fingertip through an "interaction box": the comfortable middle of
+the camera view maps to the whole window, so you don't have to reach the frame's edges. A One Euro
+filter (Casiez et al., CHI 2012) keeps it steady when your hand is still and lag-free when it moves.
 
   swipe left / right    a quick sideways sweep of the hand      → previous / next track
   swipe up              a quick upward flick                    → bring the HUD to the front
@@ -27,12 +32,44 @@ class MotionEvent:
     total: float = 0.0           # drag: total travel along the locked axis since the pinch began
 
 
+class OneEuro:
+    """The 1€ filter: a low-pass whose cutoff rises with speed (jitter-free yet responsive)."""
+
+    def __init__(self, min_cutoff: float = 1.0, beta: float = 4.0, d_cutoff: float = 1.0) -> None:
+        self.min_cutoff, self.beta, self.d_cutoff = min_cutoff, beta, d_cutoff
+        self.x: float | None = None
+        self.dx = 0.0
+        self.t: float | None = None
+
+    @staticmethod
+    def _alpha(cutoff: float, dt: float) -> float:
+        tau = 1.0 / (2 * math.pi * cutoff)
+        return 1.0 / (1.0 + tau / dt)
+
+    def __call__(self, t: float, x: float) -> float:
+        if self.x is None or self.t is None or t <= self.t:
+            self.x, self.t = x, t
+            return x
+        dt = t - self.t
+        self.t = t
+        a_d = self._alpha(self.d_cutoff, dt)
+        self.dx = a_d * (x - self.x) / dt + (1 - a_d) * self.dx
+        a = self._alpha(self.min_cutoff + self.beta * abs(self.dx), dt)
+        self.x = a * x + (1 - a) * self.x
+        return self.x
+
+    def reset(self) -> None:
+        self.x, self.t, self.dx = None, None, 0.0
+
+
 @dataclass
 class HandState:
     visible: bool = False
     x: float = 0.5               # palm centre, user's perspective (0 = user's left, 1 = right)
     y: float = 0.5               # 0 = bottom, 1 = top
     pinch: bool = False
+    px: float = 0.5              # the cursor: smoothed index fingertip mapped through the
+    py: float = 0.5              # interaction box to 0..1 of the window (y: 0 = top)
     speed: float = 0.0           # palm speed, frame-widths per second
     events: list = field(default_factory=list)
 
@@ -45,7 +82,10 @@ class HandMotion:
     AXIS_LOCK = 0.035            # travel before a drag commits to an axis
     STILL_SPEED = 0.35           # below this the hand counts as held still
 
-    def __init__(self) -> None:
+    def __init__(self, mirrored: bool = True, box: tuple = (0.15, 0.12, 0.85, 0.80)) -> None:
+        self.mirrored = mirrored
+        self.box = box                       # (left, bottom, right, top) in user coords, y up
+        self.fx, self.fy = OneEuro(), OneEuro()
         self.trail: deque = deque()          # (t, x, y) palm centres
         self.pinched = False
         self._pinch_frames = 0
@@ -64,8 +104,9 @@ class HandMotion:
             events = self._end_pinch()
             self.trail.clear()
             self.speed = 0.0
+            self.fx.reset(); self.fy.reset()
             return HandState(visible=False, events=events)
-        pts = [(1.0 - p[0], 1.0 - p[1]) for p in landmarks]   # mirror x; y up
+        pts = [((p[0] if self.mirrored else 1.0 - p[0]), 1.0 - p[1]) for p in landmarks]   # user's view; y up
         cx = (pts[WRIST][0] + pts[MIDDLE_MCP][0]) / 2
         cy = (pts[WRIST][1] + pts[MIDDLE_MCP][1]) / 2
         size = max(1e-3, math.dist(pts[WRIST], pts[MIDDLE_MCP]))
@@ -116,7 +157,17 @@ class HandMotion:
         if any(e.kind == "pinch_end" for e in events):
             self._cool_until = t + 0.6   # letting go is not a swipe
             self.trail.clear()
-        return HandState(True, cx, cy, self.pinched, self.speed, events)
+        px, py = self._cursor(t, pts)
+        return HandState(True, cx, cy, self.pinched, px, py, self.speed, events)
+
+    def _cursor(self, t: float, pts: list) -> tuple[float, float]:
+        l, b, r, top = self.box
+        # while pinching, the fingertip dives to the thumb: aim with the pinch point instead
+        tip = pts[INDEX_TIP] if not self.pinched else (
+            (pts[INDEX_TIP][0] + pts[THUMB_TIP][0]) / 2, (pts[INDEX_TIP][1] + pts[THUMB_TIP][1]) / 2)
+        x = min(1.0, max(0.0, (tip[0] - l) / (r - l)))
+        y = min(1.0, max(0.0, (top - tip[1]) / (top - b)))      # screen y grows downwards
+        return self.fx(t, x), self.fy(t, y)
 
     def _end_pinch(self) -> list[MotionEvent]:
         if not self.pinched:

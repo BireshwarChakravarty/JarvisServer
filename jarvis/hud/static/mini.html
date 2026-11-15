@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>JARVIS</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500&family=Geist+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="/static/mini.css">
+</head>
+<body data-state="idle">
+<!-- The mini JARVIS: a floating capsule shown while the main window is minimised or hidden.
+     Click to bring the HUD back; drag anywhere to move it. -->
+<main class="pill" id="pill" title="Click to open JARVIS">
+  <div id="core"><canvas id="core-gl"></canvas><canvas id="core-ui"></canvas></div>
+  <div class="txt">
+    <p class="st"><span class="pip"></span><span id="st">Standby</span></p>
+    <p class="line" id="line">Say “Hey Jarvis”</p>
+  </div>
+</main>
+<script src="/static/reactor.js"></script>
+<script src="/static/mini.js"></script>
+</body>
+</html>

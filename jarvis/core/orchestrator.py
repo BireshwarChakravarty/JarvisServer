@@ -235,7 +235,8 @@ class Jarvis:
                 self.boot(f"Facial recognition: {'tracking ' + owner if enrolled else 'online (run `jarvis enroll`)'}",
                           enrolled or None)
         if cfg.get("vision.gestures", True):
-            self.gestures = GestureEngine(cfg.models_dir, self._on_gesture_thread, on_motion=self._on_motion_thread)
+            self.gestures = GestureEngine(cfg.models_dir, self._on_gesture_thread, on_motion=self._on_motion_thread,
+                                          air_mouse=bool(cfg.get("vision.air_mouse", False)))
             if await asyncio.to_thread(self.gestures.load):
                 self.camera.add_processor(self.gestures.process)
                 self.capabilities["gestures"] = True
@@ -667,6 +668,18 @@ class Jarvis:
 
     async def on_arrival(self, away_for: float) -> None:
         self.memory.log_event("arrival", away_for=away_for)
+        from jarvis.mac.session import screen_locked
+
+        if screen_locked():
+            # Back at a locked Mac: light the screen so it's ready for Touch ID / Apple Watch / password.
+            # JARVIS never types your password; a webcam match is not strong enough to unlock with.
+            if self.cfg.get("vision.wake_on_return", True):
+                from jarvis.mac.system import wake_display
+
+                await asyncio.to_thread(wake_display)
+                if self.speaker and self.cfg.get("vision.greet_on_arrival", True):
+                    self.speaker.enqueue(f"Welcome back, {self.cfg.get('owner.title', 'sir')}.")
+            return   # the full briefing follows when you unlock (on_unlock)
         if self.cfg.get("vision.greet_on_arrival", True):
             await self.greet(self._return_kind(away_for), away_for)
 

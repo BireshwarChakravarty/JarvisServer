@@ -60,12 +60,13 @@
     <section class="step" data-step="brain" hidden>
       <p class="eyebrow">Step 2 · Intelligence</p>
       <h1>Connect my mind.</h1>
-      <p class="lede">I think with Claude or ChatGPT. Use the plan you already pay for: no API key, no extra bills.</p>
-      <div class="plans" id="plans">
-        <button class="plan" data-p="claude-code"><span class="pdot"></span><div><b>Claude Pro or Max</b><span>Recommended · via Claude Code, signed in with your plan</span></div><em class="ptag" id="tag-claude-code"></em></button>
-        <button class="plan" data-p="codex"><span class="pdot"></span><div><b>ChatGPT Plus or Pro</b><span>Via OpenAI's Codex, signed in with your plan</span></div><em class="ptag" id="tag-codex"></em></button>
-        <button class="plan" data-p="anthropic"><span class="pdot"></span><div><b>Anthropic API key</b><span>Pay as you go, billed by usage</span></div><em class="ptag" id="tag-anthropic"></em></button>
+      <p class="lede">I think with Claude or ChatGPT, on the plan you already pay for.</p>
+      <div class="plans" id="plans" role="radiogroup" aria-label="How I think">
+        <button class="plan" data-p="claude-code" role="radio"><span class="pdot"></span><div><b>Claude</b><span>Pro or Max</span></div><em class="ptag" id="tag-claude-code"></em></button>
+        <button class="plan" data-p="codex" role="radio"><span class="pdot"></span><div><b>ChatGPT</b><span>Plus or Pro</span></div><em class="ptag" id="tag-codex"></em></button>
+        <button class="plan" data-p="anthropic" role="radio"><span class="pdot"></span><div><b>API key</b><span>Pay per use</span></div><em class="ptag" id="tag-anthropic"></em></button>
       </div>
+      <p class="hint plan-about" id="plan-about"></p>
 
       <div id="cli-panel" class="cli-panel" hidden>
         <ol class="cli-steps">
@@ -148,7 +149,7 @@
       <h1>All systems go.</h1>
       <div class="toggles">
         <label class="tg"><input type="checkbox" id="opt-login" checked><span class="sw"></span><div><b>Start when I log in</b><span>I'll greet you with a briefing every time.</span></div></label>
-        <label class="tg"><input type="checkbox" id="opt-lock"><span class="sw"></span><div><b>Lock the Mac when I leave</b><span>Uses the camera to notice you've walked away.</span></div></label>
+        <label class="tg"><input type="checkbox" id="opt-lock"><span class="sw"></span><div><b>Lock the Mac when I leave</b><span>Uses the camera to notice you've walked away. When you come back I wake the screen; with <a href="#" id="watch-unlock">Apple Watch unlock</a> it opens as you sit down.</span></div></label>
         <label class="tg"><input type="checkbox" id="opt-sentry"><span class="sw"></span><div><b>Sentry mode</b><span>Photograph unknown faces at your Mac while you're away.</span></div></label>
       </div>
       <p class="err" id="ready-err"></p>

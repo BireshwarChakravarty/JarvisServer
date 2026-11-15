@@ -79,13 +79,25 @@ def run_app() -> None:
     )
     sup.window = window
 
+    # Mini JARVIS: a floating capsule while the window is minimised, closed or hidden (⌘H)
+    from jarvis.app.mini import MiniPanel
+
+    mini = MiniPanel(cfg, f"http://{host}:{port}/mini")
+    mini.create()
+    sup.mini = mini
+
     def on_closing():
         if menubar.is_quit_shortcut():
             return True   # ⌘Q: really quit
         window.hide()     # red button: keep running in the background
+        if sup.setup_done():
+            mini.show()
         return False
 
     window.events.closing += on_closing
+    window.events.minimized += lambda: sup.setup_done() and mini.show()
+    window.events.restored += mini.hide
+    window.events.shown += mini.hide
 
     def show():
         sup.show_window()
@@ -121,6 +133,9 @@ def run_app() -> None:
             from PyObjCTools import AppHelper
 
             AppHelper.callAfter(menubar.install, actions)
+            from jarvis.app.mini import watch_app_hide
+
+            AppHelper.callAfter(watch_app_hide, mini)
             if cfg.get("voice.push_to_talk_key"):
                 AppHelper.callAfter(menubar.install_push_to_talk, ptt)
         except Exception as exc:

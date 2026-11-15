@@ -24,6 +24,9 @@ NO_STORE = {"Cache-Control": "no-store"}
 
 def create_app(jarvis=None, supervisor=None) -> FastAPI:
     app = FastAPI(title="J.A.R.V.I.S.", docs_url=None, redoc_url=None)
+    from jarvis.hud.guard import LocalOnly
+
+    app.add_middleware(LocalOnly)   # other websites can't drive JARVIS through 127.0.0.1
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
     def J():
@@ -50,6 +53,10 @@ def create_app(jarvis=None, supervisor=None) -> FastAPI:
     @app.get("/setup")
     async def setup_page():
         return FileResponse(STATIC / "onboarding.html", headers=NO_STORE)
+
+    @app.get("/mini")
+    async def mini_page():
+        return FileResponse(STATIC / "mini.html", headers=NO_STORE)
 
     @app.get("/api/status")
     async def status():

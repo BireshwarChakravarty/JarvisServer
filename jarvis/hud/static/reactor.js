@@ -96,8 +96,9 @@
     }`;
 
   class Reactor {
-    constructor(glCanvas, uiCanvas) {
+    constructor(glCanvas, uiCanvas, opts = {}) {
       this.gc = glCanvas; this.uc = uiCanvas;
+      this.compact = !!opts.compact;     // the mini panel: core and inner rings only, no chronometer
       this.ui = uiCanvas.getContext("2d");
       this.state = "booting";
       this.level = 0; this.target = 0; this.voiceSource = "tts";
@@ -289,6 +290,7 @@
         ctx.fillText(label, 0, ly + 0.5 * dpr);
       }
 
+      if (this.compact) { ctx.restore(); return; }
       // ── chronometer ring: the next 12 hours around "now"
       const rChrono = base * 1.62;
       const now = new Date();

@@ -418,6 +418,12 @@ def make_router(sup) -> APIRouter:
         _write_user_config(sup.cfg, {"voice": {"tts": tts}})
         return {"ok": True, "current": _current_voice(sup.cfg)}
 
+    @r.post("/api/setup/open-unlock-settings")
+    async def open_unlock_settings():
+        # Touch ID & Password, where "Use Apple Watch to unlock" lives (Apple's secure auto-unlock)
+        subprocess.Popen(["open", "x-apple.systempreferences:com.apple.Touch-ID-Settings.extension"])
+        return {"ok": True}
+
     @r.post("/api/setup/open-voice-settings")
     async def open_voice_settings():
         # Spoken Content, where Apple's Premium voices are downloaded (free)

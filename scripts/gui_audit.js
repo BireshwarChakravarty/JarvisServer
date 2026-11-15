@@ -10,6 +10,7 @@ const PAGES = [
   ['setup-senses', '/setup?demo#senses', 2500],
   ['setup-speech', '/setup?demo#speech', 2500],
   ['setup-ready', '/setup?demo#ready', 2500],
+  ['mini', '/mini?demo', 3000, [[360, 96]]],   // the floating capsule has one fixed size
 ];
 
 const probe = () => {
@@ -65,8 +66,8 @@ const probe = () => {
 (async () => {
   const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   let total = 0; const report = {};
-  for (const [pname, path, wait] of PAGES) {
-    for (const [w, h] of SIZES) {
+  for (const [pname, path, wait, sizes] of PAGES) {
+    for (const [w, h] of sizes || SIZES) {
       const p = await b.newPage({ viewport: { width: w, height: h } });
       const errors = []; p.on('pageerror', (e) => errors.push(e.message));
       await p.goto(base + path, { waitUntil: 'domcontentloaded' });

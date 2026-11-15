@@ -23,6 +23,9 @@ class Camera:
         self._lock = threading.Lock()
         self._running = False
         self._thread: threading.Thread | None = None
+        self._worker: threading.Thread | None = None
+        self._seq = 0
+        self._new = threading.Event()
         self._processors: list[Callable[[np.ndarray], None]] = []
         self.available = False
         self.error = ""
@@ -53,13 +56,17 @@ class Camera:
         self.available = True
         self._thread = threading.Thread(target=self._loop, daemon=True, name="camera")
         self._thread.start()
+        self._worker = threading.Thread(target=self._process_loop, daemon=True, name="camera-processing")
+        self._worker.start()
         log.info("camera %s started", self.index)
         return True
 
     def stop(self) -> None:
         self._running = False
-        if self._thread:
-            self._thread.join(timeout=2)
+        self._new.set()
+        for t in (self._thread, self._worker):
+            if t:
+                t.join(timeout=2)
         if self._cap is not None:
             self._cap.release()
         self.available = False
@@ -84,12 +91,28 @@ class Camera:
             with self._lock:
                 self._frame = frame
                 self._frame_ts = time.time()
-            for fn in self._processors:
+                self._seq += 1
+            self._new.set()
+            time.sleep(max(0.0, interval - (time.monotonic() - t0)))
+
+    def _process_loop(self) -> None:
+        """Recognition runs beside capture, always on the newest frame. If it falls behind it skips
+        frames instead of queueing them, so the hand cursor never trails behind your hand."""
+        done = 0
+        while self._running:
+            if not self._new.wait(0.5):
+                continue
+            self._new.clear()
+            with self._lock:
+                frame, seq = self._frame, self._seq
+            if frame is None or seq == done:
+                continue
+            done = seq
+            for fn in list(self._processors):
                 try:
                     fn(frame)
-                except Exception:  # never let a processor kill capture
+                except Exception:  # never let a processor kill recognition
                     log.exception("frame processor failed")
-            time.sleep(max(0.0, interval - (time.monotonic() - t0)))
 
     def latest(self) -> np.ndarray | None:
         with self._lock:
@@ -103,6 +126,25 @@ class Camera:
             return None
         if max_width and frame.shape[1] > max_width:
             scale = max_width / frame.shape[1]
-            frame = cv2.resize(frame, (max_width, int(frame.shape[0] * scale)))
+            frame = cv2.resize(frame, (max_width, int(frame.shape[0] * scale)), interpolation=cv2.INTER_AREA)
+        frame = brighten_low_light(frame)
         ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
         return buf.tobytes() if ok else None
+
+
+_LUTS: dict = {}
+
+
+def brighten_low_light(frame: np.ndarray) -> np.ndarray:
+    """Preview only (recognition sees the raw frame): lift a dim room's midtones with a gamma curve
+    so faces read clearly, keeping colour. A well-lit frame passes through untouched."""
+    small = frame[::16, ::16]
+    luma = float((0.114 * small[..., 0] + 0.587 * small[..., 1] + 0.299 * small[..., 2]).mean())
+    if luma >= 100:
+        return frame
+    gamma = max(0.55, min(1.0, np.log(0.42) / np.log(max(luma, 8) / 255)))
+    key = round(gamma, 2)
+    lut = _LUTS.get(key)
+    if lut is None:
+        lut = _LUTS[key] = (((np.arange(256) / 255.0) ** key) * 255).clip(0, 255).astype(np.uint8)
+    return lut[frame]

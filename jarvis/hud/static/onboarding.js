@@ -182,11 +182,16 @@
     return !!(st && st.logged_in);
   }
   function renderBrain() {
-    document.querySelectorAll(".plan").forEach((b) => b.classList.toggle("on", b.dataset.p === provider));
+    document.querySelectorAll(".plan").forEach((b) => { b.classList.toggle("on", b.dataset.p === provider); b.setAttribute("aria-checked", b.dataset.p === provider); });
+    $("plan-about").textContent = {
+      "claude-code": "Recommended. Uses your Claude subscription through Anthropic's official Claude Code app. No API key, no extra bills.",
+      codex: "Uses your ChatGPT subscription through OpenAI's official Codex app. No API key, no extra bills.",
+      anthropic: "Pay as you go with an Anthropic API key, billed by usage.",
+    }[provider];
     ["claude-code", "codex", "anthropic"].forEach((p) => ($("tag-" + p).textContent = ready(p) ? "✓ ready" : ""));
     const cli = provider !== "anthropic";
     $("cli-panel").hidden = !cli; $("key-panel").hidden = cli;
-    $("claude-model-field").hidden = provider !== "claude-code";
+    $("claude-model-field").hidden = provider !== "claude-code" || !ready("claude-code");   // only once signed in
     if (cli) {
       const st = B[CLI[provider]] || {}, [app, plan] = NAMES[provider];
       $("cs-install-t").textContent = `Install ${app}`;
@@ -430,6 +435,7 @@
     } catch (e) { $("speech-err").textContent = e.message; }
   }
   $("speech-next").onclick = nextStep;
+  $("watch-unlock").onclick = (e) => { e.preventDefault(); e.stopPropagation(); api("/api/setup/open-unlock-settings", {}).catch(() => {}); };
 
   /* ───────────── ready ───────────── */
   $("launch").onclick = async () => {

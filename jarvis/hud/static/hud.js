@@ -40,31 +40,61 @@
   }
   setTimeout(finishBoot, 5000);
 
-  /* ───────────── dialogue ───────────── */
-  let clearTimer = null;
+  /* ───────────── dialogue: broadcast-style captions ─────────────
+     Whole sentences only (never a sentence cut in half), the line being spoken bright and the one
+     before it dimmed, at most about three lines. When JARVIS is speaking aloud, each sentence
+     appears as his voice reaches it rather than racing ahead of it. */
+  let clearTimer = null, voiced = false;
+  const caps = [];
+  const norm = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   function showYou(text) {
     $("you").textContent = text;
-    $("jarvis").innerHTML = "";
+    $("jarvis").innerHTML = ""; caps.length = 0; $("jarvis").classList.remove("dense");
     clearTimeout(clearTimer);
   }
   function addReply(text) {
-    const el = $("jarvis");
-    const words = text.split(/(\s+)/);
-    let i = 0;
-    if (el.childNodes.length) el.appendChild(document.createTextNode(" "));
-    for (const w of words) {
-      if (!w) continue;
-      if (/^\s+$/.test(w)) { el.appendChild(document.createTextNode(" ")); continue; }
-      const span = document.createElement("span");
-      span.className = "w"; span.textContent = w;
-      span.style.animationDelay = `${i++ * 38}ms`;
-      el.appendChild(span);
-    }
-    // keep only what fits: drop the oldest words as new ones arrive
-    const max = parseFloat(getComputedStyle(el).maxHeight) || 9999;
-    while (el.scrollHeight > max + 6 && el.firstChild) el.removeChild(el.firstChild);
+    const el = document.createElement("span");
+    el.className = "cap pending";
+    const cap = { text, key: norm(text), el, shown: false };
+    caps.push(cap);
+    $("jarvis").appendChild(el);
+    // text-only (no voice yet), or a sentence the voice never announces: show it anyway
+    if (!voiced) reveal(cap);
+    else setTimeout(() => { if (!cap.shown) reveal(cap); }, 4500);
     clearTimeout(clearTimer);
-    clearTimer = setTimeout(() => { $("you").textContent = ""; el.innerHTML = ""; }, 60000);
+    clearTimer = setTimeout(() => { $("you").textContent = ""; $("jarvis").innerHTML = ""; caps.length = 0; }, 60000);
+  }
+  function onSpoken(text) {          // the speaker started a phrase: reveal the sentences in it
+    voiced = true;
+    const k = norm(text || "");
+    for (const c of caps.slice()) if (!c.shown && c.key && k.includes(c.key)) reveal(c);   // copy: fit() prunes caps
+  }
+  function reveal(cap) {
+    const idx = caps.indexOf(cap);
+    for (let i = 0; i < idx; i++) if (!caps[i].shown) reveal(caps[i]);   // keep reading order
+    if (cap.shown) return;
+    cap.shown = true;
+    cap.el.className = "cap live";
+    const words = cap.text.split(/\s+/).filter(Boolean);
+    cap.el.textContent = "";
+    words.forEach((w, i) => {
+      const span = document.createElement("span");
+      span.className = "w"; span.textContent = w; span.style.animationDelay = `${i * 38}ms`;
+      cap.el.appendChild(span); cap.el.appendChild(document.createTextNode(" "));
+    });
+    caps.forEach((c) => { if (c.shown && c !== cap) c.el.className = "cap said"; });
+    fit();
+  }
+  function fit() {
+    const el = $("jarvis");
+    el.classList.remove("dense");
+    // drop whole earlier sentences until everything fits; never touch the live one
+    while (el.scrollHeight > el.clientHeight + 2) {
+      const first = caps.find((c) => c.shown && !c.el.classList.contains("live"));
+      if (!first) break;
+      first.el.remove(); caps.splice(caps.indexOf(first), 1);
+    }
+    if (el.scrollHeight > el.clientHeight + 2) el.classList.add("dense");   // one long sentence: smaller type
   }
 
   /* ───────────── weather ───────────── */
@@ -105,8 +135,13 @@
     const h = Math.floor(m / 60), mm = m % 60;
     return `in ${h}h${mm ? " " + mm + "m" : ""}`;
   }
+  let agendaKey = "";
   function renderAgenda() {
-    const ol = $("agenda"); ol.innerHTML = "";
+    const ol = $("agenda");
+    // the minute refresh only updates "in 5 min" and now/next: animate only when the events change
+    const key = JSON.stringify(agenda.map((e) => [e.title, e.start, e.end]));
+    ol.classList.toggle("still", key === agendaKey); agendaKey = key;
+    ol.innerHTML = "";
     const timed = agenda.filter((e) => !e.all_day);
     if (!agenda.length) { ol.innerHTML = '<li class="empty">Clear schedule</li>'; return; }
     const now = Date.now();
@@ -242,6 +277,12 @@
     img.onerror = () => { $("optics").classList.remove("live"); $("optic-id").textContent = "No feed"; delete img.dataset.on; };
     img.src = "/camera.mjpg?t=" + Date.now();
   }
+  // don't encode video nobody can see: drop the stream while the window is hidden or minimised
+  document.addEventListener("visibilitychange", () => {
+    const img = $("cam");
+    if (document.hidden && img.dataset.on) { img.onerror = null; img.removeAttribute("src"); delete img.dataset.on; img.dataset.paused = "1"; }
+    else if (!document.hidden && img.dataset.paused) { delete img.dataset.paused; startCamera(); }
+  });
   function drawFaces(e) {
     const c = $("cam-overlay"), box = c.parentElement, dpr = window.devicePixelRatio || 1;
     c.width = box.clientWidth * dpr; c.height = box.clientHeight * dpr;
@@ -286,7 +327,7 @@
     if (!el) return;
     clearTimeout(handTimer);
     if (!e.visible) { el.classList.remove("on", "pinch"); return; }
-    el.style.transform = `translate(${(e.x * innerWidth).toFixed(1)}px, ${((1 - e.y) * innerHeight).toFixed(1)}px)`;
+    el.style.transform = `translate(${(e.x * innerWidth).toFixed(1)}px, ${(e.y * innerHeight).toFixed(1)}px)`;
     el.classList.add("on"); el.classList.toggle("pinch", !!e.pinch);
     handTimer = setTimeout(() => el.classList.remove("on", "pinch"), 900);   // camera stalled: fade out
   }
@@ -314,6 +355,7 @@
       case "wake": reactor.pulse(); setState("listening"); break;
       case "transcript": if (!e.replay) showYou(e.text); break;
       case "reply": if (!e.replay) addReply(e.text); break;
+      case "speaking": if (!e.replay) onSpoken(e.text); break;
       case "tool": if (!e.replay) logTool(e); break;
       case "stats":
         bar("v-cpu", "n-cpu", e.cpu); bar("v-mem", "n-mem", e.mem); bar("v-disk", "n-disk", e.disk);
@@ -331,6 +373,7 @@
       case "spin": reactor.nudge(e.dx); break;
       case "dial": reactor.setDial(e.phase === "end" ? null : e.value);
         if (e.phase === "end" && e.value != null && !e.replay) island(`Volume ${e.value}%`); break;
+      case "airmouse": document.body.classList.toggle("airmouse", !!e.active); if (!e.replay) island(e.active ? "☝️ Air mouse on · pinch to click · ✋ to stop" : "Air mouse off"); break;
       case "attention": document.body.classList.toggle("unattended", !e.looking); break;
       case "confirm": $("confirm-text").textContent = e.action; $("confirm").hidden = false; break;
       case "confirm_result": $("confirm").hidden = true; break;
@@ -419,12 +462,12 @@
   // /?demo&gesture: a hand comes in, pinches, and dials the volume up, then flicks to the next track
   function demoGestures() {
     const ev = [];
-    for (let i = 0; i <= 20; i++) ev.push([3000 + i * 60, { type: "hand", visible: true, x: 0.82 - i * 0.012, y: 0.30 + i * 0.008, pinch: false }]);
-    ev.push([4400, { type: "hand", visible: true, x: 0.58, y: 0.46, pinch: true }], [4420, { type: "dial", phase: "start", value: 40 }]);
-    for (let i = 1; i <= 16; i++) ev.push([4500 + i * 90, { type: "hand", visible: true, x: 0.58, y: 0.46 + i * 0.012, pinch: true }],
+    for (let i = 0; i <= 20; i++) ev.push([3000 + i * 60, { type: "hand", visible: true, x: 0.82 - i * 0.012, y: 0.70 - i * 0.008, pinch: false }]);
+    ev.push([4400, { type: "hand", visible: true, x: 0.58, y: 0.54, pinch: true }], [4420, { type: "dial", phase: "start", value: 40 }]);
+    for (let i = 1; i <= 16; i++) ev.push([4500 + i * 90, { type: "hand", visible: true, x: 0.58, y: 0.54 - i * 0.012, pinch: true }],
       [4510 + i * 90, { type: "dial", phase: "move", value: 40 + i * 2 }]);
-    ev.push([9000, { type: "dial", phase: "end", value: 72 }], [9000, { type: "hand", visible: true, x: 0.58, y: 0.65, pinch: false }]);
-    for (let i = 1; i <= 6; i++) ev.push([10000 + i * 70, { type: "hand", visible: true, x: 0.40 + i * 0.06, y: 0.62, pinch: false }]);
+    ev.push([9000, { type: "dial", phase: "end", value: 72 }], [9000, { type: "hand", visible: true, x: 0.58, y: 0.35, pinch: false }]);
+    for (let i = 1; i <= 6; i++) ev.push([10000 + i * 70, { type: "hand", visible: true, x: 0.40 + i * 0.06, y: 0.38, pinch: false }]);
     ev.push([10500, { type: "gesture", gesture: "Swipe_right", action: "next" }], [11400, { type: "hand", visible: false }]);
     ev.forEach(([ms, e]) => setTimeout(() => handle(e), ms));
   }

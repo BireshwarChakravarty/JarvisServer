@@ -273,6 +273,23 @@ def run() -> int:
             raise RuntimeError(f"got {got!r}")
         return "ok"
 
+    @check("mini JARVIS: the floating-panel APIs it uses exist")
+    def _():
+        import AppKit
+        import Quartz
+        names = ["NSWindowCollectionBehaviorCanJoinAllSpaces", "NSWindowCollectionBehaviorFullScreenAuxiliary",
+                 "NSWindowCollectionBehaviorStationary", "NSWindowCollectionBehaviorIgnoresCycle",
+                 "NSStatusWindowLevel", "NSApplicationDidHideNotification", "NSApplicationDidUnhideNotification"]
+        missing = [n for n in names if not hasattr(AppKit, n)]
+        missing += [n for n in ("CGEventCreateMouseEvent", "CGEventPost", "kCGEventMouseMoved", "kCGEventLeftMouseDown",
+                                "kCGEventLeftMouseUp", "kCGEventLeftMouseDragged", "kCGHIDEventTap") if not hasattr(Quartz, n)]
+        if missing:
+            raise RuntimeError(f"missing: {missing}")
+        from jarvis.app.mini import MiniPanel  # noqa: F401
+        from jarvis.vision.airmouse import MacPointer  # noqa: F401
+        vf = AppKit.NSScreen.mainScreen().visibleFrame() if AppKit.NSScreen.mainScreen() else None
+        return f"AppKit + Quartz symbols present; visible frame {vf.size.width:.0f}x{vf.size.height:.0f}" if vf else "symbols present"
+
     @check("setup + HUD server")
     def _():
         from fastapi.testclient import TestClient
@@ -281,7 +298,8 @@ def run() -> int:
         sup = Supervisor(state["cfg"])
         client = TestClient(create_app(supervisor=sup))
         out = {}
-        for path in ("/setup", "/", "/api/setup/state", "/static/onboarding.js", "/static/reactor.js"):
+        for path in ("/setup", "/", "/api/setup/state", "/static/onboarding.js", "/static/reactor.js",
+                     "/mini", "/static/mini.js", "/static/mini.css"):
             r = client.get(path)
             out[path] = r.status_code
             if r.status_code != 200:

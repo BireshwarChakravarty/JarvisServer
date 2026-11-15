@@ -1,5 +1,6 @@
-"""Motion gestures from synthetic MediaPipe hand landmarks (image coords: x right, y down;
-the user's right is the image's left, because the Mac camera isn't mirrored)."""
+"""Motion gestures from synthetic MediaPipe hand landmarks, in the coordinates the app really
+feeds them: JARVIS's Camera mirrors frames like a selfie view, so image-right IS the user's right
+(x right, y down)."""
 from jarvis.vision.motion import HandMotion, attention
 
 
@@ -22,12 +23,12 @@ def run(frames, dt=1 / 12):
 
 
 def test_swipe_right_from_the_users_point_of_view():
-    _, ev = run([hand(0.70 - 0.06 * i, 0.5) for i in range(6)])   # image x falls = user's right
+    _, ev = run([hand(0.30 + 0.06 * i, 0.5) for i in range(6)])   # mirrored frame: image right = user's right
     assert [(e.kind, e.direction) for e in ev] == [("swipe", "right")]
 
 
 def test_swipe_left_and_up():
-    _, ev = run([hand(0.30 + 0.06 * i, 0.5) for i in range(6)])
+    _, ev = run([hand(0.70 - 0.06 * i, 0.5) for i in range(6)])
     assert [(e.kind, e.direction) for e in ev] == [("swipe", "left")]
     _, ev = run([hand(0.5, 0.75 - 0.07 * i) for i in range(6)])
     assert [(e.kind, e.direction) for e in ev] == [("swipe", "up")]
@@ -59,7 +60,7 @@ def test_pinch_drag_up_is_a_volume_dial_and_release_is_not_a_swipe():
 
 
 def test_pinch_drag_sideways_spins():
-    frames = [hand(0.5, 0.5, True)] * 3 + [hand(0.5 - 0.02 * i, 0.5, True) for i in range(1, 8)]
+    frames = [hand(0.5, 0.5, True)] * 3 + [hand(0.5 + 0.02 * i, 0.5, True) for i in range(1, 8)]
     _, ev = run(frames)
     drags = [e for e in ev if e.kind == "pinch_drag"]
     assert drags and all(e.direction == "x" and e.dx > 0 for e in drags)   # user's right
@@ -92,5 +93,76 @@ def test_engine_maps_swipes_to_actions():
     got = []
     eng = GestureEngine(Path("."), lambda g, a: got.append((g, a)))
     for i in range(6):
-        eng.handle_motion(i / 12, hand(0.70 - 0.06 * i, 0.5))
+        eng.handle_motion(i / 12, hand(0.30 + 0.06 * i, 0.5))
     assert got == [("Swipe_right", "next")]
+
+
+def test_cursor_follows_the_fingertip_the_right_way():
+    # the bug you saw: frames are already mirrored, so moving right must move the cursor right
+    m = HandMotion()
+    xs, ys = [], []
+    for i in range(20):
+        st = m.update(i / 24, hand(0.35 + 0.015 * i, 0.60 - 0.01 * i))   # right and up
+        xs.append(st.px), ys.append(st.py)
+    assert xs[-1] > xs[0] + 0.25 and ys[-1] < ys[0] - 0.15            # right, and up the screen
+    assert all(0 <= v <= 1 for v in xs + ys)
+
+
+def test_cursor_box_and_raw_camera_option():
+    st = HandMotion().update(0, hand(0.02, 0.5))
+    assert st.px == 0.0                                               # clamped at the box edge
+    st = HandMotion(mirrored=False).update(0, hand(0.30, 0.5))       # an un-mirrored camera flips x
+    assert st.px > 0.5
+
+
+def test_one_euro_steadies_jitter_without_lag():
+    import random
+
+    from jarvis.vision.motion import OneEuro
+
+    f, rnd = OneEuro(), random.Random(1)
+    raw = [0.5 + rnd.uniform(-0.01, 0.01) for _ in range(48)]
+    out = [f(i / 24, v) for i, v in enumerate(raw)]
+    spread = lambda v: max(v[24:]) - min(v[24:])
+    assert spread(out) < spread(raw) / 2                               # still hand: steadier
+    f2 = OneEuro()
+    track = [f2(i / 24, i * 0.04) for i in range(12)]                 # fast move: keeps up
+    assert 0.44 - track[-1] < 0.08
+
+
+class FakePointer:
+    def __init__(self):
+        self.log = []
+
+    def move(self, x, y): self.log.append("move")
+    def down(self, x, y): self.log.append("down")
+    def up(self, x, y): self.log.append("up")
+
+
+def test_air_mouse_modes():
+    from jarvis.vision.airmouse import AirMouse
+
+    p, changes = FakePointer(), []
+    am, m = AirMouse(p, changes.append), HandMotion()
+    t, i = 0.0, 0
+
+    def step(label, frame):
+        nonlocal t
+        t += 1 / 24
+        return am.update(t, label, m.update(t, frame))
+
+    for _ in range(6):
+        assert not step("Pointing_Up", hand(0.5, 0.5))                 # not yet: hold ½ s
+    for _ in range(10):
+        step("Pointing_Up", hand(0.5, 0.5))
+    assert am.active and changes == [True]
+    for _ in range(5):
+        step("None", hand(0.5 + 0.01 * i, 0.5))
+    for _ in range(4):
+        step("None", hand(0.5, 0.5, True))                             # pinch → click down
+    for _ in range(3):
+        step("None", hand(0.5, 0.5))                                   # release → up
+    assert "down" in p.log and "up" in p.log and p.log.index("down") < p.log.index("up")
+    for _ in range(14):
+        step("Open_Palm", hand(0.5, 0.5))
+    assert not am.active and changes == [True, False]

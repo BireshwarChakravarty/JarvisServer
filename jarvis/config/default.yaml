@@ -56,9 +56,11 @@ voice:
 vision:
   enabled: true
   camera_index: 0
-  fps: 15
+  fps: 30                 # smoother hand tracking; recognition is throttled separately
   face_recognition: true
   gestures: true
+  air_mouse: false         # ☝️ hold to drive the Mac's pointer with your fingertip; pinch = click
+  wake_on_return: true     # back at a locked Mac: wake the screen, ready for Touch ID / Apple Watch
   greet_on_arrival: true   # greet you when you sit down after being away
   away_minutes: 10         # how long you must be gone to count as "away"
   auto_lock_when_away: false
@@ -73,6 +75,10 @@ greeting:
   news_feeds:
     - "https://feeds.bbci.co.uk/news/world/rss.xml"
     - "https://hnrss.org/frontpage"
+
+app:
+  mini_panel: true         # a floating mini JARVIS while the window is minimised, closed or hidden
+  mini_position: null      # remembered after you drag it
 
 hud:
   enabled: true

@@ -18,6 +18,7 @@ class Supervisor:
     def __init__(self, cfg) -> None:
         self.cfg = cfg
         self.jarvis = None
+        self.mini = None   # the floating mini JARVIS (app mode only)
         self.models = ModelManager(cfg.models_dir, cfg.get("voice.stt.model", "small.en"))
         self.camera = None          # setup-time camera (released before JARVIS starts)
         self.faces = None           # setup-time face engine
@@ -111,8 +112,13 @@ class Supervisor:
         self.faces = None
 
     # ── window control (called from any thread) ───────────────────────────
+    def setup_done(self) -> bool:
+        return bool(self.cfg.setup_complete)
+
     def show_window(self, url: str | None = None) -> None:
         w = self.window
+        if self.mini is not None:
+            self.mini.hide()
         if w is None:
             return
         try:

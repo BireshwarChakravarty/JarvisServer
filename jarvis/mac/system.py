@@ -133,6 +133,14 @@ def toggle_dark_mode(enable: bool | None = None) -> str:
 
 
 # ── system power / session ────────────────────────────────────────────────
+def wake_display(seconds: int = 5) -> None:
+    """Declare user activity so a sleeping display lights up (the lock screen stays locked)."""
+    import subprocess
+
+    subprocess.Popen(["caffeinate", "-u", "-t", str(int(seconds))],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def lock_screen() -> str:
     require_mac()
     # Ctrl+Cmd+Q is the system lock shortcut

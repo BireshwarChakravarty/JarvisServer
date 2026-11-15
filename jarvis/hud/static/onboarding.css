@@ -137,7 +137,7 @@ body.settings .ob-steps i { cursor: pointer; }
   .eyebrow { margin-bottom: 10px; }
   .step h1 { font-size: clamp(30px, 3vw, 42px); margin-bottom: 10px; }
   .lede { margin-bottom: 16px; font-size: 15px; }
-  .plan { padding: 10px 14px; } .plans { gap: 6px; margin-bottom: 12px; }
+  .plan { padding: 10px 12px; } .plans { gap: 6px; }
   .cli-steps li { padding: 7px 0; }
   .perm { padding: 9px 12px; } .perms { max-height: none; overflow: visible; }
   .tg { padding: 10px 14px; }
@@ -154,6 +154,7 @@ body.settings .ob-steps i { cursor: pointer; }
   .step > .actions:last-child { bottom: 0; padding-bottom: 14px; }
   .dl { margin: 0 auto 18px; }
   .dl-rows { grid-template-columns: repeat(2, 1fr); }
+  .plans { grid-template-columns: 1fr; }
 }
 
 .field select {
@@ -166,8 +167,10 @@ body.settings .ob-steps i { cursor: pointer; }
 .field.compact { margin-bottom: 14px; max-width: 420px; }
 
 /* intelligence: plan picker */
-.plans { display: grid; gap: 8px; margin-bottom: 16px; }
-.plan { display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 14px; text-align: left; padding: 14px 16px;
+.plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px; }
+.plan-about { margin: 0 0 14px; min-height: 2.9em; }
+.plan .ptag { grid-column: 2; }
+.plan { display: grid; grid-template-columns: 18px 1fr; align-items: center; column-gap: 10px; text-align: left; padding: 12px 14px;
   border-radius: 16px; border: 1px solid var(--hair-2); background: rgb(255 255 255 / 0.025); color: var(--text); cursor: pointer;
   font: inherit; transition: border-color 0.2s, background 0.2s; }
 .plan:hover { border-color: rgb(143 236 255 / 0.3); }
