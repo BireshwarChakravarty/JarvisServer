@@ -59,8 +59,14 @@ curl -fsSL https://raw.githubusercontent.com/BireshwarChakravarty/JarvisServer/c
 **B. Download.** Get `JARVIS-macOS-AppleSilicon.dmg` from the
 [latest release](https://github.com/BireshwarChakravarty/JarvisServer/releases/tag/jarvis-latest), open it and drag
 JARVIS to Applications. The first time you open it, macOS says it can't verify the developer, because the app isn't
-notarized with a paid Apple Developer ID. Go to **System Settings › Privacy & Security**, scroll down and click
-**Open Anyway**. You only do this once.
+notarized with a paid Apple Developer ID. Clear the download quarantine once in Terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/JARVIS.app
+```
+
+or go to **System Settings › Privacy & Security**, scroll down and click **Open Anyway**. You only do this once.
+(The one-line installer in A does this for you.)
 
 Either way, JARVIS opens straight into a **guided setup**. Nothing else is done by hand:
 
