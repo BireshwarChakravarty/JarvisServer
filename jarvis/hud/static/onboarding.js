@@ -484,5 +484,6 @@
     return new Promise((res) => setTimeout(() => res({ ok: true, model: "claude-opus-5-5", best: 0.93 }), 900));
   }
 
+  if (DEMO) window.__goStep = (st) => go(st);
   init().catch((e) => caption("I couldn't reach my core: " + e.message));
 })();

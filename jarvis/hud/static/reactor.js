@@ -301,11 +301,34 @@
         const x = Math.cos(a) * rl, y = Math.sin(a) * rl;
         const when = new Date(nextLabel.s).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
         ctx.font = `500 ${11 * dpr}px "Geist Mono", ui-monospace, monospace`;
-        ctx.textAlign = Math.cos(a) >= 0 ? "left" : "right";
         ctx.textBaseline = "middle";
         ctx.fillStyle = this.rgba(nextLabel.live ? [255, 196, 108] : [220, 240, 255], 0.85);
-        const title = nextLabel.e.title.length > 22 ? nextLabel.e.title.slice(0, 21) + "…" : nextLabel.e.title;
-        ctx.fillText(`${nextLabel.live ? "NOW" : when.toUpperCase()} · ${title}`, x, y);
+        // Keep the label inside the centre column and the window: never over the side panels.
+        const cr = this.uc.getBoundingClientRect(), k = cr.width / W;   // canvas px -> CSS px
+        const host = this.uc.closest("#presence, .ob-presence") || this.uc.parentElement;
+        const hr = host.getBoundingClientRect(), m = 8;
+        const minX = (Math.max(hr.left, 0) + m - cr.left) / k - cx;
+        const maxX = (Math.min(hr.right, window.innerWidth) - m - cr.left) / k - cx;
+        const right = Math.cos(a) >= 0;
+        // Never cut a word: full label, then a touch smaller, then just the time tag
+        // (the agenda column always carries the full title).
+        const tag = nextLabel.live ? "NOW" : when.toUpperCase();
+        const room = right ? maxX - x : x - minX;
+        let label = `${tag} · ${nextLabel.e.title}`;
+        if (ctx.measureText(label).width > room) {
+          ctx.font = `500 ${10 * dpr}px "Geist Mono", ui-monospace, monospace`;
+          if (ctx.measureText(label).width > room) {
+            ctx.font = `500 ${11 * dpr}px "Geist Mono", ui-monospace, monospace`;
+            label = tag;
+          }
+        }
+        const tw = ctx.measureText(label).width;
+        let left = right ? x : x - tw;
+        left = Math.min(Math.max(left, minX), maxX - tw);
+        ctx.textAlign = "left";
+        ctx.fillText(label, left, y);
+        window.__reactorLabel = { text: label, rect: [cr.left + (cx + left) * k, cr.top + (cy + y - 7 * dpr) * k,
+                                                       cr.left + (cx + left + tw) * k, cr.top + (cy + y + 7 * dpr) * k] };
       }
       ctx.restore();
     }

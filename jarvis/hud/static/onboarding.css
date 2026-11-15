@@ -1,13 +1,21 @@
 /* Onboarding: same ink, light and type as the HUD. One idea per screen. */
-body.ob { overflow: hidden; }
-.ob-shell { position: fixed; inset: 0; display: grid; grid-template-columns: minmax(360px, 1fr) minmax(460px, 560px); gap: 4vw; padding: 5vh 6vw 0; }
-.ob-presence { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 0; padding-bottom: 14vh; }
-.ob-presence #core { width: min(100%, 56vh, 620px); aspect-ratio: 1; position: relative; }
+/* The page is a column: the two-pane shell takes what's left after the download tray, so nothing
+   ever sits under the tray, and each pane scrolls on its own if a window is very short. */
+body.ob { overflow: hidden; height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
+.ob-shell { position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(340px, 1fr) minmax(440px, 560px); gap: 4vw; padding: 4vh 6vw 0; }
+.ob-presence { display: flex; flex-direction: column; align-items: center; justify-content: safe center; min-width: 0; min-height: 0; padding-bottom: 4vh; }
+.ob-presence #core { width: min(100%, 52vh, 620px); min-width: 200px; aspect-ratio: 1; position: relative; flex: none; }
 .ob-presence #core canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .ob-presence #core #core-ui { inset: -30%; width: 160%; height: 160%; pointer-events: none; }
 .ob-caption { margin: 6px 0 0; max-width: 460px; min-height: 3em; text-align: center; font: 300 19px/1.45 var(--sans); color: var(--text); opacity: 0.92; }
 
-.ob-panel { position: relative; display: flex; flex-direction: column; justify-content: center; padding-bottom: 18vh; min-height: 0; }
+.ob-panel { position: relative; display: flex; flex-direction: column; justify-content: safe center; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--hair-2) transparent;
+  padding: 2vh 10px 3vh 4px; margin-right: -10px; }
+.ob-panel > .step { flex: none; }
+/* Back / Continue never scroll out of reach */
+.step > .actions:last-child { position: sticky; bottom: -3vh; z-index: 3; padding: 34px 0 calc(3vh + 6px); margin-top: 0;
+  background: linear-gradient(to bottom, rgb(3 5 8 / 0), rgb(3 5 8 / 0.92) 46%, var(--ink)); }
 .ob-steps { display: flex; gap: 8px; margin-bottom: 30px; }
 .ob-steps i { width: 26px; height: 3px; border-radius: 2px; background: var(--hair-2); transition: background 0.4s; }
 .ob-steps i.done { background: rgb(143 236 255 / 0.5); }
@@ -94,7 +102,9 @@ body.ob { overflow: hidden; }
 /* toggles */
 .toggles { display: grid; gap: 10px; margin: 8px 0 6px; }
 .tg { display: grid; grid-template-columns: 46px 1fr; gap: 14px; align-items: center; padding: 14px 16px; border-radius: 16px; border: 1px solid var(--hair-2); cursor: pointer; }
-.tg input { display: none; }
+.tg { position: relative; }
+.tg input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }   /* hidden but keyboard-reachable */
+.tg input:focus-visible + .sw { outline: 2px solid var(--ice); outline-offset: 3px; }
 .tg .sw { width: 42px; height: 26px; border-radius: 999px; background: rgb(255 255 255 / 0.12); position: relative; transition: background 0.25s; }
 .tg .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform 0.25s var(--ease); }
 .tg input:checked + .sw { background: var(--ice-2); }
@@ -102,8 +112,9 @@ body.ob { overflow: hidden; }
 .tg b { display: block; font-weight: 500; } .tg span { font-size: 13px; color: var(--muted); }
 
 /* downloads */
-.dl { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); width: min(880px, calc(100vw - 32px)); padding: 14px 18px; border-radius: 20px; z-index: 10; transition: opacity 0.6s, transform 0.6s var(--ease); }
-.dl.done { opacity: 0; transform: translate(-50%, 20px); pointer-events: none; }
+.dl { position: relative; flex: none; align-self: center; width: min(880px, calc(100vw - 32px)); margin: 10px 0 18px; padding: 14px 18px; border-radius: 20px; z-index: 10;
+  max-height: 160px; overflow: hidden; transition: opacity 0.5s, max-height 0.6s var(--ease) 0.3s, margin 0.6s var(--ease) 0.3s, padding 0.6s var(--ease) 0.3s; }
+.dl.done { opacity: 0; max-height: 0; margin: 0; padding-top: 0; padding-bottom: 0; pointer-events: none; }
 .dl-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
 .dl-head .label { margin: 0; } .dl-head .mono { font-size: 11px; color: var(--muted); }
 .dl-rows { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
@@ -117,11 +128,28 @@ body.ob { overflow: hidden; }
 /* settings mode tweaks */
 body.settings .ob-steps i { cursor: pointer; }
 
+/* short windows: tighten the rhythm before anything has to scroll */
+@media (max-height: 820px) and (min-width: 961px) {
+  .ob-steps { margin-bottom: 18px; }
+  .eyebrow { margin-bottom: 10px; }
+  .step h1 { font-size: clamp(30px, 3vw, 42px); margin-bottom: 10px; }
+  .lede { margin-bottom: 16px; font-size: 15px; }
+  .plan { padding: 10px 14px; } .plans { gap: 6px; margin-bottom: 12px; }
+  .cli-steps li { padding: 7px 0; }
+  .perm { padding: 9px 12px; } .perms { max-height: none; overflow: visible; }
+  .tg { padding: 10px 14px; }
+  .actions { margin-top: 16px; }
+  .dl { padding: 10px 16px; margin-bottom: 12px; } .dl-head { margin-bottom: 6px; }
+  .ob-caption { font-size: 17px; }
+}
+
 @media (max-width: 960px) {
-  body.ob { overflow-y: auto; }
-  .ob-shell { position: static; grid-template-columns: 1fr; padding: 24px 18px 200px; gap: 10px; }
-  .ob-presence { padding-bottom: 0; } .ob-presence #core { width: min(70vw, 300px); }
-  .ob-panel { padding-bottom: 0; padding-top: 30px; }
+  body.ob { overflow-y: auto; height: auto; display: block; }
+  .ob-shell { position: static; grid-template-columns: 1fr; padding: 24px 18px 24px; gap: 10px; }
+  .ob-presence { padding-bottom: 0; } .ob-presence #core { width: min(70vw, 300px); min-width: 0; }
+  .ob-panel { padding: 30px 0 0; margin: 0; overflow: visible; }
+  .step > .actions:last-child { bottom: 0; padding-bottom: 14px; }
+  .dl { margin: 0 auto 18px; }
   .dl-rows { grid-template-columns: repeat(2, 1fr); }
 }
 
