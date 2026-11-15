@@ -13,8 +13,14 @@ _target = None   # keep strong references, or PyObjC objects get collected
 _item = None
 
 
+_terminating = False
+
+
 def is_quit_shortcut() -> bool:
-    """True when the current Cocoa event is ⌘Q (so closing means quit, not hide)."""
+    """True when JARVIS should really quit rather than hide: ⌘Q, a Quit Apple Event (the system sends
+    one at shutdown, restart and log-out; installers and `osascript … quit` do too) or power-off."""
+    if _terminating:
+        return True
     try:
         import AppKit
 
@@ -144,3 +150,41 @@ def install_push_to_talk(on_change) -> None:
 
 def quit_app() -> None:
     os._exit(0)
+
+
+def install_quit_handlers() -> None:
+    """Honour quit requests from outside. Without this, closing-means-hide also swallowed the system's
+    own quit at shutdown, restart and log-out, so JARVIS could cancel your Mac shutting down."""
+    global _quit_target
+    try:
+        import struct
+
+        import AppKit
+        from Foundation import NSObject
+
+        def fourcc(code: bytes) -> int:
+            return struct.unpack(">I", code)[0]
+
+        class QuitTarget(NSObject):
+            def handleQuit_withReply_(self, event, reply):
+                _really_quit()
+
+            def willPowerOff_(self, note):
+                _really_quit()
+
+        _quit_target = QuitTarget.alloc().init()
+        AppKit.NSAppleEventManager.sharedAppleEventManager().setEventHandler_andSelector_forEventClass_andEventID_(
+            _quit_target, "handleQuit:withReply:", fourcc(b"aevt"), fourcc(b"quit"))
+        AppKit.NSWorkspace.sharedWorkspace().notificationCenter().addObserver_selector_name_object_(
+            _quit_target, "willPowerOff:", AppKit.NSWorkspaceWillPowerOffNotification, None)
+    except Exception as exc:
+        log.info("quit handlers not installed: %s", exc)
+
+
+_quit_target = None
+
+
+def _really_quit() -> None:
+    global _terminating
+    _terminating = True
+    quit_app()

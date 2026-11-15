@@ -2,7 +2,7 @@
 //   node scripts/gui_audit.js http://127.0.0.1:7900 <outdir>
 const { chromium } = require('playwright');
 const base = process.argv[2], out = process.argv[3];
-const SIZES = [[980, 640], [1280, 800], [1480, 920], [1512, 945], [1728, 1080], [1920, 1080], [2560, 1440], [390, 844]];
+const SIZES = process.env.AUDIT_QUICK ? [[1512, 945]] : [[980, 640], [1280, 800], [1480, 920], [1512, 945], [1728, 1080], [1920, 1080], [2560, 1440], [390, 844]];
 const PAGES = [
   ['hud', '/?demo', 20500],
   ['setup-welcome', '/setup?demo', 2500],
@@ -59,6 +59,57 @@ const probe = () => {
       const ix = Math.min(r, x.r.right) - Math.max(l, x.r.left), iy = Math.min(btm, x.r.bottom) - Math.max(t, x.r.top);
       if (ix > 2 && iy > 2) issues.push({ kind: 'canvas-label-overlap', text: L.text + ' ⟷ ' + x.el.textContent.trim().slice(0, 30) });
     }
+  }
+  // 5. controls: icon-only buttons need a name and a tooltip; every target ≥ 24×24 (WCAG 2.5.8)
+  for (const el of document.querySelectorAll('button, a[href], [role="button"], [role="radio"], select, input:not([type="checkbox"])')) {
+    if (!visible(el) || visRect(el).empty) continue;
+    const r = el.getBoundingClientRect(), text = el.innerText.trim();
+    const inlineLink = el.tagName === 'A' && el.closest('p, span, label') && getComputedStyle(el).display === 'inline';
+    if (!text && el.querySelector('svg')) {
+      if (!el.getAttribute('aria-label')) issues.push({ kind: 'icon-button-unnamed', el: name(el) });
+      if (!el.title) issues.push({ kind: 'icon-button-no-tooltip', el: name(el) });
+    }
+    if (!inlineLink && (r.width < 24 || r.height < 24)) issues.push({ kind: 'small-target', el: name(el), size: [Math.round(r.width), Math.round(r.height)] });
+  }
+  // 6. one icon language per toolbar: same outline/solid mode and stroke weight (solid glyphs opt in)
+  const bars = new Map();
+  for (const svg of document.querySelectorAll('button svg')) {
+    if (!visible(svg) || svg.dataset.icon === 'solid') continue;
+    const bar = svg.closest('button').parentElement, cs = getComputedStyle(svg);
+    const key = `${cs.fill === 'none' ? 'outline' : 'filled'} ${parseFloat(cs.strokeWidth).toFixed(1)}`;
+    if (!bars.has(bar)) bars.set(bar, new Map());
+    bars.get(bar).set(key, (bars.get(bar).get(key) || []).concat(name(svg.closest('button'))));
+  }
+  for (const [bar, styles] of bars) if (styles.size > 1)
+    issues.push({ kind: 'mixed-icon-styles', el: name(bar), styles: [...styles].map(([k, v]) => `${k}: ${v.join(',')}`) });
+  // 7. text contrast against what's actually behind it (ancestor backgrounds over the page ink)
+  const parse = (c) => { const m = c.match(/rgba?\(([^)]+)\)/); if (!m) return null; const v = m[1].split(/[ ,/]+/).filter(Boolean).map(Number);
+    return [v[0], v[1], v[2], v.length > 3 ? (String(v[3]).includes('%') ? v[3] / 100 : v[3]) : 1]; };
+  const lum = ([r, g, b]) => { const f = (x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const over = (top, bottom) => [0, 1, 2].map((i) => top[i] * top[3] + bottom[i] * (1 - top[3]));
+  // collect running animations once (asking per element forces a style flush every time)
+  const moving = new Set(document.getAnimations().filter((a) => a.playState === 'running' && a.effect && a.effect.target)
+    .map((a) => a.effect.target));
+  const memo = new Map();   // element -> [composited background, accumulated opacity]
+  const backdrop = (el) => {
+    if (!el) return [[3, 5, 8], 1];
+    if (memo.has(el)) return memo.get(el);
+    const [under, op] = backdrop(el.parentElement), s = getComputedStyle(el), c = parse(s.backgroundColor);
+    const v = [c && c[3] > 0 ? over(c, under) : under, op * +s.opacity];
+    memo.set(el, v); return v;
+  };
+  for (const el of textEls) {
+    if (el.closest('[aria-hidden="true"], button:disabled, .w, .cap.said, .timeline li.past')) continue;   // decorative, disabled or intentionally de-emphasised
+    let animating = false;
+    for (let p = el; p && !animating; p = p.parentElement) animating = moving.has(p);
+    if (animating) continue;                                       // mid fade-in: judge it once it has settled
+    const cs = getComputedStyle(el); let fg = parse(cs.color); if (!fg) continue;
+    const [bg, alpha] = backdrop(el);
+    const text = over([fg[0], fg[1], fg[2], fg[3] * alpha], bg);
+    const L1 = lum(text), L2 = lum(bg), ratio = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
+    const size = parseFloat(cs.fontSize), large = size >= 24 || (size >= 18.66 && +cs.fontWeight >= 700);
+    if (ratio < (large ? 3 : 4.5) && el.textContent.trim().length > 1)
+      issues.push({ kind: 'low-contrast', el: name(el), text: el.textContent.trim().slice(0, 30), ratio: +ratio.toFixed(2), size });
   }
   return issues;
 };

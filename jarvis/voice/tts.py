@@ -295,6 +295,12 @@ class Speaker:
     def speaking(self) -> bool:
         return not self._idle.is_set()
 
+    current_text = ""
+
+    def saying(self, word: str) -> bool:
+        """Is the phrase playing right now saying `word`? (Used to ignore his own voice.)"""
+        return word.lower() in (self.current_text or "").lower()
+
     def enqueue(self, text: str) -> None:
         text = text.strip()
         if not text:
@@ -324,6 +330,13 @@ class Speaker:
             self._pending = 0
             self._idle.set()
         bus.emit("level", source="tts", value=0.0)
+
+    def close(self) -> None:
+        """Stop and let both worker threads exit (a replaced speaker mustn't linger)."""
+        self.stop()
+        self._closed = True
+        self._text_q.put((None, None))
+        self._audio_q.put((None, None, None, None, None))
 
     def play_tone(self, kind: str = "wake") -> None:
         """Short UI chimes, synthesised on the fly."""
@@ -379,6 +392,8 @@ class Speaker:
     def _synth_worker(self) -> None:
         while True:
             gen, text = self._text_q.get()
+            if getattr(self, "_closed", False):
+                return
             if gen != self._gen:
                 continue
             count = 1
@@ -407,10 +422,13 @@ class Speaker:
     def _play_worker(self) -> None:
         while True:
             gen, text, audio, sr, count = self._audio_q.get()
+            if getattr(self, "_closed", False):
+                return
             if gen != self._gen:
                 continue
             self._stop_play.clear()
             self._playing.set()
+            self.current_text = text
             bus.emit("speaking", text=text)
             try:
                 self._play(audio, sr, gen, pause=breath_after(text))
@@ -419,6 +437,7 @@ class Speaker:
                 bus.emit("error", message=f"Audio output problem: {exc}")
             finally:
                 self._playing.clear()
+                self.current_text = ""
                 for _ in range(count):
                     self._done_one()
 

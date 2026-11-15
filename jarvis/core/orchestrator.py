@@ -52,6 +52,16 @@ def _human_duration(seconds: float) -> str:
     return f"{d} day{'s' if d != 1 else ''}"
 
 
+def _log_failure(fut) -> None:
+    """Background work started from other threads (arrival, departure, sentry…) must not fail silently."""
+    try:
+        exc = fut.exception()
+    except Exception:          # cancelled
+        return
+    if exc is not None:
+        log.error("background task failed", exc_info=exc)
+
+
 class Jarvis:
     def __init__(self, cfg, headless: bool = False) -> None:
         self.cfg = cfg
@@ -244,27 +254,48 @@ class Jarvis:
 
     def _threadsafe(self, coro) -> None:
         if self.loop:
-            asyncio.run_coroutine_threadsafe(coro, self.loop)
+            fut = asyncio.run_coroutine_threadsafe(coro, self.loop)
+            fut.add_done_callback(_log_failure)
+
+    async def _supervise(self, name: str, factory) -> None:
+        """Keep a core loop alive: if it crashes on something unexpected, log it and restart it with a
+        growing pause, instead of letting one failure take the whole assistant down."""
+        delay = 1.0
+        while True:
+            started = time.monotonic()
+            try:
+                await factory()
+                return                      # finished on purpose
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("%s loop crashed; restarting in %.0fs", name, delay)
+                bus.emit("error", message=f"Internal hiccup in {name}; recovering.")
+            if time.monotonic() - started > 60:
+                delay = 1.0                 # it ran fine for a while: start the backoff over
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 60.0)
 
     # ═════════════════════════════ main loop ═════════════════════════════
     async def run(self, greet: bool = True) -> None:
         await self.start()
+        sup = self._supervise
         tasks = [
-            asyncio.create_task(self._request_worker(), name="requests"),
-            asyncio.create_task(self.scheduler.watch(), name="watch"),
-            asyncio.create_task(self._stats_loop(), name="stats"),
+            asyncio.create_task(sup("requests", self._request_worker), name="requests"),
+            asyncio.create_task(sup("scheduler", self.scheduler.watch), name="watch"),
+            asyncio.create_task(sup("telemetry", self._stats_loop), name="stats"),
         ]
         if self.mic is not None:
-            tasks.append(asyncio.create_task(self._voice_loop(), name="voice"))
+            tasks.append(asyncio.create_task(sup("voice", self._voice_loop), name="voice"))
         from jarvis.mac.session import SessionWatcher
 
         watcher = SessionWatcher(on_unlock=self.on_unlock, on_wake=self.on_wake)
-        tasks.append(asyncio.create_task(watcher.run(), name="session"))
+        tasks.append(asyncio.create_task(sup("session", watcher.run), name="session"))
         bus.emit("state", state="idle")
         if self.speaker:
             self.speaker.play_tone("boot")
         if greet and self.cfg.get("greeting.on_login", True):
-            asyncio.create_task(self.greet("login"))
+            asyncio.create_task(self.greet("login")).add_done_callback(_log_failure)
         try:
             await asyncio.gather(*tasks)
         finally:
@@ -431,7 +462,8 @@ class Jarvis:
                 frame = await asyncio.wait_for(q.get(), timeout=0.1)
             except asyncio.TimeoutError:
                 continue
-            if barge and self.speaker.speaking and self.wake.process(frame):
+            if barge and self.speaker.speaking and self.wake.process(frame) and not self.speaker.saying("jarvis"):
+                # (ignored while he's saying "Jarvis" himself: that's his own voice in the mic)
                 self.interrupt()
                 self.speaker.play_tone("wake")
                 return "barge"
@@ -467,6 +499,15 @@ class Jarvis:
         try:
             reply = await self.brain.respond(text, on_sentence=on_sentence, context=await self._live_context(),
                                              images=images, cancel=cancel)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # never leave you in silence: say so, and keep everything else running
+            log.exception("turn failed for %r", text[:80])
+            reply = f"Sorry, {self.cfg.get('owner.title', 'sir')}, something went wrong on my side. Could you try that again?"
+            bus.emit("reply", text=reply)
+            if self.speaker:
+                self.speaker.enqueue(reply)
         finally:
             self._turn_active = False
             if filler:
@@ -875,7 +916,7 @@ class Jarvis:
             await self.control("mute_mic" if msg.get("muted") else "unmute_mic")
         elif kind == "greet":
             self.memory.set("last_greeting", 0)
-            asyncio.create_task(self.greet("login"))
+            asyncio.create_task(self.greet("login")).add_done_callback(_log_failure)
         elif kind == "hand_control":
             on = msg.get("on")
             if on is None and self.gestures is not None:

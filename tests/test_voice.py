@@ -98,3 +98,54 @@ def test_pro_plan_gets_sonnet_by_default():
 
     assert recommended_model("pro") == "sonnet" and recommended_model("Claude Pro") == "sonnet"
     assert recommended_model("max") == "" and recommended_model("") == ""
+
+
+def test_core_loops_restart_after_a_crash():
+    import asyncio
+    from types import SimpleNamespace
+
+    from jarvis.core.orchestrator import Jarvis
+
+    runs = []
+
+    async def flaky():
+        runs.append(1)
+        if len(runs) == 1:
+            raise RuntimeError("boom")      # first run crashes …
+        return                              # … the restart completes normally
+
+    asyncio.run(Jarvis._supervise(SimpleNamespace(), "test", flaky))
+    assert len(runs) == 2
+
+
+def test_switching_voices_reuses_the_loaded_model(cfg, monkeypatch):
+    from types import SimpleNamespace
+
+    from jarvis.app.supervisor import Supervisor
+
+    sup = Supervisor(cfg)
+    monkeypatch.setattr(sup.models, "ready", lambda k: True)
+    loads = []
+
+    class FakeKokoro:
+        name = "kokoro-onnx"
+        sample_rate = 24000
+
+        def __init__(self):
+            loads.append(1); self.voice = None; self.speed = 1.0
+
+        def set_voice(self, v): self.voice = v
+
+        def synth(self, t):
+            import numpy as np
+            return np.zeros(10, dtype="float32")
+
+    monkeypatch.setattr("jarvis.voice.tts.make_backend", lambda *a, **k: FakeKokoro())
+    for v in ("jarvis", "george", "lewis", "emma"):
+        cfg.data["voice"]["tts"]["voice"] = v
+        sp = sup.setup_speaker()
+    assert len(loads) == 1 and sp.backend.voice == "emma"            # one model, re-pointed
+    live = SimpleNamespace(speaker=SimpleNamespace(backend=FakeKokoro()))
+    sup.jarvis = live
+    cfg.data["voice"]["tts"]["voice"] = "fable"
+    assert sup.setup_speaker() is live.speaker and live.speaker.backend.voice == "fable"   # applies to JARVIS now

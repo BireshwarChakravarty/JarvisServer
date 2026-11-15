@@ -145,6 +145,7 @@ def run_app() -> None:
             from PyObjCTools import AppHelper
 
             AppHelper.callAfter(menubar.install, actions)
+            AppHelper.callAfter(menubar.install_quit_handlers)
             from jarvis.app.mini import watch_app_hide
 
             AppHelper.callAfter(watch_app_hide, mini)

@@ -151,6 +151,7 @@ class ClaudeCodeBrain(_CLIBrain):
     def __init__(self, *a, **k) -> None:
         super().__init__(*a, **k)
         self.proc: asyncio.subprocess.Process | None = None
+        self._exited_silently = False
         self._stderr_task: asyncio.Task | None = None
         self.binary = None
 
@@ -227,21 +228,43 @@ class ClaudeCodeBrain(_CLIBrain):
             self.turns += 1
             self.last_active = time.time()
             bus.emit("state", state="thinking")
-            try:
-                self.proc.stdin.write((json.dumps(msg) + "\n").encode())
-                await self.proc.stdin.drain()
-                reply = await self._read_turn(on_sentence, cancel)
-            except (BrokenPipeError, ConnectionResetError) as exc:
-                log.error("claude CLI pipe broke: %s", exc)
-                self.proc = None
-                reply = await self._speak_error("I lost my connection to Claude for a moment. Please say that again.",
-                                                on_sentence)
+            limit = float(self.cfg.get("brain.turn_timeout_seconds", 240))
+            for attempt in (1, 2):
+                self._exited_silently = False
+                try:
+                    self.proc.stdin.write((json.dumps(msg) + "\n").encode())
+                    await self.proc.stdin.drain()
+                    reply = await asyncio.wait_for(self._read_turn(on_sentence, cancel, quiet_exit=attempt == 1), limit)
+                except asyncio.TimeoutError:
+                    # a stalled turn must not block every request after it
+                    log.error("claude turn exceeded %.0fs; stopping it", limit)
+                    await self._stop()
+                    reply = await self._speak_error("That was taking far too long, so I've stopped it. "
+                                                    "Shall I try again?", on_sentence)
+                except (BrokenPipeError, ConnectionResetError) as exc:
+                    log.error("claude CLI pipe broke: %s", exc)
+                    self.proc = None
+                    reply = await self._speak_error("I lost my connection to Claude for a moment. Please say that again.",
+                                                    on_sentence)
+                if not (self._exited_silently and attempt == 1):
+                    break
+                # The CLI quit without a word (typically: the saved session can't be resumed).
+                # Start a fresh session and send the same request once more.
+                log.warning("claude CLI exited silently; retrying in a fresh session")
+                self.session_id = str(uuid.uuid4())
+                self.turns, self.seeded = 1, True
+                await self._start(resume=False)
+                if self.memory:
+                    self.memory.start_session(self.session_id)
+                msg = {"type": "user", "message": {"role": "user", "content": [
+                    {"type": "text", "text": self._compose(text, context, event_note, True)}]}}
             self.last_active = time.time()
             if self.memory and reply:
                 self.memory.log_turn(self.session_id, "assistant", reply)
             return reply
 
-    async def _read_turn(self, on_sentence: SentenceCallback | None, cancel: asyncio.Event | None) -> str:
+    async def _read_turn(self, on_sentence: SentenceCallback | None, cancel: asyncio.Event | None,
+                         quiet_exit: bool = False) -> str:
         splitter, spoken = SentenceSplitter(), []
         streamed = False
         interrupted = False
@@ -262,6 +285,9 @@ class ClaudeCodeBrain(_CLIBrain):
                 log.error("claude CLI exited (%s)", code)
                 self.proc = None
                 if not spoken:
+                    if quiet_exit:
+                        self._exited_silently = True   # the caller retries once in a fresh session
+                        return ""
                     return await self._speak_error(
                         "Claude Code stopped unexpectedly. If you've just installed it, open Settings and sign in "
                         "with your Claude plan.", on_sentence)

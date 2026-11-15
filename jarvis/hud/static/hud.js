@@ -414,7 +414,8 @@
       case "announce": if (!e.replay) island(e.text, e.priority === "high" ? "warn" : ""); break;
       case "alert": island(e.message, "err"); break;
       case "error": island(e.message, "err"); setState("error"); setTimeout(() => setState("idle"), 2600); break;
-      case "mic": muted = !!e.muted; $("btn-mute").classList.toggle("on", muted); setState(state); break;
+      case "mic": muted = !!e.muted; $("btn-mute").classList.toggle("on", muted); $("btn-mute").setAttribute("aria-pressed", muted);
+        $("btn-mute").title = muted ? "Microphone muted: click to unmute" : "Mute microphone"; setState(state); break;
       case "protocol": if (e.status === "start" && !e.replay) island(`Protocol engaged · ${e.name.replace(/_/g, " ")}`, "warn"); break;
     }
   }

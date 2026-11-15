@@ -86,20 +86,33 @@ class Supervisor:
         return self.camera
 
     def setup_speaker(self):
-        from jarvis.voice.tts import Speaker, make_backend
+        """The speaker setup previews voices with. One voice model stays loaded (325 MB): switching
+        voices re-points it instead of loading another copy, and when JARVIS is already running his
+        own speaker is used, so the new voice applies to him straight away."""
+        from jarvis.voice.tts import VOICE_PRESETS, Speaker, make_backend
 
-        choice = self.cfg.get("voice.tts.backend", "auto")
+        cfg = self.cfg
+        choice = cfg.get("voice.tts.backend", "auto")
         want = "say" if choice == "say" or not self.models.ready("voice") else "kokoro-onnx"
-        key = (want, self.cfg.get("voice.tts.voice"), self.cfg.get("voice.tts.say_voice"), self.cfg.get("voice.tts.speed"))
+        voice = cfg.get("voice.tts.voice", "jarvis")
+        speed = float(cfg.get("voice.tts.speed", 1.0)) * VOICE_PRESETS.get(voice, {}).get("speed", 1.0)
+        live = self.jarvis.speaker if self.jarvis is not None and getattr(self.jarvis, "speaker", None) else None
+        for sp in (live, self.speaker):
+            if sp is not None and sp.backend.name == want == "kokoro-onnx":
+                sp.backend.set_voice(voice)
+                sp.backend.speed = speed
+                return sp
+        key = (want, voice, cfg.get("voice.tts.say_voice"), speed)
         if self.speaker is None or getattr(self, "_speaker_key", None) != key:
             if self.speaker is not None:
-                self.speaker.stop()
-            backend = make_backend(want, self.cfg.get("voice.tts.voice", "jarvis"),
-                                   float(self.cfg.get("voice.tts.speed", 1.0)),
-                                   self.cfg.get("voice.tts.say_voice", "auto"), self.cfg.models_dir)
-            self.speaker = Speaker(backend, self.cfg.get("voice.output_device"))
+                self.speaker.close()
+            backend = make_backend(want, voice, float(cfg.get("voice.tts.speed", 1.0)),
+                                   cfg.get("voice.tts.say_voice", "auto"), cfg.models_dir)
+            self.speaker = Speaker(backend, cfg.get("voice.output_device"))
             self.speaker.start()
             self._speaker_key = key
+        if live is not None and want == "say":
+            live.backend = self.speaker.backend          # JARVIS switches to the Apple voice too
         return self.speaker
 
     def release_setup_devices(self) -> None:

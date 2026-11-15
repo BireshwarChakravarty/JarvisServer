@@ -161,6 +161,12 @@
     setDial(v) { if (v === null || v === undefined) { this.dialHide = true; } else { this.dial = v; this.dialHide = false; this.dialOn = this.dialOn || 0; } }
 
     frame(ts) {
+      // Idle and quiet: 30 fps is indistinguishable for a slow breathing glow and halves (or, on a
+      // 120 Hz display, quarters) the GPU work of an always-on HUD. Full rate the moment anything moves.
+      const calm = this.state === "idle" && this.level < 0.02 && this.target < 0.02 && !this.spinVel
+        && !(this.dialOn > 0.01) && this.birth >= 1 && this.ringsOn >= 1;
+      if (calm && ts - (this.lastDraw || 0) < 32) { requestAnimationFrame((t2) => this.frame(t2)); return; }
+      this.lastDraw = ts;
       const dt = Math.min(0.05, (ts - (this.last || ts)) / 1000);
       this.last = ts;
       const k = this.reduced ? 0.35 : 1;

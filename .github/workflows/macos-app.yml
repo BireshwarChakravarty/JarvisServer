@@ -203,7 +203,7 @@ jobs:
           curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/scripts/install-app.sh" | bash -s -- --fresh
           for i in $(seq 1 120); do curl -sf -o /dev/null http://127.0.0.1:7777/api/status && break; sleep 1; done
           curl -sf http://127.0.0.1:7777/api/setup/state | python3 -c "import sys,json; s=json.load(sys.stdin); assert not s['complete'] and not s['profile']['name'], s; print('fresh: setup starts from scratch ✓')"
-          osascript -e 'tell application "JARVIS" to quit' || pkill -f "/Applications/JARVIS.app" || true
+          # left running for the next step
       - name: It opens into setup
         run: |
           for i in $(seq 1 120); do curl -sf -o /dev/null http://127.0.0.1:7777/api/status && break; sleep 1; done
@@ -213,7 +213,12 @@ jobs:
           sleep 10
           n=$(pgrep -f "/Applications/JARVIS.app/Contents/MacOS" | wc -l | tr -d ' '); echo "processes: $n"; [ "$n" -ge 1 ] && [ "$n" -le 2 ]
           screencapture -x "$RUNNER_TEMP/first-launch.png" || true
-          osascript -e 'tell application "JARVIS" to quit' || pkill -f "/Applications/JARVIS.app" || true
+      - name: A Quit request really quits (as at shutdown, restart and log-out)
+        run: |
+          osascript -e 'tell application "JARVIS" to quit'
+          for i in $(seq 1 15); do pgrep -f "/Applications/JARVIS.app/Contents/MacOS" >/dev/null || break; sleep 1; done
+          if pgrep -f "/Applications/JARVIS.app/Contents/MacOS" >/dev/null; then echo "JARVIS ignored Quit: it would block shutdown"; exit 1; fi
+          echo "quit honoured ✓"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
