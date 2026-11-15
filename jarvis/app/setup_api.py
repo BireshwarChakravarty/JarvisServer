@@ -92,6 +92,7 @@ def make_router(sup) -> APIRouter:
                 "units": (user.get("location") or {}).get("units", "metric"),
             },
             "has_key": _has_key(),
+            "provider": cfg.get("brain.provider", "anthropic"),
             "permissions": perms,
             "models": sup.models.status(),
             "face_enrolled": enrolled,
@@ -183,6 +184,88 @@ def make_router(sup) -> APIRouter:
             where = "file"
         os.environ["ANTHROPIC_API_KEY"] = k
         return {"ok": True, "model": info, "stored_in": where}
+
+    # ── the brain: your Claude or ChatGPT plan ───────────────────────────
+    @r.get("/api/setup/brain")
+    async def brain_state():
+        from jarvis.app import brain_setup
+
+        cfg = sup.cfg
+        claude, codex = await asyncio.gather(
+            asyncio.to_thread(brain_setup.status, "claude", cfg.get("brain.claude_path")),
+            asyncio.to_thread(brain_setup.status, "codex", cfg.get("brain.codex_path")))
+        return {"provider": cfg.get("brain.provider", "anthropic"), "claude": claude, "codex": codex,
+                "has_key": _has_key(),
+            "provider": cfg.get("brain.provider", "anthropic"), "claude_model": cfg.get("brain.claude_model") or ""}
+
+    @r.post("/api/setup/brain")
+    async def brain_choose(body: dict = Body(...)):
+        provider = body.get("provider")
+        if provider not in ("claude-code", "codex", "anthropic"):
+            return JSONResponse({"ok": False, "error": "unknown provider"}, status_code=400)
+        patch = {"brain": {"provider": provider}}
+        if "claude_model" in body:
+            patch["brain"]["claude_model"] = body.get("claude_model") or None
+        _write_user_config(sup.cfg, patch)
+        return {"ok": True}
+
+    @r.post("/api/setup/brain/{which}/{action}")
+    async def brain_cli(which: str, action: str, body: dict = Body(default={})):
+        from jarvis.app import brain_setup
+
+        if which not in ("claude", "codex") or action not in ("install", "login", "input", "cancel"):
+            return JSONResponse({"ok": False}, status_code=404)
+        key = f"cli_{which}"
+        if action == "input":
+            sess = getattr(sup, key, None)
+            if sess:
+                await sess.send(str(body.get("text", "")))
+            return {"ok": bool(sess)}
+        if action == "cancel":
+            sess = getattr(sup, key, None)
+            if sess:
+                sess.cancel()
+            return {"ok": True}
+        sess = brain_setup.CLISession(which, action)
+        try:
+            await sess.start()
+        except FileNotFoundError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        setattr(sup, key, sess)
+        try:
+            await asyncio.wait_for(sess.done.wait(), timeout=600 if action == "install" else 900)
+        except asyncio.TimeoutError:
+            sess.cancel()
+        st = await asyncio.to_thread(brain_setup.status, which)
+        return {"ok": sess.code == 0, "code": sess.code, "status": st, "log": sess.lines[-20:]}
+
+    @r.post("/api/setup/brain/test")
+    async def brain_test():
+        """One real round-trip through the chosen brain."""
+        from jarvis.core.cli_brains import make_brain
+        from jarvis.tools.registry import ToolRegistry
+
+        brain = make_brain(sup.cfg, ToolRegistry(), None, None)
+        text: list[str] = []
+
+        async def collect(s):
+            text.append(s)
+
+        try:
+            reply = await asyncio.wait_for(brain.respond(
+                "This is a connection test. Reply with one short, witty sentence confirming you're online.",
+                on_sentence=collect), timeout=120)
+        except asyncio.TimeoutError:
+            reply = ""
+        finally:
+            stop = getattr(brain, "_stop", None)
+            if stop:
+                await stop()
+            if getattr(brain, "mcp", None):
+                await brain.mcp.stop()
+        bad = (not reply) or reply.startswith(("Claude Code", "Codex", "I'm not signed in", "We've reached",
+                                              "Something went wrong", "My Anthropic API key", "I can't reach"))
+        return {"ok": not bad, "reply": reply}
 
     @r.post("/api/setup/open-url")
     async def open_url(body: dict = Body(...)):
@@ -372,8 +455,17 @@ def make_router(sup) -> APIRouter:
     # ── finish ────────────────────────────────────────────────────────────
     @r.post("/api/setup/finish")
     async def finish(body: dict = Body(default={})):
-        if not _has_key():
+        provider = sup.cfg.get("brain.provider", "anthropic")
+        if provider == "anthropic" and not _has_key():
             return JSONResponse({"ok": False, "error": "JARVIS needs an Anthropic API key first."}, status_code=400)
+        if provider in ("claude-code", "codex"):
+            from jarvis.app import brain_setup
+
+            st = await asyncio.to_thread(brain_setup.status, "claude" if provider == "claude-code" else "codex")
+            if not st["logged_in"]:
+                name = "Claude" if provider == "claude-code" else "ChatGPT"
+                return JSONResponse({"ok": False, "error": f"Sign in with your {name} plan first (Intelligence step)."},
+                                    status_code=400)
         missing = [k for k in ("wake", "ears", "voice") if not sup.models.ready(k)]
         if missing:
             return JSONResponse({"ok": False, "error": "Still downloading: " + ", ".join(missing)}, status_code=400)

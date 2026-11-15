@@ -65,7 +65,9 @@ class Jarvis:
                                require_confirmation=bool(cfg.get("safety.confirm_risky_actions", True)))
         import jarvis.tools.builtin  # noqa: F401  (registers tools)
 
-        self.brain = Brain(cfg, registry, self.memory, self.ctx)
+        from jarvis.core.cli_brains import make_brain
+
+        self.brain = make_brain(cfg, registry, self.memory, self.ctx)
         # subsystems (filled in by start())
         self.speaker = None
         self.mic = None
@@ -129,10 +131,13 @@ class Jarvis:
 
         import os
 
-        has_key = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
-        self.capabilities["brain"] = cfg.get("brain.model") if cfg.get("brain.provider") == "anthropic" else "ollama"
-        self.boot(f"Neural link: {self.capabilities['brain']}" + ("" if has_key else " (API key not found in env — "
-                                                                   "will try ant auth profile)"), True)
+        has_key = provider_ok = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")) \
+            or cfg.get("brain.provider") in ("claude-code", "codex")
+        provider = cfg.get("brain.provider", "anthropic")
+        self.capabilities["brain"] = {
+            "anthropic": cfg.get("brain.model"), "claude-code": "Claude plan (Claude Code)",
+            "codex": "ChatGPT plan (Codex)", "ollama": "ollama"}.get(provider, provider)
+        self.boot(f"Neural link: {self.capabilities['brain']}" + ("" if has_key else " (no API key found)"), True)
         self.scheduler.restore()
         bus.emit("capabilities", **self.capabilities)
         self.ready.set()
@@ -600,7 +605,8 @@ class Jarvis:
             reply = await self.brain.respond(None, event_note=note, on_sentence=on_sentence,
                                              context=await self._live_context())
             if not reply or reply.startswith(("My Anthropic API key", "I can't reach", "Something went wrong",
-                                              "My servers")):
+                                              "My servers", "Claude Code", "Codex", "I'm not signed in",
+                                              "We've reached", "I lost my connection")):
                 line = fallback_greeting(self.cfg.get("owner.name", ""), title,
                                          "login" if kind == "login" else "return", extras=offline_extras(data))
                 bus.emit("reply", text=line)

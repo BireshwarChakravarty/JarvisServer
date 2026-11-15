@@ -16,8 +16,11 @@ location:
   units: metric            # metric | imperial
 
 brain:
-  provider: anthropic      # anthropic | ollama (offline, no tools)
-  model: claude-opus-5-5
+  provider: claude-code    # claude-code (your Claude Pro/Max plan) | codex (your ChatGPT plan)
+                           # | anthropic (API key) | ollama (offline, no tools)
+  claude_model: null       # e.g. "sonnet" (fastest), "opus" (smartest); null = your plan's default
+  codex_model: null
+  model: claude-opus-5-5   # used by the API-key provider
   effort: low              # low | medium | high — low keeps spoken replies snappy
   fast_mode: false         # Claude fast mode (premium pricing, ~2.5x faster output)
   max_tokens: 8000

@@ -133,3 +133,25 @@ body.settings .ob-steps i { cursor: pointer; }
 }
 .field select option { background: #0b1118; }
 .field.compact { margin-bottom: 14px; max-width: 420px; }
+
+/* intelligence: plan picker */
+.plans { display: grid; gap: 8px; margin-bottom: 16px; }
+.plan { display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 14px; text-align: left; padding: 14px 16px;
+  border-radius: 16px; border: 1px solid var(--hair-2); background: rgb(255 255 255 / 0.025); color: var(--text); cursor: pointer;
+  font: inherit; transition: border-color 0.2s, background 0.2s; }
+.plan:hover { border-color: rgb(143 236 255 / 0.3); }
+.plan b { display: block; font-weight: 500; font-size: 15px; } .plan span { font-size: 12.5px; color: var(--muted); }
+.plan .pdot { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--faint); }
+.plan.on { border-color: rgb(143 236 255 / 0.55); background: rgb(143 236 255 / 0.06); }
+.plan.on .pdot { border-color: var(--ice); background: radial-gradient(circle, var(--ice) 0 40%, transparent 45%); }
+.ptag { font: 500 11px var(--sans); font-style: normal; color: var(--mint); white-space: nowrap; }
+.cli-panel { border: 1px solid var(--hair-2); border-radius: 16px; padding: 6px 14px 12px; margin-bottom: 4px; }
+.cli-steps { list-style: none; margin: 0 0 8px; padding: 0; }
+.cli-steps li { display: grid; grid-template-columns: 26px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--hair-2); }
+.cli-steps li:last-child { border-bottom: 0; }
+.cli-steps .n { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font: 500 12px var(--mono); color: var(--muted); border: 1px solid var(--hair-2); }
+.cli-steps li.ok .n { background: var(--mint); border-color: var(--mint); color: #022; }
+.cli-steps li.ok .n::after { content: "✓"; } .cli-steps li.ok .n { font-size: 0; } .cli-steps li.ok .n::after { font-size: 12px; }
+.cli-steps b { display: block; font-weight: 500; font-size: 14px; } .cli-steps span { font-size: 12.5px; color: var(--muted); }
+.cli-log { max-height: 120px; overflow-y: auto; margin: 6px 0 8px; padding: 10px 12px; border-radius: 10px; background: rgb(0 0 0 / 0.35);
+  font-size: 11px; line-height: 1.5; color: var(--muted); white-space: pre-wrap; word-break: break-word; }

@@ -101,7 +101,7 @@
     if (s === "senses") { renderPerms(S.permissions); pollTimer = setInterval(refreshPerms, 2000); }
     if (s === "face" || s === "voice") loadDevices();
     if (s === "face") startCamera();
-    if (s === "brain") renderKey();
+    if (s === "brain") loadBrain();
   }
   function leave(s) {
     if (s === "senses") clearInterval(pollTimer);
@@ -160,26 +160,98 @@
     busy($("you-next"), false);
   };
 
-  /* ───────────── brain ───────────── */
-  function renderKey() {
-    $("key-connected").hidden = !S.has_key;
-    $("key-form").hidden = S.has_key;
-    $("key-next").textContent = S.has_key ? "Continue" : "Connect";
+  /* ───────────── brain: your Claude / ChatGPT plan, or an API key ───────────── */
+  let B = null, provider = "claude-code";
+  const CLI = { "claude-code": "claude", codex: "codex" };
+  const NAMES = { "claude-code": ["Claude Code", "Claude"], codex: ["Codex", "ChatGPT"] };
+  async function loadBrain() {
+    try { B = await api("/api/setup/brain"); } catch (e) { B = { provider: "claude-code", claude: {}, codex: {}, has_key: S.has_key }; }
+    provider = B.provider === "anthropic" && !B.has_key ? "claude-code" : B.provider;
+    if (B.claude_model) $("claude-model").value = B.claude_model;
+    renderBrain();
   }
-  $("key-replace").onclick = () => { S.has_key = false; renderKey(); $("key").focus(); };
+  function ready(p) {
+    if (p === "anthropic") return !!(B && B.has_key);
+    const st = B && B[CLI[p]];
+    return !!(st && st.logged_in);
+  }
+  function renderBrain() {
+    document.querySelectorAll(".plan").forEach((b) => b.classList.toggle("on", b.dataset.p === provider));
+    ["claude-code", "codex", "anthropic"].forEach((p) => ($("tag-" + p).textContent = ready(p) ? "✓ ready" : ""));
+    const cli = provider !== "anthropic";
+    $("cli-panel").hidden = !cli; $("key-panel").hidden = cli;
+    $("claude-model-field").hidden = provider !== "claude-code";
+    if (cli) {
+      const st = B[CLI[provider]] || {}, [app, plan] = NAMES[provider];
+      $("cs-install-t").textContent = `Install ${app}`;
+      $("cs-install").classList.toggle("ok", !!st.installed);
+      $("cs-install-d").textContent = st.installed ? `Installed ${st.version ? "· " + st.version : ""}` : `The official ${plan} app, one time`;
+      $("cs-install-btn").hidden = !!st.installed;
+      $("cs-login").classList.toggle("ok", !!st.logged_in);
+      $("cs-login-d").textContent = st.logged_in ? (st.plan === false && provider === "claude-code" ? "Signed in with an API account (billed per use)" : `Signed in${st.detail ? " · " + st.detail : ""}`) : "Your browser opens to approve it";
+      $("cs-login-btn").textContent = st.logged_in ? "Switch account" : "Sign in";
+      $("cs-login-btn").disabled = !st.installed;
+      $("cs-test-btn").disabled = !st.logged_in;
+    } else {
+      $("key-connected").hidden = !B.has_key; $("key-form").hidden = B.has_key;
+    }
+    $("key-next").textContent = cli || B.has_key ? "Continue" : "Connect";
+  }
+  document.querySelectorAll(".plan").forEach((b) => (b.onclick = async () => {
+    provider = b.dataset.p; $("key-err").textContent = ""; renderBrain();
+    api("/api/setup/brain", { provider }).catch(() => {});
+  }));
+  $("claude-model").onchange = () => api("/api/setup/brain", { provider, claude_model: $("claude-model").value }).catch(() => {});
+  function logLine(line) {
+    const el = $("cli-log"); el.hidden = false;
+    el.textContent += (el.textContent ? "\n" : "") + line; el.scrollTop = el.scrollHeight;
+  }
+  async function cliAction(action, btn) {
+    const which = CLI[provider]; $("key-err").textContent = ""; $("cli-log").textContent = "";
+    busy(btn, true);
+    if (action === "login") { $("cli-input-row").hidden = false; caption(`Approve the sign-in in your browser, ${S.profile.name || "sir"}.`); }
+    if (action === "install") caption("Installing. This takes about a minute.");
+    try {
+      const r = await api(`/api/setup/brain/${which}/${action}`, {});
+      B[which] = r.status;
+      if (!r.ok && !(r.status && (action === "install" ? r.status.installed : r.status.logged_in))) $("key-err").textContent = `That didn't finish. ${(r.log || []).slice(-1)[0] || ""}`;
+      else caption(action === "install" ? "Installed." : "Signed in. Let's make sure I can think.");
+    } catch (e) { $("key-err").textContent = e.message; }
+    $("cli-input-row").hidden = true; busy(btn, false); renderBrain();
+    if (action === "login" && ready(provider)) $("cs-test-btn").click();
+  }
+  $("cs-install-btn").onclick = () => cliAction("install", $("cs-install-btn"));
+  $("cs-login-btn").onclick = () => cliAction("login", $("cs-login-btn"));
+  $("cli-input-send").onclick = async () => { await api(`/api/setup/brain/${CLI[provider]}/input`, { text: $("cli-input").value }).catch(() => {}); $("cli-input").value = ""; };
+  $("cs-test-btn").onclick = async () => {
+    busy($("cs-test-btn"), true); reactor.setState("thinking"); caption("Establishing a neural link…");
+    try {
+      const r = await api("/api/setup/brain/test", {});
+      $("cs-test").classList.toggle("ok", r.ok);
+      $("cs-test-d").textContent = r.ok ? `“${r.reply}”` : r.reply;
+      reactor.setState(r.ok ? "speaking" : "error"); caption(r.ok ? r.reply : "Not quite. " + r.reply);
+    } catch (e) { $("key-err").textContent = e.message; reactor.setState("error"); }
+    busy($("cs-test-btn"), false); setTimeout(() => reactor.setState("idle"), 2400);
+  };
+  $("key-replace").onclick = () => { B.has_key = false; renderBrain(); $("key").focus(); };
   $("key-show").onclick = () => { const k = $("key"); k.type = k.type === "password" ? "text" : "password"; $("key-show").textContent = k.type === "password" ? "Show" : "Hide"; };
   $("get-key").onclick = (e) => { e.preventDefault(); api("/api/setup/open-url", { url: "https://console.anthropic.com/settings/keys" }).catch(() => {}); };
   $("key-next").onclick = async () => {
-    if (S.has_key) return nextStep();
+    $("key-err").textContent = "";
+    if (provider !== "anthropic") {
+      if (!ready(provider)) { $("key-err").textContent = `Sign in with your ${NAMES[provider][1]} plan first.`; return; }
+      await api("/api/setup/brain", { provider }).catch(() => {});
+      return nextStep();
+    }
+    if (B.has_key) { await api("/api/setup/brain", { provider }).catch(() => {}); return nextStep(); }
     const key = $("key").value.trim();
     if (!key) { $("key-err").textContent = "Paste your key first."; return; }
-    $("key-err").textContent = "";
-    busy($("key-next"), true);
-    reactor.setState("thinking"); caption("Establishing a neural link…");
+    busy($("key-next"), true); reactor.setState("thinking"); caption("Establishing a neural link…");
     try {
       const r = await api("/api/setup/key", { key });
-      S.has_key = true; $("key-model").textContent = `Claude is online${r.model ? " · " + r.model : ""}. Key saved in Keychain.`;
-      renderKey(); reactor.setState("speaking"); caption("Link established. I can think now.");
+      B.has_key = S.has_key = true; $("key-model").textContent = `Claude is online${r.model ? " · " + r.model : ""}. Key saved in Keychain.`;
+      await api("/api/setup/brain", { provider: "anthropic" }).catch(() => {});
+      renderBrain(); reactor.setState("speaking"); caption("Link established. I can think now.");
       setTimeout(() => reactor.setState("idle"), 1600);
     } catch (e) { $("key-err").textContent = e.message; reactor.setState("error"); setTimeout(() => reactor.setState("idle"), 1600); }
     busy($("key-next"), false);
@@ -361,6 +433,7 @@
         const g = models.find((x) => x.key === e.group);
         if (g) { g.done = e.done; g.total = e.total || g.total; if (e.ready) g.ready = true; g.error = e.error || null; renderDownloads(); }
       }
+      if (e.type === "cli_log" && e.line) logLine(e.line);
       if (e.type === "enroll" && e.target) $("enroll-ring").style.strokeDashoffset = String(289 - (289 * e.count) / e.target);
       if (e.type === "faces" && step === "face") drawFaces(e);
     };
@@ -403,6 +476,8 @@
       face_enrolled: false, login_item: "off", app_path: "/Users/you/Downloads/JARVIS.app", in_applications: false, options: {} });
     if (path === "/api/setup/models") return Promise.resolve(models.map((m) => (m.ready ? m : { ...m, done: Math.min(m.total, m.done + m.total * 0.07) })));
     if (path === "/api/setup/permissions") return Promise.resolve(S.permissions);
+    if (path === "/api/setup/brain") return Promise.resolve({ provider: "claude-code", has_key: false, claude_model: "",
+      claude: { installed: true, version: "2.1.325 (Claude Code)", logged_in: false }, codex: { installed: false } });
     if (path === "/api/setup/devices") return Promise.resolve({ microphones: [{ name: "Studio Display Microphone", default: true }, { name: "Logitech BRIO" }],
       cameras: [{ index: 0, name: "Logitech BRIO" }, { index: 1, name: "iPhone Camera" }], input_device: null, camera_index: 0 });
     if (path.startsWith("/api/setup/geocode")) return Promise.resolve([{ name: "London", region: "England", country: "United Kingdom", country_code: "GB" }]);

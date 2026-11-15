@@ -20,5 +20,5 @@ def cfg(jarvis_home):
 
     return load_config(overrides={
         "voice": {"enabled": False}, "vision": {"enabled": False},
-        "greeting": {"briefing": False}, "brain": {"web_search": True},
+        "greeting": {"briefing": False}, "brain": {"web_search": True, "provider": "anthropic"},
     })

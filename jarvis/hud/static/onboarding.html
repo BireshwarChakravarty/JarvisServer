@@ -60,16 +60,37 @@
     <section class="step" data-step="brain" hidden>
       <p class="eyebrow">Step 2 · Intelligence</p>
       <h1>Connect my mind.</h1>
-      <p class="lede">I think with Claude by Anthropic. Paste an API key and I'll keep it in your Mac's Keychain.</p>
-      <div class="keybox" id="key-connected" hidden><span class="tick">✓</span><div><b>Connected</b><span id="key-model">Claude is online</span></div><button class="btn ghost small" id="key-replace">Replace key</button></div>
-      <div id="key-form">
-        <label class="field"><span>Anthropic API key</span>
-          <div class="inline"><input id="key" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false"><button class="btn ghost small" id="key-show" type="button">Show</button></div>
-        </label>
-        <p class="hint">No key yet? <a href="#" id="get-key">Create one at console.anthropic.com</a>: sign in, choose <b>API Keys</b>, then <b>Create Key</b>, and paste it here.</p>
-        <p class="err" id="key-err"></p>
+      <p class="lede">I think with Claude or ChatGPT. Use the plan you already pay for: no API key, no extra bills.</p>
+      <div class="plans" id="plans">
+        <button class="plan" data-p="claude-code"><span class="pdot"></span><div><b>Claude Pro or Max</b><span>Recommended · via Claude Code, signed in with your plan</span></div><em class="ptag" id="tag-claude-code"></em></button>
+        <button class="plan" data-p="codex"><span class="pdot"></span><div><b>ChatGPT Plus or Pro</b><span>Via OpenAI's Codex, signed in with your plan</span></div><em class="ptag" id="tag-codex"></em></button>
+        <button class="plan" data-p="anthropic"><span class="pdot"></span><div><b>Anthropic API key</b><span>Pay as you go, billed by usage</span></div><em class="ptag" id="tag-anthropic"></em></button>
       </div>
-      <div class="actions"><button class="btn ghost" data-back>Back</button><button class="btn gold" id="key-next">Connect</button></div>
+
+      <div id="cli-panel" class="cli-panel" hidden>
+        <ol class="cli-steps">
+          <li id="cs-install"><span class="n">1</span><div><b id="cs-install-t">Install</b><span id="cs-install-d">The official app, one time</span></div><button class="btn ghost small" id="cs-install-btn">Install</button></li>
+          <li id="cs-login"><span class="n">2</span><div><b>Sign in with your plan</b><span id="cs-login-d">Your browser opens to approve it</span></div><button class="btn ghost small" id="cs-login-btn">Sign in</button></li>
+          <li id="cs-test"><span class="n">3</span><div><b>Say hello</b><span id="cs-test-d">One quick round trip</span></div><button class="btn ghost small" id="cs-test-btn">Test</button></li>
+        </ol>
+        <label class="field compact" id="claude-model-field"><span>Model</span>
+          <select id="claude-model"><option value="">Your plan's default</option><option value="sonnet">Sonnet (fastest replies)</option><option value="opus">Opus (smartest)</option></select>
+        </label>
+        <pre class="cli-log mono" id="cli-log" hidden></pre>
+        <div class="inline" id="cli-input-row" hidden><input id="cli-input" placeholder="Paste the code from your browser" spellcheck="false"><button class="btn ghost small" id="cli-input-send" type="button">Send</button></div>
+      </div>
+
+      <div id="key-panel" hidden>
+        <div class="keybox" id="key-connected" hidden><span class="tick">✓</span><div><b>Connected</b><span id="key-model">Claude is online</span></div><button class="btn ghost small" id="key-replace">Replace key</button></div>
+        <div id="key-form">
+          <label class="field"><span>Anthropic API key</span>
+            <div class="inline"><input id="key" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false"><button class="btn ghost small" id="key-show" type="button">Show</button></div>
+          </label>
+          <p class="hint">No key yet? <a href="#" id="get-key">Create one at console.anthropic.com</a>, then paste it here.</p>
+        </div>
+      </div>
+      <p class="err" id="key-err"></p>
+      <div class="actions"><button class="btn ghost" data-back>Back</button><button class="btn gold" id="key-next">Continue</button></div>
     </section>
 
     <!-- 3 · senses -->

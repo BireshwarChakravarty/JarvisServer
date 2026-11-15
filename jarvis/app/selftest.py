@@ -261,6 +261,13 @@ def run() -> int:
         p = b._request_params(Session(id="x", system="s", tools=b._tool_schemas()))
         return f"{p['model']}, {len(p['tools'])} tools"
 
+    @check("monthly-plan brain drives the real Claude Code CLI (mock API, no account)", required=False, timeout=180)
+    def _():
+        claude = os.environ.get("JARVIS_SELFTEST_CLAUDE_BIN")
+        if not claude:
+            return "skipped (set JARVIS_SELFTEST_CLAUDE_BIN)"
+        return _claude_code_roundtrip(state["cfg"], claude)
+
     failed = [r for r in RESULTS if not r["ok"] and r["required"]]
     report = {"ok": not failed, "results": RESULTS, "python": sys.version, "executable": sys.executable}
     out = os.environ.get("JARVIS_SELFTEST_OUT")
@@ -268,3 +275,99 @@ def run() -> int:
         Path(out).write_text(json.dumps(report, indent=2, default=str))
     log("SELFTEST PASSED" if not failed else f"SELFTEST FAILED: {[r['check'] for r in failed]}")
     os._exit(0 if not failed else 1)  # don't wait on any stuck worker thread
+
+
+def _claude_code_roundtrip(cfg, claude_bin: str) -> str:
+    """Spin a tiny mock of the Messages API, point the real CLI at it with a fake key (external
+    traffic black-holed), and check a JARVIS tool gets called through the MCP endpoint."""
+    import asyncio
+    import json as _json
+    import socket
+    import threading
+
+    import uvicorn
+    from fastapi import FastAPI
+    from fastapi.responses import JSONResponse, StreamingResponse
+
+    seen = []
+    api = FastAPI()
+
+    def sse(events):
+        return "".join(f"event: {e['type']}\ndata: {_json.dumps(e)}\n\n" for e in events)
+
+    async def messages(request):
+        body = await request.json()
+        seen.append(body)
+        if not body.get("stream"):
+            return JSONResponse({"id": "m", "type": "message", "role": "assistant", "model": "x",
+                                 "content": [{"type": "text", "text": "OK"}], "stop_reason": "end_turn",
+                                 "stop_sequence": None, "usage": {"input_tokens": 1, "output_tokens": 1}})
+        tools = [t.get("name") for t in body.get("tools", [])]
+        last = body["messages"][-1]
+        done = isinstance(last.get("content"), list) and any(b.get("type") == "tool_result" for b in last["content"])
+        if "mcp__jarvis__selftest_ping" in tools and not done:
+            blocks = [{"type": "tool_use", "id": f"toolu_{len(seen)}", "name": "mcp__jarvis__selftest_ping", "input": {}}]
+            stop = "tool_use"
+        else:
+            blocks = [{"type": "text", "text": "All systems online, sir."}]
+            stop = "end_turn"
+        ev = [{"type": "message_start", "message": {"id": f"m{len(seen)}", "type": "message", "role": "assistant",
+               "model": "x", "content": [], "stop_reason": None, "stop_sequence": None,
+               "usage": {"input_tokens": 1, "output_tokens": 1}}}]
+        for i, b in enumerate(blocks):
+            if b["type"] == "text":
+                ev += [{"type": "content_block_start", "index": i, "content_block": {"type": "text", "text": ""}},
+                       {"type": "content_block_delta", "index": i, "delta": {"type": "text_delta", "text": b["text"]}}]
+            else:
+                ev += [{"type": "content_block_start", "index": i, "content_block": {**b, "input": {}}},
+                       {"type": "content_block_delta", "index": i, "delta": {"type": "input_json_delta", "partial_json": "{}"}}]
+            ev.append({"type": "content_block_stop", "index": i})
+        ev += [{"type": "message_delta", "delta": {"stop_reason": stop, "stop_sequence": None}, "usage": {"output_tokens": 3}},
+               {"type": "message_stop"}]
+        return StreamingResponse(iter([sse(ev)]), media_type="text/event-stream")
+
+    api.add_route("/v1/messages", messages, methods=["POST"])
+
+    with socket.socket() as s_:
+        s_.bind(("127.0.0.1", 0))
+        port = s_.getsockname()[1]
+    srv = uvicorn.Server(uvicorn.Config(api, host="127.0.0.1", port=port, log_level="error"))
+    threading.Thread(target=srv.run, daemon=True).start()
+    for _ in range(100):
+        if srv.started:
+            break
+        time.sleep(0.05)
+
+    from jarvis.core.cli_brains import ClaudeCodeBrain
+    from jarvis.tools.context import ToolContext
+    from jarvis.tools.registry import ToolRegistry
+
+    reg = ToolRegistry()
+    pinged = []
+
+    @reg.tool("Self-test ping")
+    def selftest_ping(ctx):
+        pinged.append(True)
+        return "pong"
+
+    home = Path(tempfile.mkdtemp(prefix="cchome-"))
+    cfg.data["brain"]["claude_path"] = claude_bin
+    cfg.data["brain"]["cli_env"] = {
+        "ANTHROPIC_API_KEY": "sk-ant-selftest-not-real", "ANTHROPIC_BASE_URL": f"http://127.0.0.1:{port}",
+        "HTTPS_PROXY": "http://127.0.0.1:9", "HTTP_PROXY": "http://127.0.0.1:9", "NO_PROXY": "127.0.0.1,localhost",
+        "DISABLE_TELEMETRY": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "HOME": str(home)}
+    brain = ClaudeCodeBrain(cfg, reg, None, ToolContext(cfg=cfg))
+
+    async def go():
+        try:
+            return await brain.respond("ping", on_sentence=None)
+        finally:
+            await brain._stop()
+            if brain.mcp:
+                await brain.mcp.stop()
+
+    reply = asyncio.run(go())
+    srv.should_exit = True
+    if not pinged:
+        raise RuntimeError(f"tool not called (requests: {len(seen)}, reply {reply!r})")
+    return f"tool called via MCP; reply {reply!r}"

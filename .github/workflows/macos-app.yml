@@ -29,10 +29,16 @@ jobs:
       - name: Install Briefcase
         run: python -m pip install --upgrade pip "briefcase==0.4.7"
 
+      - name: Install the official Claude Code CLI (for the subscription-brain tests)
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          echo "CLAUDE_BIN=$(which claude)" >> "$GITHUB_ENV"
+          claude --version
+
       - name: Unit tests (source)
         run: |
           python -m pip install -e ".[dev]"
-          python -m pytest -q
+          python -m pytest -q -rs
 
       - name: Create app bundle
         run: briefcase create macOS app --no-input
@@ -48,6 +54,7 @@ jobs:
           JARVIS_SELFTEST_OUT: ${{ runner.temp }}/selftest.json
           JARVIS_SELFTEST_LOG: ${{ runner.temp }}/selftest.log
         run: |
+          export JARVIS_SELFTEST_CLAUDE_BIN="$CLAUDE_BIN"
           APP=$(ls -d build/jarvis/macos/app/*.app | head -1)
           echo "APP=$APP" >> "$GITHUB_ENV"
           EXE="$APP/Contents/MacOS/$(ls "$APP/Contents/MacOS" | head -1)"
