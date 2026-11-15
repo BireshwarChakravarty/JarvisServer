@@ -54,6 +54,7 @@ class Supervisor:
 
         self.cfg = load_config()
         self.jarvis = Jarvis(self.cfg)
+        self.jarvis.show_window = self.show_window   # flick ↑ brings the HUD forward
         self._jarvis_task = asyncio.ensure_future(self.jarvis.run(greet=greet))
         self._jarvis_task.add_done_callback(self._jarvis_done)
         log.info("JARVIS started")

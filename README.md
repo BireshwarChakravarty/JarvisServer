@@ -29,7 +29,8 @@ smart home and terminal. Everything shows on a live, holographic HUD.
 | ✋ **Interrupt anytime** | Say "Jarvis" while he's talking, raise an open palm, or press Esc. After each answer he keeps listening for a few seconds, so follow-ups don't need the wake word. |
 | 👁️ **Sees** | "What am I holding?", "How do I look?", "What's on my screen?", "Read this error": camera frames and screenshots go straight to Claude's vision. |
 | 🧑‍🚀 **Knows you** | Face recognition (OpenCV YuNet + SFace) tells you apart from visitors. Optional **sentry mode** photographs unknown faces while you're away; optional auto-lock when you leave. |
-| 🤚 **Gestures** | ✋ stop · 👍 / 👎 answer a confirmation · ✌️ start listening · 🤟 play/pause music |
+| 🤚 **Gestures** | Hold a pose: ✋ stop · 👍 / 👎 answer a confirmation · ✌️ start listening · 🤟 play/pause music. Or move: **swipe ← →** for the previous or next track · **flick ↑** to bring up the HUD · **pinch and drag up or down** to turn the volume like a dial · **pinch and drag sideways** to spin the hologram core. A reticle on the HUD follows your hand, so you can see what he sees. |
+| 👁️ **Attention** | He notices whether you're facing the screen: the HUD's side panels rest when you look away and wake when you look back. |
 | 🖥️ **Runs your Mac** | Opens and quits apps, volume, brightness, dark mode, lock, sleep, notifications, clipboard, typing, Spotlight file search, reading files, Finder, screenshots |
 | 📅 **Your life** | Calendar (read and create), Reminders (they sync to your iPhone), Contacts, iMessage, Notes, unread Mail |
 | 🎵 **Music** | Plays songs, artists and playlists in Music or Spotify; play, pause, skip, "what's playing?" |
@@ -205,7 +206,7 @@ mcp_servers:
                           │        └ follow-up ─┘ mlx-whisper large-v3-turbo         │
                           │                                                          │
   camera ─► YuNet/SFace ─►│  Presence ─► "welcome back" · sentry · auto-lock         │
-          └► MediaPipe ──►│  Gestures ─► stop / yes / no / listen / play-pause       │
+          └► MediaPipe ──►│  Gestures ─► poses, swipes, pinch-dial, hologram spin   │
                           │                                                          │
   login / unlock (Quartz)►│  Greeter ─► briefing (weather·calendar·reminders·mail·news)
                           │                                                          │

@@ -275,6 +275,22 @@
     setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 400); }, 5200);
   }
 
+  /* ───────────── hands: a tracking reticle that follows your hand across the HUD ───────────── */
+  const GESTURE_LABEL = {
+    Swipe_left: "⟵ Previous track", Swipe_right: "Next track ⟶", Swipe_up: "↑ HUD", Open_Palm: "✋ Stop",
+    Thumb_Up: "👍 Yes", Thumb_Down: "👎 No", Victory: "✌️ Listening", ILoveYou: "🤟 Play / pause",
+  };
+  let handTimer = 0;
+  function moveHand(e) {
+    const el = $("hand");
+    if (!el) return;
+    clearTimeout(handTimer);
+    if (!e.visible) { el.classList.remove("on", "pinch"); return; }
+    el.style.transform = `translate(${(e.x * innerWidth).toFixed(1)}px, ${((1 - e.y) * innerHeight).toFixed(1)}px)`;
+    el.classList.add("on"); el.classList.toggle("pinch", !!e.pinch);
+    handTimer = setTimeout(() => el.classList.remove("on", "pinch"), 900);   // camera stalled: fade out
+  }
+
   /* ───────────── event dispatch ───────────── */
   function handle(e) {
     switch (e.type) {
@@ -310,7 +326,12 @@
       case "alarms": alarms = e.alarms || []; renderTimers(); break;
       case "protocols": setProtocols(e.items); break;
       case "faces": drawFaces(e); break;
-      case "gesture": island(`${e.gesture.replace(/_/g, " ")} → ${e.action.replace(/_/g, " ")}`); break;
+      case "gesture": if (!e.replay) island(GESTURE_LABEL[e.gesture] || `${e.gesture.replace(/_/g, " ")} · ${e.action.replace(/_/g, " ")}`); break;
+      case "hand": if (!e.replay) moveHand(e); break;
+      case "spin": reactor.nudge(e.dx); break;
+      case "dial": reactor.setDial(e.phase === "end" ? null : e.value);
+        if (e.phase === "end" && e.value != null && !e.replay) island(`Volume ${e.value}%`); break;
+      case "attention": document.body.classList.toggle("unattended", !e.looking); break;
       case "confirm": $("confirm-text").textContent = e.action; $("confirm").hidden = false; break;
       case "confirm_result": $("confirm").hidden = true; break;
       case "announce": if (!e.replay) island(e.text, e.priority === "high" ? "warn" : ""); break;
@@ -390,9 +411,24 @@
       [24500, { type: "state", state: "idle" }],
     ];
     const play = () => script.forEach(([ms, ev]) => setTimeout(() => handle(ev), ms));
+    window.__handle = handle;   // demo only: lets tests and screenshots inject events
+    if (new URLSearchParams(location.search).has("gesture")) { demoGestures(); return; }
     play(); setInterval(play, 28000);
     setInterval(() => { if (["speaking", "listening"].includes(state)) reactor.setLevel(0.2 + Math.random() * 0.6, state === "listening" ? "mic" : "tts"); }, 70);
   }
+  // /?demo&gesture: a hand comes in, pinches, and dials the volume up, then flicks to the next track
+  function demoGestures() {
+    const ev = [];
+    for (let i = 0; i <= 20; i++) ev.push([3000 + i * 60, { type: "hand", visible: true, x: 0.82 - i * 0.012, y: 0.30 + i * 0.008, pinch: false }]);
+    ev.push([4400, { type: "hand", visible: true, x: 0.58, y: 0.46, pinch: true }], [4420, { type: "dial", phase: "start", value: 40 }]);
+    for (let i = 1; i <= 16; i++) ev.push([4500 + i * 90, { type: "hand", visible: true, x: 0.58, y: 0.46 + i * 0.012, pinch: true }],
+      [4510 + i * 90, { type: "dial", phase: "move", value: 40 + i * 2 }]);
+    ev.push([9000, { type: "dial", phase: "end", value: 72 }], [9000, { type: "hand", visible: true, x: 0.58, y: 0.65, pinch: false }]);
+    for (let i = 1; i <= 6; i++) ev.push([10000 + i * 70, { type: "hand", visible: true, x: 0.40 + i * 0.06, y: 0.62, pinch: false }]);
+    ev.push([10500, { type: "gesture", gesture: "Swipe_right", action: "next" }], [11400, { type: "hand", visible: false }]);
+    ev.forEach(([ms, e]) => setTimeout(() => handle(e), ms));
+  }
+
   function demoCommand(msg) {
     if (msg.type === "text") {
       handle({ type: "transcript", text: msg.text });

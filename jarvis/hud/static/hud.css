@@ -311,3 +311,23 @@ body[data-state="listening"] #btn-mic svg { fill: var(--gold); stroke: var(--gol
   outline: 2px solid var(--ice); outline-offset: 3px; border-radius: 10px;
 }
 :where(input, select, textarea):focus-visible { outline-offset: 1px; }
+
+/* ───────── hand tracking reticle ───────── */
+#hand { position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 40; pointer-events: none; opacity: 0;
+  transition: opacity 0.35s, transform 0.12s linear; }
+#hand.on { opacity: 1; }
+#hand i { position: absolute; left: -22px; top: -22px; width: 44px; height: 44px; border-radius: 50%;
+  border: 1.5px solid rgb(143 236 255 / 0.75); box-shadow: 0 0 18px rgb(143 236 255 / 0.35), inset 0 0 12px rgb(143 236 255 / 0.2);
+  transition: all 0.18s var(--ease); }
+#hand i::before, #hand i::after { content: ""; position: absolute; background: rgb(143 236 255 / 0.8); }
+#hand i::before { left: 50%; top: -9px; bottom: -9px; width: 1px; transform: translateX(-0.5px);
+  mask-image: linear-gradient(#000 0 9px, transparent 9px calc(100% - 9px), #000 calc(100% - 9px)); }
+#hand i::after { top: 50%; left: -9px; right: -9px; height: 1px; transform: translateY(-0.5px);
+  mask-image: linear-gradient(90deg, #000 0 9px, transparent 9px calc(100% - 9px), #000 calc(100% - 9px)); }
+#hand.pinch i { transform: scale(0.55); border-color: var(--gold); box-shadow: 0 0 22px rgb(255 196 108 / 0.6); }
+#hand.pinch i::before, #hand.pinch i::after { background: var(--gold); }
+
+/* ───────── attention: the periphery rests when you look away, and wakes when you look back ───────── */
+.zone, #command { transition: opacity 0.9s var(--ease), transform 0.9s var(--ease), filter 0.9s var(--ease); }
+body.unattended .zone { opacity: 0.42; filter: saturate(0.6); }
+@media (prefers-reduced-motion: reduce) { #hand { transition: opacity 0.2s; } }

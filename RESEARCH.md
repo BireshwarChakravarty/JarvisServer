@@ -59,6 +59,16 @@ This build combines the strongest idea from each into one system.
 | Apple's downloadable Premium voices are far better than the compact defaults ([Apple: Spoken Content voices](https://support.apple.com/guide/mac-help/change-the-voice-your-mac-uses-to-speak-text-mchlp2290/mac)) | The `say` fallback picks the best installed British voice (Jamie Premium first), and setup offers a link to download one |
 | Newer open models (e.g. [Kyutai Pocket TTS](https://huggingface.co/kyutai/pocket-tts)) sound more natural but need PyTorch and a gated download whose terms forbid cloning a voice without consent | Not bundled. JARVIS will never clone the film actor's voice; the blend is an original voice |
 
+### Gestures, round two: motion, not just poses
+
+| Finding | What it changed |
+|---|---|
+| MediaPipe's recogniser classifies only static poses, but it also returns 21 hand landmarks per frame ([Gesture Recognizer](https://developers.google.com/edge/mediapipe/solutions/vision/gesture_recognizer/python), [hand landmarks](https://developers.google.com/mediapipe/solutions/vision/hand_landmarker)) | `jarvis/vision/motion.py` tracks the palm centre and the thumb-to-index gap over time: swipes, flicks and pinch-and-drag, all from the same model, with no extra download |
+| Air-gesture projects ([mctrl](https://github.com/manav1702/mctrl), [handTrack](https://github.com/small-cactus/handTrack)) use pinch as the "grab", with hysteresis so it doesn't flicker | Pinch opens at a gap under 0.32 palm widths and releases above 0.50, after two frames; a drag locks to one axis after 3.5% of travel |
+| A swipe performed with an open hand looks like ✋ "stop" to a pose classifier | Held poses only count while the hand is still; letting go of a pinch is never read as a swipe |
+| The film's workshop holograms are grabbed and turned by hand | Pinch and drag sideways spins the HUD core with inertia; pinch and drag vertically is a volume dial drawn around the core |
+| Face landmarks give head yaw cheaply (nose against the eye midpoint) | An attention estimate with hysteresis: the HUD's periphery rests when you look away |
+
 ## 4. Gaps no surveyed project filled, built here
 
 1. **A greeting that depends on the time of day and comes with a briefing.** At login, or the first time you're back at the Mac that day, you get the weather, your next meetings, overdue reminders, unread mail and headlines in under 70 spoken words. It then asks what you'd like to do today and listens without needing the wake word.

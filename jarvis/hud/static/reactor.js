@@ -154,6 +154,10 @@
     setLevel(v, source) { this.target = Math.max(this.target, Math.min(1, v)); if (source) this.voiceSource = source; }
     setEvents(events) { this.events = events || []; }
     pulse() { this.target = Math.max(this.target, 0.8); }
+    // hologram manipulation: pinch and drag sideways to spin the core, like the workshop holograms
+    nudge(dx) { this.spinVel = (this.spinVel || 0) + dx * 40; }
+    // the pinch volume dial: a gold arc and readout around the core (null hides it)
+    setDial(v) { if (v === null || v === undefined) { this.dialHide = true; } else { this.dial = v; this.dialHide = false; this.dialOn = this.dialOn || 0; } }
 
     frame(ts) {
       const dt = Math.min(0.05, (ts - (this.last || ts)) / 1000);
@@ -175,6 +179,11 @@
       this.ringsOn = Math.min(1, this.ringsOn + dt * (this.birth > 0.6 ? 0.55 : 0));
       const busy = this.state === "thinking" || this.state === "working" || this.state === "transcribing" || this.state === "booting";
       this.spin += dt * k * (busy ? 1.4 : 0.12);
+      if (this.spinVel) {            // grabbed: spin with inertia, plasma follows
+        this.spin += this.spinVel * dt; this.grabT = (this.grabT || 0) + this.spinVel * dt * 0.8;
+        this.spinVel *= Math.pow(0.08, dt); if (Math.abs(this.spinVel) < 0.01) this.spinVel = 0;
+      }
+      if (this.dial !== undefined) this.dialOn = Math.max(0, Math.min(1, (this.dialOn || 0) + dt * (this.dialHide ? -2.5 : 5)));
       this.sweep += dt * k * (busy ? 3.2 : 0);
       this.drawCore();
       this.drawRings(busy);
@@ -189,7 +198,7 @@
         const gl = this.gl, u = this.u;
         gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
         gl.uniform2f(u.uRes, this.gc.width, this.gc.height);
-        gl.uniform1f(u.uTime, this.t);
+        gl.uniform1f(u.uTime, this.t + (this.grabT || 0));
         gl.uniform1f(u.uLevel, this.level);
         gl.uniform1f(u.uSwirl, this.cur.swirl);
         gl.uniform1f(u.uGlow, this.cur.glow);
@@ -256,6 +265,28 @@
         ctx.moveTo(Math.cos(a) * rVoice, Math.sin(a) * rVoice);
         ctx.lineTo(Math.cos(a) * (rVoice + len), Math.sin(a) * (rVoice + len));
         ctx.stroke();
+      }
+
+      // ── volume dial (pinch + drag up/down)
+      if (this.dialOn > 0.01) {
+        const rD = rVoice + base * 0.08, frac = Math.max(0, Math.min(1, this.dial / 100)), o = this.dialOn;
+        ctx.lineWidth = 3 * dpr;
+        ctx.strokeStyle = this.rgba([255, 255, 255], 0.08 * o);
+        ctx.beginPath(); ctx.arc(0, 0, rD, top, top + TAU); ctx.stroke();
+        ctx.strokeStyle = this.rgba([255, 196, 108], 0.95 * o);
+        ctx.shadowColor = "rgba(255,196,108,0.8)"; ctx.shadowBlur = 12 * dpr;
+        ctx.beginPath(); ctx.arc(0, 0, rD, top, top + TAU * frac); ctx.stroke();
+        ctx.shadowBlur = 0;
+        // readout sits below the ring, on dark glass, never over the bright core
+        const label = `VOLUME  ${Math.round(this.dial)}%`, ly = rD + base * 0.17;
+        ctx.font = `500 ${12 * dpr}px "Geist Mono", ui-monospace, monospace`;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        const tw = ctx.measureText(label).width, ph = 22 * dpr;
+        ctx.fillStyle = `rgba(3,5,8,${0.72 * o})`;
+        ctx.beginPath(); ctx.roundRect(-tw / 2 - 12 * dpr, ly - ph / 2, tw + 24 * dpr, ph, ph / 2); ctx.fill();
+        ctx.strokeStyle = this.rgba([255, 196, 108], 0.45 * o); ctx.lineWidth = 1 * dpr; ctx.stroke();
+        ctx.fillStyle = this.rgba([255, 214, 150], o);
+        ctx.fillText(label, 0, ly + 0.5 * dpr);
       }
 
       // ── chronometer ring: the next 12 hours around "now"

@@ -193,7 +193,21 @@ def run() -> int:
         text = stt.transcribe(resample(audio, sr))
         if "london" not in text.lower() or "time" not in text.lower():
             raise RuntimeError(f"unexpected transcript {text!r}")
+        state["stt"] = stt
         return f"[{name}] {text!r} in {time.time() - t0:.2f}s"
+
+    @check("voice: the JARVIS blend speaks clearly, in spoken form", timeout=300)
+    def _():
+        from jarvis.voice.text import speech_form
+        from jarvis.voice.tts import KokoroONNX, VOICE_PRESETS
+        p = VOICE_PRESETS["jarvis"]
+        tts = KokoroONNX("jarvis", p["speed"], state["cfg"].models_dir)
+        line = speech_form("Your board call is at 9:00 AM tomorrow, sir.")
+        audio = tts.synth(line)
+        text = state["stt"].transcribe(resample(audio, tts.sample_rate)).lower()
+        if "nine" not in text and "9" not in text or "morning" not in text:
+            raise RuntimeError(f"said {line!r}, heard {text!r}")
+        return f"said {line!r}; Whisper heard {text!r}"
 
     @check("eyes: face engine")
     def _():
@@ -214,6 +228,27 @@ def run() -> int:
             raise RuntimeError("gesture model failed to load")
         ge.process(np.zeros((480, 640, 3), np.uint8))
         return "MediaPipe gesture recogniser ran"
+
+    @check("eyes: motion gestures (swipe, pinch dial)")
+    def _():
+        from jarvis.vision.gestures import GestureEngine
+
+        def hand(x, y, pinch=False):
+            pts = [(x, y)] * 21
+            pts[0], pts[9], pts[4] = (x, y + 0.05), (x, y - 0.05), (x - 0.01, y - 0.08)
+            pts[8] = (x - 0.01, y - 0.08) if pinch else (x + 0.07, y - 0.12)
+            return pts
+        got, moves = [], []
+        ge = GestureEngine(state["cfg"].models_dir, lambda g, a: got.append(a), on_motion=moves.append)
+        for i in range(6):
+            ge.handle_motion(i / 12, hand(0.70 - 0.06 * i, 0.5))
+        frames = [hand(0.5, 0.6, True)] * 3 + [hand(0.5, 0.6 - 0.03 * i, True) for i in range(1, 7)] + [None]
+        for i, f in enumerate(frames):
+            ge.handle_motion(5 + i / 12, f)
+        kinds = [m.kind for m in moves]
+        if got != ["next"] or kinds[0] != "pinch_start" or kinds[-1] != "pinch_end" or "pinch_drag" not in kinds:
+            raise RuntimeError(f"swipes {got}, motion {kinds}")
+        return "swipe → next track; pinch → drag → release"
 
     @check("permissions API answers", timeout=30)
     def _():

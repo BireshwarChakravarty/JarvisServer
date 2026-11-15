@@ -131,7 +131,8 @@ class FaceEngine:
         faces: list[Face] = []
         for det in dets[:4]:
             x, y, w, h = (int(v) for v in det[:4])
-            face = Face(box=(x, y, w, h), score=float(det[-1]))
+            face = Face(box=(x, y, w, h), score=float(det[-1]),
+                        landmarks=[(float(det[i]), float(det[i + 1])) for i in range(4, 14, 2)] if len(det) >= 15 else [])
             if self.known and w >= 40:
                 face.name, face.similarity = self.identify(self.embed(small, det))
             faces.append(face)
@@ -141,6 +142,22 @@ class FaceEngine:
         bus.emit("faces", w=small.shape[1], h=small.shape[0], faces=[
             {"box": f.box, "name": f.name, "sim": round(f.similarity, 2)} for f in faces
         ])
+        self._update_attention(faces)
+
+    def _update_attention(self, faces: list[Face]) -> None:
+        """Is the person at the Mac looking at the screen? Hysteresis so a glance doesn't flicker."""
+        from jarvis.vision.motion import attention
+
+        main = max(faces, key=lambda f: f.box[2] * f.box[3], default=None)
+        score = attention(main.landmarks, main.box[2]) if main and len(main.landmarks) >= 3 else 0.0
+        self._att = 0.5 * getattr(self, "_att", 0.0) + 0.5 * score
+        looking = getattr(self, "looking", False)
+        if not looking and self._att > 0.62:
+            self.looking = True
+        elif looking and self._att < 0.35:
+            self.looking = False
+        if getattr(self, "looking", False) != looking:
+            bus.emit("attention", looking=self.looking)
 
     def snapshot(self) -> list[Face]:
         with self._lock:

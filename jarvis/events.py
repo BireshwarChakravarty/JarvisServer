@@ -32,7 +32,7 @@ class EventBus:
     def emit(self, type_: str, **payload: Any) -> None:
         """Publish from any thread."""
         event = {"type": type_, "ts": time.time(), **payload}
-        if type_ not in ("level", "stats", "faces"):
+        if type_ not in ("level", "stats", "faces", "hand", "spin", "dial", "attention"):   # live-only streams
             self.history.append(event)
         if type_ == "state":
             self.state["state"] = payload.get("state")

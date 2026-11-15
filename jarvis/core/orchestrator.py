@@ -55,6 +55,7 @@ def _human_duration(seconds: float) -> str:
 class Jarvis:
     def __init__(self, cfg, headless: bool = False) -> None:
         self.cfg = cfg
+        self.show_window = None   # set by the app shell: brings the HUD window to the front
         self.headless = headless
         self.loop: asyncio.AbstractEventLoop | None = None
         self.memory = Memory(cfg.db_path)
@@ -234,7 +235,7 @@ class Jarvis:
                 self.boot(f"Facial recognition: {'tracking ' + owner if enrolled else 'online (run `jarvis enroll`)'}",
                           enrolled or None)
         if cfg.get("vision.gestures", True):
-            self.gestures = GestureEngine(cfg.models_dir, self._on_gesture_thread)
+            self.gestures = GestureEngine(cfg.models_dir, self._on_gesture_thread, on_motion=self._on_motion_thread)
             if await asyncio.to_thread(self.gestures.load):
                 self.camera.add_processor(self.gestures.process)
                 self.capabilities["gestures"] = True
@@ -765,6 +766,47 @@ class Jarvis:
             self.trigger_listen()
         elif action == "media_toggle":
             asyncio.create_task(registry.call("media_control", {"action": "toggle"}, self.ctx))
+        elif action in ("next", "previous"):
+            asyncio.create_task(registry.call("media_control", {"action": action}, self.ctx))
+        elif action == "show_hud":
+            if self.show_window:
+                self.show_window()
+
+    # pinch-and-drag: vertical is a volume dial, sideways spins the hologram (the HUD does that part)
+    def _on_motion_thread(self, ev) -> None:
+        if self.loop:
+            self.loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self._on_motion(ev)))
+
+    async def _on_motion(self, ev) -> None:
+        from jarvis.mac import system as mac
+
+        if ev.kind == "pinch_start":
+            self._dial = {"start": None, "sent": None, "t": 0.0}
+            try:
+                self._dial["start"] = await asyncio.to_thread(mac.get_volume)
+            except Exception:
+                self._dial["start"] = 50
+            bus.emit("dial", phase="start", value=self._dial["start"])
+            return
+        dial = getattr(self, "_dial", None)
+        if dial is None or dial["start"] is None:
+            return
+        if ev.kind == "pinch_drag" and ev.direction == "x":
+            bus.emit("spin", dx=round(ev.dx, 4))
+        elif ev.kind in ("pinch_drag", "pinch_end") and ev.direction == "y":
+            level = int(max(0, min(100, round(dial["start"] + ev.total * 160))))   # a hand-span ≈ the full range
+            now = time.monotonic()
+            if level != dial["sent"] and (ev.kind == "pinch_end" or now - dial["t"] > 0.12):
+                dial["sent"], dial["t"] = level, now
+                bus.emit("dial", phase="end" if ev.kind == "pinch_end" else "move", value=level)
+                try:
+                    await asyncio.to_thread(mac.set_volume, level)
+                except Exception:
+                    log.debug("volume dial failed", exc_info=True)
+        if ev.kind == "pinch_end":
+            if ev.direction != "y":
+                bus.emit("dial", phase="end", value=None)
+            self._dial = None
 
     # ═════════════════════════════ HUD commands ══════════════════════════
     async def hud_command(self, msg: dict) -> None:
