@@ -428,7 +428,8 @@ class Speaker:
             self._stop_play.clear()
             self._playing.set()
             self.current_text = text
-            bus.emit("speaking", text=text)
+            # duration lets the HUD pace subtitles to the actual audio, word for word
+            bus.emit("speaking", text=text, duration=round(len(audio) / max(1, sr), 2))
             try:
                 self._play(audio, sr, gen, pause=breath_after(text))
             except Exception as exc:  # no output device, device unplugged … keep the worker alive

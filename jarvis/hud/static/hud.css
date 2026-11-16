@@ -160,14 +160,11 @@ body[data-state="muted"] .pip { background: #6b7685; box-shadow: none; }
 .you:not(:empty)::before { content: "“"; opacity: 0.6; } .you:not(:empty)::after { content: "”"; opacity: 0.6; }
 .jarvis {
   margin: 0 auto; max-width: 780px; font: 300 clamp(20px, 1.9vw, 27px)/1.38 var(--sans); letter-spacing: -0.01em;
-  color: var(--text); text-wrap: pretty; max-height: 4.2em; overflow: hidden;
+  color: var(--text); height: 2.76em; overflow: hidden;   /* exactly two subtitle lines */
 }
-.jarvis .w { display: inline-block; white-space: pre; animation: word 0.55s var(--ease) both; }
-.jarvis .cap { transition: opacity 0.6s var(--ease), color 0.6s; }
-.jarvis .cap + .cap::before { content: " "; }
-.jarvis .cap.pending { display: none; }
-.jarvis .cap.said { opacity: 0.38; }
-.jarvis.dense { font-size: clamp(17px, 1.5vw, 22px); }
+.jarvis .line { display: block; white-space: nowrap; }
+.jarvis .w { display: inline-block; white-space: pre; animation: word 0.45s var(--ease) both; }
+
 @keyframes word { from { opacity: 0; filter: blur(8px); } }
 .bootline { margin-top: 10px; height: 16px; font-size: 11px; color: var(--muted); letter-spacing: 0.04em; transition: opacity 0.6s; }
 body:not(.booting) .bootline { opacity: 0; }

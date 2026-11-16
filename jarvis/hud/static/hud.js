@@ -40,61 +40,96 @@
   }
   setTimeout(finishBoot, 5000);
 
-  /* ───────────── dialogue: broadcast-style captions ─────────────
-     Whole sentences only (never a sentence cut in half), the line being spoken bright and the one
-     before it dimmed, at most about three lines. When JARVIS is speaking aloud, each sentence
-     appears as his voice reaches it rather than racing ahead of it. */
-  let clearTimer = null, voiced = false;
-  const caps = [];
+  /* ───────────── dialogue: subtitles in time with his voice ─────────────
+     Like broadcast subtitles: what he's saying, in blocks of at most two lines (measured at the real
+     font and width, broken at commas and full stops where possible), each block shown while those
+     words are being spoken: the speaker reports every phrase's real audio duration. Without a voice
+     (text mode) blocks advance at reading speed. Never half a sentence out of context. */
+  let clearTimer = null, voiced = false, lastSpoke = 0;
+  let subTimers = [], readQueue = [], reading = false;
+  const spokenKeys = [];
   const norm = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const measurer = document.createElement("canvas").getContext("2d");
+
+  function clearSubs() { subTimers.forEach(clearTimeout); subTimers = []; readQueue = []; reading = false; }
   function showYou(text) {
     $("you").textContent = text;
-    $("jarvis").innerHTML = ""; caps.length = 0; $("jarvis").classList.remove("dense");
+    $("jarvis").innerHTML = ""; clearSubs();
     clearTimeout(clearTimer);
   }
-  function addReply(text) {
-    const el = document.createElement("span");
-    el.className = "cap pending";
-    const cap = { text, key: norm(text), el, shown: false };
-    caps.push(cap);
-    $("jarvis").appendChild(el);
-    // text-only (no voice yet), or a sentence the voice never announces: show it anyway
-    if (!voiced) reveal(cap);
-    else setTimeout(() => { if (!cap.shown) reveal(cap); }, 4500);
-    clearTimeout(clearTimer);
-    clearTimer = setTimeout(() => { $("you").textContent = ""; $("jarvis").innerHTML = ""; caps.length = 0; }, 60000);
-  }
-  function onSpoken(text) {          // the speaker started a phrase: reveal the sentences in it
-    voiced = true;
-    const k = norm(text || "");
-    for (const c of caps.slice()) if (!c.shown && c.key && k.includes(c.key)) reveal(c);   // copy: fit() prunes caps
-  }
-  function reveal(cap) {
-    const idx = caps.indexOf(cap);
-    for (let i = 0; i < idx; i++) if (!caps[i].shown) reveal(caps[i]);   // keep reading order
-    if (cap.shown) return;
-    cap.shown = true;
-    cap.el.className = "cap live";
-    const words = cap.text.split(/\s+/).filter(Boolean);
-    cap.el.textContent = "";
-    words.forEach((w, i) => {
-      const span = document.createElement("span");
-      span.className = "w"; span.textContent = w; span.style.animationDelay = `${i * 38}ms`;
-      cap.el.appendChild(span); cap.el.appendChild(document.createTextNode(" "));
-    });
-    caps.forEach((c) => { if (c.shown && c !== cap) c.el.className = "cap said"; });
-    fit();
-  }
-  function fit() {
-    const el = $("jarvis");
-    el.classList.remove("dense");
-    // drop whole earlier sentences until everything fits; never touch the live one
-    while (el.scrollHeight > el.clientHeight + 2) {
-      const first = caps.find((c) => c.shown && !c.el.classList.contains("live"));
-      if (!first) break;
-      first.el.remove(); caps.splice(caps.indexOf(first), 1);
+  function linesFor(text) {
+    const el = $("jarvis"), cs = getComputedStyle(el);
+    measurer.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const max = el.clientWidth * 0.94, lines = [];
+    let line = "";
+    for (const w of text.split(/\s+/).filter(Boolean)) {
+      const t = line ? line + " " + w : w;
+      if (measurer.measureText(t).width <= max || !line) line = t; else { lines.push(line); line = w; }
     }
-    if (el.scrollHeight > el.clientHeight + 2) el.classList.add("dense");   // one long sentence: smaller type
+    if (line) lines.push(line);
+    return lines;
+  }
+  // two lines per block; end a block at punctuation when one falls in its second half
+  function blocksFor(text) {
+    const lines = linesFor(text), blocks = [];
+    for (let i = 0; i < lines.length; i += 2) blocks.push(lines.slice(i, i + 2));
+    for (let i = 0; i < blocks.length - 1; i++) {
+      const joined = blocks[i].join(" "), cut = Math.max(joined.lastIndexOf(", "), joined.lastIndexOf(". "),
+        joined.lastIndexOf("; "), joined.lastIndexOf("? "), joined.lastIndexOf("! "));
+      if (cut > joined.length * 0.35 && cut < joined.length - 2) {
+        const keep = joined.slice(0, cut + 1), carry = joined.slice(cut + 2);
+        const rest = linesFor(carry + " " + blocks.slice(i + 1).map((b) => b.join(" ")).join(" "));
+        const rebuilt = []; for (let k = 0; k < rest.length; k += 2) rebuilt.push(rest.slice(k, k + 2));
+        const head = linesFor(keep);
+        if (head.length <= 2) { blocks.splice(i, blocks.length - i, head, ...rebuilt); }
+      }
+    }
+    return blocks;
+  }
+  function showBlock(lines) {
+    const el = $("jarvis"); el.innerHTML = "";
+    let n = 0;
+    lines.forEach((ln) => {
+      const row = document.createElement("span"); row.className = "line";
+      ln.split(" ").forEach((w) => {
+        const span = document.createElement("span"); span.className = "w"; span.textContent = w + " ";
+        span.style.animationDelay = `${n++ * 28}ms`; row.appendChild(span);
+      });
+      el.appendChild(row);
+    });
+    clearTimeout(clearTimer);
+    clearTimer = setTimeout(() => { $("you").textContent = ""; el.innerHTML = ""; }, 60000);
+  }
+  // voiced: pace the blocks across the phrase's real duration
+  function onSpoken(text, duration) {
+    voiced = true; lastSpoke = Date.now();
+    spokenKeys.push(norm(text)); if (spokenKeys.length > 20) spokenKeys.shift();
+    subTimers.forEach(clearTimeout); subTimers = []; readQueue = []; reading = false;
+    const blocks = blocksFor(text), total = blocks.reduce((n, b) => n + b.join(" ").length, 0) || 1;
+    const dur = Math.max(0.6, (duration || text.length / 15) * 1000);
+    let at = 0;
+    blocks.forEach((b) => {
+      subTimers.push(setTimeout(() => showBlock(b), at));
+      at += dur * (b.join(" ").length / total);
+    });
+  }
+  // text mode (or a line the voice never speaks): reading pace, in order
+  function addReply(text) {
+    if (voiced && Date.now() - lastSpoke < 30000) {
+      setTimeout(() => { const k = norm(text); if (!spokenKeys.some((s) => s.includes(k))) queueRead(text); }, 6000);
+      return;
+    }
+    queueRead(text);
+  }
+  function queueRead(text) {
+    readQueue.push(...blocksFor(text));
+    if (!reading) nextRead();
+  }
+  function nextRead() {
+    const b = readQueue.shift();
+    if (!b) { reading = false; return; }
+    reading = true; showBlock(b);
+    subTimers.push(setTimeout(nextRead, Math.max(1600, (b.join(" ").length / 15) * 1000)));
   }
 
   /* ───────────── weather ───────────── */
@@ -389,7 +424,8 @@
       case "wake": reactor.pulse(); setState("listening"); break;
       case "transcript": if (!e.replay) showYou(e.text); break;
       case "reply": if (!e.replay) addReply(e.text); break;
-      case "speaking": if (!e.replay) onSpoken(e.text); break;
+      case "speaking": if (!e.replay) onSpoken(e.text, e.duration); break;
+      case "interrupted": subTimers.forEach(clearTimeout); subTimers = []; break;
       case "tool": if (!e.replay) logTool(e); break;
       case "stats":
         bar("v-cpu", "n-cpu", e.cpu); bar("v-mem", "n-mem", e.mem); bar("v-disk", "n-disk", e.disk);

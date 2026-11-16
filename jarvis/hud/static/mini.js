@@ -37,8 +37,17 @@
     if (cur) out.push(cur);
     return out;
   }
-  function say(text) {
-    queue.push(...blocks(text));
+  // with the phrase's real audio duration, each block is shown while its words are spoken
+  function say(text, duration) {
+    const bs = blocks(text);
+    if (duration) {
+      queue = []; clearTimeout(timer); timer = null;
+      const total = bs.reduce((n, b) => n + b.length, 0) || 1;
+      let at = 0;
+      bs.forEach((b) => { setTimeout(() => show(b), at); at += duration * 1000 * (b.length / total); });
+      return;
+    }
+    queue.push(...bs);
     if (!timer) next();
   }
   function next() {
@@ -65,7 +74,7 @@
       case "level": if (e.source === "tts" || state === "listening") reactor.setLevel(e.value, e.source); break;
       case "wake": reactor.pulse(); setState("listening"); break;
       case "transcript": if (!e.replay) { queue = []; clearTimeout(timer); timer = null; show(`“${e.text}”`, "you"); } break;
-      case "speaking": if (!e.replay) say(e.text); break;
+      case "speaking": if (!e.replay) say(e.text, e.duration); break;
       case "agenda": agenda = e.events || []; if (state === "idle") idleLine(); break;
       case "announce": if (!e.replay) say(e.text); break;
       case "mic": if (e.muted) setState("muted"); break;
