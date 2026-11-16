@@ -135,6 +135,14 @@ class Supervisor:
     def setup_done(self) -> bool:
         return bool(self.cfg.setup_complete)
 
+    def page_url(self, path: str) -> str:
+        """A full address on JARVIS's own server. pywebview resolves a bare path like "/pair" against
+        its *own* internal file server (a random port), which 404s, so never hand it a bare path."""
+        if path.startswith(("http://", "https://")):
+            return path
+        port = int(self.cfg.get("hud.port", 7777))
+        return f"http://127.0.0.1:{port}/{path.lstrip('/')}"
+
     def show_window(self, url: str | None = None) -> None:
         w = self.window
         if self.mini is not None:
@@ -143,7 +151,7 @@ class Supervisor:
             return
         try:
             if url:
-                w.load_url(url)
+                w.load_url(self.page_url(url))
             w.show()
             w.restore()
         except Exception as exc:

@@ -115,3 +115,23 @@ def test_permissions_and_login_item_are_safe_off_mac():
     if not permissions.IS_MAC:
         assert all(p["status"] == "unavailable" for p in sts)
         assert login_item.status() == "unavailable"
+
+
+def test_menu_pages_open_on_jarvis_own_server(cfg):
+    """The menu's Settings… and Pair iPhone or iPad… must load from JARVIS's server, not pywebview's."""
+    from jarvis.app.supervisor import Supervisor
+
+    sup = Supervisor(cfg)
+    loaded = []
+
+    class Window:
+        def load_url(self, u): loaded.append(u)
+        def show(self): pass
+        def restore(self): pass
+
+    sup.window = Window()
+    for path in ("/pair", "/setup", "setup#senses", "http://127.0.0.1:7777/"):
+        sup.show_window(path)
+    port = int(cfg.get("hud.port", 7777))
+    assert loaded == [f"http://127.0.0.1:{port}/pair", f"http://127.0.0.1:{port}/setup",
+                      f"http://127.0.0.1:{port}/setup#senses", "http://127.0.0.1:7777/"]
