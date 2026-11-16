@@ -79,6 +79,7 @@ greeting:
 app:
   mini_panel: true         # a floating mini JARVIS while the window is minimised, closed or hidden
   mini_position: null      # remembered after you drag it
+  companion: false         # iPhone / iPad companion on your home network (pair by QR code)
 
 hud:
   enabled: true

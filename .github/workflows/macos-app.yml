@@ -213,6 +213,13 @@ jobs:
           sleep 10
           n=$(pgrep -f "/Applications/JARVIS.app/Contents/MacOS" | wc -l | tr -d ' '); echo "processes: $n"; [ "$n" -ge 1 ] && [ "$n" -le 2 ]
           screencapture -x "$RUNNER_TEMP/first-launch.png" || true
+      - name: The iPhone / iPad companion turns on, offers a pairing link, serves the app, turns off
+        run: |
+          curl -sf -X POST -H 'Content-Type: application/json' -d '{"enabled": true}' http://127.0.0.1:7777/api/remote/enable
+          curl -sf http://127.0.0.1:7777/api/remote | python3 -c "import sys,json; s=json.load(sys.stdin); print(s['url'].split('#')[0]); assert s['running'] and ':7778/remote#pair=' in s['url']"
+          curl -sf http://127.0.0.1:7778/remote | grep -q "remote.js" && echo "companion app served on :7778 ✓"
+          code=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -d '{"code":"guess"}' http://127.0.0.1:7778/remote/api/pair); [ "$code" = 403 ] && echo "bad pairing code refused ✓"
+          curl -sf -X POST -H 'Content-Type: application/json' -d '{"enabled": false}' http://127.0.0.1:7777/api/remote/enable
       - name: A Quit request really quits (as at shutdown, restart and log-out)
         run: |
           osascript -e 'tell application "JARVIS" to quit'

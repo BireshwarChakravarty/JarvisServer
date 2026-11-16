@@ -442,6 +442,43 @@ def make_router(sup) -> APIRouter:
                 needs = True
         return {"ok": True, "enabled": on, "message": message, "needs_permission": needs}
 
+    # ── iPhone / iPad companion ───────────────────────────────────────────
+    @r.get("/api/remote")
+    async def remote_state():
+        from jarvis.remote.server import PORT, lan_addresses
+
+        enabled = bool(sup.cfg.get("app.companion", False))
+        out = {"enabled": enabled, "running": sup.remote.running, "error": sup.remote.error,
+               "devices": sup.devices.list()}
+        if enabled and sup.remote.running:
+            name, ip = await asyncio.to_thread(lan_addresses)
+            code, expires = sup.devices.current_code()
+            out.update(url=f"http://{name}:{PORT}/remote#pair={code}",
+                       ip_url=f"http://{ip}:{PORT}/remote#pair={code}" if ip else None,
+                       host=name, expires=int(expires))
+        return out
+
+    @r.post("/api/remote/enable")
+    async def remote_enable(body: dict = Body(...)):
+        enabled = bool(body.get("enabled"))
+        _write_user_config(sup.cfg, {"app": {"companion": enabled}})
+        if enabled:
+            ok = await sup.remote.start()
+            if not ok:
+                return JSONResponse({"ok": False, "error": sup.remote.error}, status_code=500)
+        else:
+            await sup.remote.stop()
+        return {"ok": True, "enabled": enabled}
+
+    @r.post("/api/remote/new-code")
+    async def remote_new_code():
+        sup.devices.new_code()
+        return {"ok": True}
+
+    @r.post("/api/remote/forget")
+    async def remote_forget(body: dict = Body(default={})):
+        return {"ok": True, "forgotten": sup.devices.forget(body.get("id"))}
+
     @r.post("/api/setup/open-unlock-settings")
     async def open_unlock_settings():
         # Touch ID & Password, where "Use Apple Watch to unlock" lives (Apple's secure auto-unlock)

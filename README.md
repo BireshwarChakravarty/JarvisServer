@@ -50,6 +50,19 @@ smart home and terminal. Everything shows on a live, holographic HUD.
 ---
 
 
+## iPhone & iPad companion
+
+Choose **Pair iPhone or iPad…** in the menu-bar icon, turn the companion on, and scan the QR code
+with your iPhone's or iPad's Camera. The JARVIS companion opens in Safari; use **Share ▸ Add to
+Home Screen** for a full-screen app. From it you can ask anything (type, or use the keyboard's 🎤
+dictation key), answer his "Shall I…?" questions, run protocols, see what he's saying as subtitles,
+and stop, mute, switch hand control, lock the Mac or bring JARVIS up on its screen.
+
+It works on your home Wi-Fi only. Each QR code expires after 10 minutes, each device gets its own
+key (forget one or all on the pairing screen), only devices on a private network are answered, and
+the camera feed never leaves the Mac. The first time, macOS may ask whether JARVIS can accept
+incoming connections: allow it.
+
 ## Built-in protocols
 
 Say *"Jarvis, engage …"* (or any alias) or tap one on the HUD (**More** lists them all).

@@ -19,6 +19,11 @@ class Supervisor:
         self.cfg = cfg
         self.jarvis = None
         self.mini = None   # the floating mini JARVIS (app mode only)
+        from jarvis.remote.devices import DeviceStore
+        from jarvis.remote.server import RemoteServer
+
+        self.devices = DeviceStore(cfg.home / "companion.json")
+        self.remote = RemoteServer(self, self.devices)   # iPhone / iPad companion (off until enabled)
         self.models = ModelManager(cfg.models_dir, cfg.get("voice.stt.model", "small.en"))
         self.camera = None          # setup-time camera (released before JARVIS starts)
         self.faces = None           # setup-time face engine
@@ -33,6 +38,8 @@ class Supervisor:
     async def boot(self) -> None:
         self.loop = asyncio.get_running_loop()
         bus.bind(self.loop)
+        if self.cfg.get("app.companion", False):
+            await self.remote.start()
         if self.cfg.setup_complete:
             if not all(self.models.ready(k) for k in ESSENTIAL):
                 self.start_downloads()

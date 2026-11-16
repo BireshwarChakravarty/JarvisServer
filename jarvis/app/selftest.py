@@ -313,6 +313,32 @@ def run() -> int:
         menubar._terminating = False
         return "applicationShouldTerminate → YES"
 
+    @check("companion: the iPhone/iPad listener starts, serves the app, refuses unpaired devices", timeout=60)
+    def _():
+        import asyncio
+        import socket
+
+        import httpx
+
+        from jarvis.app.supervisor import Supervisor
+        sup = Supervisor(state["cfg"])
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]
+
+        async def go():
+            ok = await sup.remote.start(host="127.0.0.1", port=port)
+            try:
+                async with httpx.AsyncClient() as c:
+                    page = await c.get(f"http://127.0.0.1:{port}/remote")
+                    pair = await c.post(f"http://127.0.0.1:{port}/remote/api/pair", json={"code": "guess"})
+                return ok, page.status_code, "remote.js" in page.text, pair.status_code
+            finally:
+                await sup.remote.stop()
+        ok, page, has_js, pair = asyncio.run(go())
+        if not (ok and page == 200 and has_js and pair == 403):
+            raise RuntimeError(f"started={ok} page={page} js={has_js} pair-with-bad-code={pair}")
+        return f"listener on :{port} · page 200 · bad pairing code refused (403)"
+
     @check("setup + HUD server")
     def _():
         from fastapi.testclient import TestClient

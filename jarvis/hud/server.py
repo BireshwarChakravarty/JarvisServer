@@ -55,6 +55,10 @@ def create_app(jarvis=None, supervisor=None) -> FastAPI:
     async def setup_page():
         return FileResponse(STATIC / "onboarding.html", headers=NO_STORE)
 
+    @app.get("/pair")
+    async def pair_page():
+        return FileResponse(STATIC / "pair.html", headers=NO_STORE)
+
     @app.get("/mini")
     async def mini_page():
         return FileResponse(STATIC / "mini.html", headers=NO_STORE)

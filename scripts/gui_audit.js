@@ -11,6 +11,7 @@ const PAGES = [
   ['setup-speech', '/setup?demo#speech', 2500],
   ['setup-ready', '/setup?demo#ready', 2500],
   ['mini', '/mini?demo', 3000, [[360, 96]]],   // the floating capsule has one fixed size
+  ['pair', '/pair?demo', 2000],
 ];
 
 const probe = () => {

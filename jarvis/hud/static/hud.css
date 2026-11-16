@@ -360,3 +360,6 @@ body.unattended .zone .optics { opacity: 1; }
 .proto-row span { font-size: 12px; color: var(--muted); line-height: 1.35; }
 .proto-row:hover, .proto-row:focus-visible { background: rgb(255 196 108 / 0.08); }
 @media (max-width: 860px) { .proto-sheet { left: 0; right: auto; } }
+
+/* `hidden` always wins: layout rules like `display: grid` must never resurrect a hidden element */
+[hidden] { display: none !important; }

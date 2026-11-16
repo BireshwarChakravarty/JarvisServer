@@ -144,6 +144,7 @@ def run_app() -> None:
         "mute": lambda: hud({"type": "mute", "muted": True}),
         "unmute": lambda: hud({"type": "mute", "muted": False}),
         "hands": lambda: hud({"type": "hand_control"}),
+        "pair": lambda: (sup.show_window("/pair"), show()),
         "update": lambda: update_now(),
         "settings": lambda: (sup.show_window("/setup"), show()),
         "quit": menubar.quit_app,
