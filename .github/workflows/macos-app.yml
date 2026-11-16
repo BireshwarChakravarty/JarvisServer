@@ -228,9 +228,9 @@ jobs:
           curl -sf -D headers.txt -o JARVIS.mobileconfig http://127.0.0.1:7778/remote/jarvis.mobileconfig
           grep -qi "application/x-apple-aspen-config" headers.txt && plutil -lint JARVIS.mobileconfig && echo "iOS profile ✓"
           ! grep -q "PRIVATE KEY" JARVIS.mobileconfig && echo "profile carries no private key ✓"
-          python3 -m pip install -q websockets
+          python3 -m venv "$RUNNER_TEMP/wsv" && "$RUNNER_TEMP/wsv/bin/pip" install -q websockets   # the system Python is externally managed
           PAIR=$(curl -sf http://127.0.0.1:7777/api/remote | python3 -c "import sys,json; print(json.load(sys.stdin)['url'].split('pair=')[1])")
-          CA="$CA" PAIR="$PAIR" python3 - <<'PY'
+          CA="$CA" PAIR="$PAIR" "$RUNNER_TEMP/wsv/bin/python" - <<'PY'
           import asyncio, json, os, ssl, time, urllib.request
           import websockets
           req = urllib.request.Request("http://127.0.0.1:7778/remote/api/pair", method="POST",
