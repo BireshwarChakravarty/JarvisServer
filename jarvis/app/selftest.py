@@ -339,6 +339,21 @@ def run() -> int:
             raise RuntimeError(f"started={ok} page={page} js={has_js} pair-with-bad-code={pair}")
         return f"listener on :{port} · page 200 · bad pairing code refused (403)"
 
+    @check("email: the Apple Mail scripts compile", timeout=90)
+    def _():
+        import subprocess
+        import tempfile
+        from jarvis.mac import mail
+        out = []
+        for name, src in mail.scripts().items():
+            with tempfile.NamedTemporaryFile(suffix=".scpt") as f:
+                r = subprocess.run(["/usr/bin/osacompile", "-o", f.name, "-e", src], capture_output=True, text=True,
+                                   timeout=60)
+            if r.returncode != 0:
+                raise RuntimeError(f"{name}: {r.stderr.strip()[:300]}")
+            out.append(name)
+        return "compiled: " + ", ".join(out)
+
     @check("setup + HUD server")
     def _():
         from fastapi.testclient import TestClient

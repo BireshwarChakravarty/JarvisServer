@@ -30,7 +30,7 @@ CATALOG = [
     {"key": "calendar", "title": "Calendars", "why": "Your agenda, briefings and new events", "required": False},
     {"key": "reminders", "title": "Reminders", "why": "Create and read reminders", "required": False},
     {"key": "contacts", "title": "Contacts", "why": "Message people by name", "required": False},
-    {"key": "automation", "title": "App control", "why": "Control apps like Music, Messages and Finder", "required": False},
+    {"key": "automation", "title": "App control", "why": "Control Music, Messages and Finder, and read your email", "required": False},
     {"key": "screen", "title": "Screen recording", "why": "“What's on my screen?”", "required": False},
     {"key": "accessibility", "title": "Accessibility", "why": "Hold ⌥ to talk, type text for you", "required": False},
 ]
@@ -150,9 +150,10 @@ def _automation_probe(prompt: bool) -> str:
         status = "denied"
     else:
         status = "unknown"
-    # Finder too: used for trash/reveal; prompts separately
-    subprocess.run(["/usr/bin/osascript", "-e", 'tell application "Finder" to return name'],
-                   capture_output=True, text=True, timeout=120)
+    # Finder and Mail too (trash/reveal; reading email): each prompts separately
+    for app in ("Finder", "Mail"):
+        subprocess.run(["/usr/bin/osascript", "-e", f'tell application "{app}" to return name'],
+                       capture_output=True, text=True, timeout=120)
     _automation_cache["status"] = status
     return status
 

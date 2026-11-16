@@ -454,6 +454,46 @@ def list_protocols(ctx):
     return ctx.protocols.list()
 
 
+# ═══════════════════════════════ email ═══════════════════════════════════════
+@tool("Check the user's email (Apple Mail, every account) and find what needs their attention. Returns "
+      "candidate unread messages, best first, already scored on this Mac. Pick AT MOST the requested number "
+      "(default 3) that genuinely need the user: a real person waiting on them, a deadline, a payment, an "
+      "approval, a question, something time-sensitive. Skip newsletters, promotions, receipts and automated "
+      "notices. For each one say who it's from, what it's about in a few words, and the next step you suggest. "
+      "If nothing needs them, say so plainly. Never read message ids aloud.",
+      {"top": _p("How many to pick (default 3)", I), "days": _p("How far back to look, in days (default 3)", I)},
+      category="communication")
+def check_email(ctx, top: int = 3, days: int = 3):
+    from jarvis.mac import mail
+
+    got = mail.unread(days=max(1, min(int(days or 3), 14)))
+    if isinstance(got, str):
+        return got
+    if not got:
+        return f"No unread email in the last {days} days."
+    keep = got[:10]
+    return {"pick_at_most": max(1, min(int(top or 3), 5)), "unread_total": len(got),
+            "candidates": [{k: m[k] for k in ("id", "from", "address", "subject", "received", "flagged",
+                                              "mailing_list", "excerpt", "score")} for m in keep]}
+
+
+@tool("Read one email in full (use the id from check_email), e.g. when the user says 'read me the second one'.",
+      {"id": _p("Message id from check_email")}, ["id"], category="communication")
+def read_email(ctx, id: str):
+    from jarvis.mac import mail
+
+    m = mail.read(id)
+    return m or "I couldn't find that email any more."
+
+
+@tool("Open an email in the Mail app on screen (use the id from check_email).",
+      {"id": _p("Message id from check_email")}, ["id"], category="communication")
+def open_email(ctx, id: str):
+    from jarvis.mac import mail
+
+    return mail.open_message(id)
+
+
 # ═══════════════════════════════ hand control ════════════════════════════════
 @tool("Turn hand control on or off. Hand control covers every gesture: held poses (✋ stop, 👍/👎 yes/no, "
       "✌️ listen, 🤟 play/pause), swipes for tracks, pinch-and-drag for volume, and the air mouse (hold ☝️ to "

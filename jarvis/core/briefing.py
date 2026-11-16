@@ -63,6 +63,17 @@ def _mail() -> int | None:
     return mail_unread()
 
 
+def _mail_attention() -> list[dict] | None:
+    """Top unread mail by this Mac's score, only if Mail is already running (never launches it)."""
+    from jarvis.mac import mail
+
+    got = mail.unread(days=2, limit=30, launch=False)
+    if not isinstance(got, list):
+        return None
+    top = [m for m in got if m["score"] >= 2][:3]
+    return [{"from": m["from"], "subject": m["subject"]} for m in top] or None
+
+
 def _news(cfg) -> list[str]:
     from jarvis.integrations.news import headlines
 
@@ -76,6 +87,8 @@ async def gather(cfg, memory=None, kind: str = "login") -> dict:
         _safe("battery", _battery, timeout=3),
         _safe("unread_mail", _mail, timeout=4),
     ]
+    if kind == "login" and cfg.get("greeting.email", True):
+        jobs.append(_safe("email_needing_attention", _mail_attention, timeout=20))
     if pod in ("morning", "afternoon", "evening"):
         jobs += [_safe("calendar_today", _events_today, timeout=10), _safe("reminders_due", _reminders_due, timeout=10)]
     if pod in ("evening", "late_night"):
