@@ -361,7 +361,10 @@
     try {
       const code = `class Tap extends AudioWorkletProcessor { process(i) { const c = i[0] && i[0][0]; if (c) this.port.postMessage(c.slice(0)); return true; } }
         registerProcessor("jarvis-tap", Tap);`;
-      await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([code], { type: "application/javascript" })));
+      if (!micOn.worklet) {                         // a processor can only be registered once per context
+        await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([code], { type: "application/javascript" })));
+        micOn.worklet = true;
+      }
       voice.node = new AudioWorkletNode(ctx, "jarvis-tap");
       voice.node.port.onmessage = (m) => onFrame(m.data);
     } catch (e) {                                   // older Safari
@@ -376,6 +379,7 @@
     try { voice.src && voice.src.disconnect(); voice.node && voice.node.disconnect(); } catch (e) {}
     if (voice.stream) voice.stream.getTracks().forEach((t) => t.stop());
     voice.stream = voice.src = voice.node = null; voice.capturing = false;
+    carry = new Float32Array(0); outBuf = [];
     try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
     releaseWakeLock();
   }

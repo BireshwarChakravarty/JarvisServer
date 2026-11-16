@@ -113,6 +113,13 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   await s.waitForFunction(() => document.body.dataset.voice === 'off', null, { timeout: 15000 });
   check(true, 'Quiet for a few seconds: conversation ends on its own');
   await s.screenshot({ path: DIR + '/shot-secure.png' });
+  // a second conversation: the mic reopens cleanly (the fake microphone replays its recording)
+  const reqs = (events().match(/^REQ /gm) || []).length;
+  await s.tap('#mic');
+  await s.waitForFunction(() => document.body.dataset.voice === 'listening', null, { timeout: 5000 });
+  await s.waitForFunction(() => document.body.dataset.voice === 'off', null, { timeout: 25000 });
+  check((events().match(/^REQ /gm) || []).length === reqs + 1, 'Second tap: the mic reopens and a second request is answered');
+  check(await s.evaluate(() => !document.querySelector('#state').textContent.includes('Go on')), 'Status label restored after the conversation');
   // "Hey JARVIS" when the Mac has no detector: says so once, switches itself off, no retry loop
   await s.tap('#btn-voice');
   await s.tap('#opt-wake');
