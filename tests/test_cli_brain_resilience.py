@@ -1,7 +1,6 @@
 """The plan brain recovers by itself: a CLI that quits silently is retried in a fresh session, and a
 turn that hangs is stopped instead of freezing JARVIS."""
 import asyncio
-import os
 import stat
 import sys
 import textwrap

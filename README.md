@@ -55,14 +55,36 @@ smart home and terminal. Everything shows on a live, holographic HUD.
 
 Choose **Pair iPhone or iPad…** in the menu-bar icon, turn the companion on, and scan the QR code
 with your iPhone's or iPad's Camera. The JARVIS companion opens in Safari; use **Share ▸ Add to
-Home Screen** for a full-screen app. From it you can ask anything (type, or use the keyboard's 🎤
-dictation key), answer his "Shall I…?" questions, run protocols, see what he's saying as subtitles,
-and stop, mute, switch hand control, lock the Mac or bring JARVIS up on its screen.
+Home Screen** for a full-screen app. From it you can talk to him or type, answer his "Shall I…?"
+questions, run protocols, see what he's saying as subtitles, and stop, mute the Mac's microphone,
+switch hand control, lock the Mac or bring JARVIS up on its screen. Every tap shows whether the Mac
+did it; if the link went stale while the phone slept, it reconnects and delivers the tap.
+
+### Talking to him from the phone
+
+Tap the **microphone** and speak. JARVIS listens until you pause, answers **out loud on the phone**,
+then keeps listening for a follow-up, so a whole conversation needs one tap. Stay quiet for a few
+seconds (or tap again) to finish. In **Voice settings** (the bars at the top right):
+
+- **Listen for "Hey JARVIS"**: while the companion is open on screen it waits for the wake word,
+  hands-free, and keeps the screen awake. If the Mac and the phone both hear you, only one answers.
+- **Answer on this device**: his voice plays on the phone (on by default), or on the Mac.
+
+One-time setup per device: iOS only lets a web app use the microphone over a secure connection, so
+your Mac makes its own small certificate. The first time you tap the microphone, the companion walks
+you through it: **Download the JARVIS profile** → Settings › **Profile Downloaded** › Install →
+Settings › General › About › **Certificate Trust Settings** › switch on *JARVIS on (your Mac)* → back
+in the companion, **Continue**. It then moves to the secure app; add that one to your Home Screen.
+The certificate only vouches for your Mac on your home network, its private key never leaves the Mac,
+and you can remove it any time in Settings › General › VPN & Device Management.
+
+iOS doesn't let any web page listen in the background or with the screen locked, so "Hey JARVIS" on
+the phone works while the companion is open on screen.
 
 It works on your home Wi-Fi only. Each QR code expires after 10 minutes, each device gets its own
 key (forget one or all on the pairing screen), only devices on a private network are answered, and
-the camera feed never leaves the Mac. The first time, macOS may ask whether JARVIS can accept
-incoming connections: allow it.
+the camera feed never leaves the Mac. Your voice is transcribed on the Mac, never in the cloud. The
+first time, macOS may ask whether JARVIS can accept incoming connections: allow it.
 
 ## Built-in protocols
 
@@ -381,6 +403,17 @@ streamer, memory, protocols, presence, the scheduler, the HUD server, the full v
 synthetic audio, spoken confirmations, the offline greeting fallback, and a **contract test that drives the
 real Anthropic SDK against a local mock of the Messages API**.
 
+The companion has an end-to-end test that drives an emulated iPhone (Playwright) against the real
+companion server, pausing the server to prove a frozen link is detected, and feeding a fake microphone:
+
+```bash
+mkdir -p /tmp/e2e && JARVIS_HOME=/tmp/e2e .venv/bin/python scripts/companion_e2e_server.py /tmp/e2e &
+```
+
+```bash
+.venv/bin/python scripts/companion_e2e_audio.py /tmp/e2e/say.wav && E2E_DIR=/tmp/e2e node scripts/companion_e2e.js
+```
+
 See [RESEARCH.md](RESEARCH.md) for the projects surveyed and what was taken from each.
 
 ### Troubleshooting
@@ -398,6 +431,13 @@ See [RESEARCH.md](RESEARCH.md) for the projects surveyed and what was taken from
   Holding Right ⌥ always works.
 - **Calendar is empty.** Inside JARVIS.app he uses EventKit (grant Calendars). From a terminal he uses AppleScript
   (grant Automation › Calendar).
+- **Companion says "Not trusted yet".** The profile is installed but not trusted: Settings › General ›
+  About › Certificate Trust Settings › switch on *JARVIS on (your Mac)*. Then tap **Continue** again.
+- **Companion mic does nothing / "Microphone access is off".** Settings › Safari › Microphone › Allow
+  (or Ask), then reopen the companion. The microphone only works in the secure app (its address uses
+  port 7779).
+- **Companion keeps saying "Reconnecting".** The phone and the Mac must be on the same Wi-Fi, and macOS
+  must allow JARVIS's incoming connections (System Settings › Network › Firewall › Options).
 - **No camera feed.** Grant the Camera permission and check `vision.camera_index` (1 is often an iPhone with Continuity Camera).
 - **Logs** are in `~/.jarvis/jarvis.log`.
 

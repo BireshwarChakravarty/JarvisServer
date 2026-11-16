@@ -137,6 +137,7 @@ def test_tap_to_talk_hears_you_and_answers_on_the_phone(energy_vad):
 
     j, sent = asyncio.run(run())
     assert j.requests == [("What time is it?", "phone", "PHONE")]          # answered on this phone
+    assert j.claims and set(j.claims) == {"phone:dev1"}                    # the Mac stays out of it meanwhile
     phases = [m["phase"] for m in sent if m["type"] == "voice"]
     assert phases[:3] == ["listening", "transcribing", "thinking"] and phases[-1] == "off"
     assert any(m == {"type": "heard", "text": "What time is it?"} for m in sent)
@@ -204,7 +205,7 @@ def test_hey_jarvis_on_the_phone_starts_a_conversation(energy_vad):
         return j, sent, mode
 
     j, sent, mode = asyncio.run(run())
-    assert {"type": "wake"} in sent and j.claims == ["phone:dev9"]
+    assert {"type": "wake"} in sent and set(j.claims) == {"phone:dev9"}
     assert j.requests and j.requests[0][0] == "What time is it?"
     assert mode == "wake"                                         # and goes back to waiting for "Hey JARVIS"
 

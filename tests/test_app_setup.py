@@ -1,9 +1,7 @@
 """Onboarding API, model manager and news parsing (all platform-independent)."""
-import asyncio
 import http.server
 import socketserver
 import threading
-from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -67,7 +65,6 @@ class _Quiet(http.server.SimpleHTTPRequestHandler):
 
 
 def test_model_manager_downloads_with_progress_and_mirrors(tmp_path):
-    from jarvis.events import bus
     from jarvis.models import Asset, Group, ModelManager
 
     src = tmp_path / "srv"
@@ -84,7 +81,6 @@ def test_model_manager_downloads_with_progress_and_mirrors(tmp_path):
             Asset("sub/a.bin", [f"http://127.0.0.1:{port}/missing.bin", f"http://127.0.0.1:{port}/a.bin"], 10),
             Asset("b.bin", [f"http://127.0.0.1:{port}/b.bin"], 10),
         ])]
-        q = asyncio.Queue()
         assert mm.ensure("g")
         assert (tmp_path / "models/sub/a.bin").stat().st_size == 300_000
         assert mm.ready("g") and mm.status()[0]["ready"]
@@ -131,7 +127,33 @@ def test_menu_pages_open_on_jarvis_own_server(cfg):
 
     sup.window = Window()
     for path in ("/pair", "/setup", "setup#senses", "http://127.0.0.1:7777/"):
-        sup.show_window(path)
+        sup._show_window(path)
     port = int(cfg.get("hud.port", 7777))
     assert loaded == [f"http://127.0.0.1:{port}/pair", f"http://127.0.0.1:{port}/setup",
                       f"http://127.0.0.1:{port}/setup#senses", "http://127.0.0.1:7777/"]
+
+
+def test_showing_the_window_never_blocks_the_caller(cfg):
+    """pywebview's window calls wait for the main thread (up to 20 s). Called on JARVIS's event loop
+    that froze everything, including the iPhone companion's buttons."""
+    import threading
+    import time
+
+    from jarvis.app.supervisor import Supervisor
+
+    sup = Supervisor(cfg)
+    release, shown = threading.Event(), threading.Event()
+
+    class SlowWindow:
+        def load_url(self, u): pass
+        def show(self):
+            release.wait(5)
+            shown.set()
+        def restore(self): pass
+
+    sup.window = SlowWindow()
+    t0 = time.monotonic()
+    sup.show_window("/pair")
+    assert time.monotonic() - t0 < 0.2
+    release.set()
+    assert shown.wait(5)

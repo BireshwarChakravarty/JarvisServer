@@ -30,7 +30,7 @@
   <header class="top">
     <span class="link"><i class="led" id="led"></i><span id="link">Connecting…</span></span>
     <span class="top-r"><span class="wx" id="wx"></span>
-      <button class="icon-btn" id="btn-voice" aria-label="Voice settings"><svg viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg></button></span>
+      <button class="icon-btn" id="btn-voice" aria-label="Voice settings" title="Voice settings"><svg viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg></button></span>
   </header>
   <button class="banner" id="banner" hidden></button>
 
@@ -58,10 +58,10 @@
 
   <form class="ask" id="ask" autocomplete="off">
     <input id="text" placeholder="Ask JARVIS anything…" enterkeyhint="send" aria-label="Ask JARVIS">
-    <button type="button" id="mic" class="mic" aria-label="Talk to JARVIS" aria-pressed="false">
+    <button type="button" id="mic" class="mic" aria-label="Talk to JARVIS" title="Talk to JARVIS" aria-pressed="false">
       <svg viewBox="0 0 24 24"><rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5.5 10.5a6.5 6.5 0 0 0 13 0M12 17v4M8.5 21h7"/></svg>
       <i class="ring"></i></button>
-    <button type="submit" id="send" aria-label="Send" hidden><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button>
+    <button type="submit" id="send" aria-label="Send" title="Send" hidden><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button>
   </form>
 
   <!-- one-time setup so Safari allows the microphone -->

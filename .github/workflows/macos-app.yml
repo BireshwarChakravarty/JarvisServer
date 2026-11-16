@@ -219,6 +219,46 @@ jobs:
           curl -sf http://127.0.0.1:7777/api/remote | python3 -c "import sys,json; s=json.load(sys.stdin); print(s['url'].split('#')[0]); assert s['running'] and ':7778/remote#pair=' in s['url']"
           curl -sf http://127.0.0.1:7778/remote | grep -q "remote.js" && echo "companion app served on :7778 ✓"
           code=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -d '{"code":"guess"}' http://127.0.0.1:7778/remote/api/pair); [ "$code" = 403 ] && echo "bad pairing code refused ✓"
+      - name: Companion voice - secure port with JARVIS's own certificate, iOS profile, every tap acknowledged
+        run: |
+          CA="$HOME/Library/Application Support/JARVIS/companion-tls/ca.pem"
+          for i in $(seq 1 30); do [ -f "$CA" ] && curl -sf --cacert "$CA" https://localhost:7779/remote/api/ping >/dev/null && break; sleep 1; done
+          curl -sf --cacert "$CA" https://localhost:7779/remote/api/ping && echo " ← secure port trusted with only JARVIS's authority ✓"
+          openssl x509 -in "$CA" -noout -subject
+          curl -sf -D headers.txt -o JARVIS.mobileconfig http://127.0.0.1:7778/remote/jarvis.mobileconfig
+          grep -qi "application/x-apple-aspen-config" headers.txt && plutil -lint JARVIS.mobileconfig && echo "iOS profile ✓"
+          ! grep -q "PRIVATE KEY" JARVIS.mobileconfig && echo "profile carries no private key ✓"
+          python3 -m pip install -q websockets
+          PAIR=$(curl -sf http://127.0.0.1:7777/api/remote | python3 -c "import sys,json; print(json.load(sys.stdin)['url'].split('pair=')[1])")
+          CA="$CA" PAIR="$PAIR" python3 - <<'PY'
+          import asyncio, json, os, ssl, time, urllib.request
+          import websockets
+          req = urllib.request.Request("http://127.0.0.1:7778/remote/api/pair", method="POST",
+                                       data=json.dumps({"code": os.environ["PAIR"], "name": "CI"}).encode(),
+                                       headers={"Content-Type": "application/json"})
+          token = json.load(urllib.request.urlopen(req))["token"]
+          ctx = ssl.create_default_context(cafile=os.environ["CA"])
+          async def main():
+              async with websockets.connect(f"wss://localhost:7779/remote/ws?token={token}", ssl=ctx) as ws:
+                  async def until(kind, t=15):
+                      while True:
+                          m = json.loads(await asyncio.wait_for(ws.recv(), t))
+                          if m.get("type") == kind:
+                              return m
+                  hello = await until("hello")
+                  assert hello["voice"]["secure"], hello
+                  for i, msg in enumerate([{"type": "show"}, {"type": "stop"}, {"type": "mute", "muted": False},
+                                           {"type": "hand_control", "on": False}, {"type": "ping", "t": 1}], 1):
+                      t0 = time.time()
+                      await ws.send(json.dumps({**msg, "id": i}))
+                      a = await until("pong" if msg["type"] == "ping" else "ack")
+                      print(f"{msg['type']:>13} → {a.get('note', 'pong')!r} in {time.time() - t0:.2f}s")
+                      assert time.time() - t0 < 5, "the Mac took too long to answer"
+                  await ws.send(json.dumps({"type": "ping", "t": 2}))      # link still alive after Show
+                  assert (await until("pong"))["t"] == 2
+          asyncio.run(main())
+          print("every companion command acknowledged; Show doesn't stall the link ✓")
+          PY
           curl -sf -X POST -H 'Content-Type: application/json' -d '{"enabled": false}' http://127.0.0.1:7777/api/remote/enable
       - name: A Quit request really quits (as at shutdown, restart and log-out)
         run: |

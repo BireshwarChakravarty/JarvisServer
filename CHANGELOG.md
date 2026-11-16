@@ -3,6 +3,24 @@
 All builds are published to the `jarvis-latest` release after passing unit tests, the in-app self-test
 on Apple Silicon, a real launch, packaging, and a clean install on a fresh Mac.
 
+## Talk to JARVIS from your iPhone or iPad; companion buttons fixed
+- **Companion buttons were unreliable.** Tapping *Show* ran a window call on JARVIS's own event loop that
+  could freeze every command for up to 20 s, and after the phone slept iOS could leave a dead connection
+  that still looked open, so taps went nowhere silently. Now: the window is shown off the event loop (also
+  fixed for the mini panel, the HUD's settings link and the "show" gesture), the link is pinged and
+  replaced the moment the app returns to the screen, taps made while reconnecting are delivered after,
+  every command is acknowledged by the Mac (button flash + note), and a failing command can't drop the link.
+- **Voice in the companion.** Tap the mic and talk: the phone streams audio to the Mac, Whisper transcribes
+  it there, and his reply plays on the phone; he keeps listening for follow-ups. Optional "Hey JARVIS"
+  while the companion is open, with the screen kept awake; the Mac and the phone never both answer.
+- **Secure connection** for the microphone: a private certificate authority made on your Mac, installed on
+  each device once as a profile, with a server certificate that renews itself.
+- Transcriptions take turns (the Mac's mic and a phone can overlap; Metal speech isn't thread-safe).
+- Tests: 15 new unit tests; a 30-step end-to-end test drives an emulated iPhone against the real companion
+  server (including a frozen Mac and a fake microphone); the in-app self-test sends real JARVIS speech
+  through the phone path over a secure link; the fresh-install check verifies the certificate, the
+  profile and an acknowledgement for every command against the installed app.
+
 ## Production hardening (overnight)
 - **Reliability:** core loops supervised and restarted with backoff; background tasks can't vanish
   silently; a failed reply is spoken, never silence; the plan brain retries a session it can't resume and

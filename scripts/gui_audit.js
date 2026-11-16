@@ -13,6 +13,14 @@ const PAGES = [
   ['mini', '/mini?demo', 3000, [[360, 96]]],   // the floating capsule has one fixed size
   ['pair', '/pair?demo', 2000],
 ];
+// the iPhone / iPad companion lives on its own server: REMOTE_BASE=http://127.0.0.1:7778
+const PHONES = [[375, 667], [390, 844], [430, 932], [844, 390], [820, 1180], [1024, 1366]];
+if (process.env.REMOTE_BASE) {
+  if (process.env.REMOTE_ONLY) PAGES.length = 0;
+  for (const [n, q] of [['remote', ''], ['remote-setup', '&setup'], ['remote-voice', '&vset'],
+                        ['remote-listening', '&listening'], ['remote-banner', '&banner']])
+    PAGES.push([n, process.env.REMOTE_BASE + '/remote?demo' + q, 2500, PHONES]);
+}
 
 const probe = () => {
   const vw = innerWidth, vh = innerHeight, issues = [];
@@ -122,7 +130,7 @@ const probe = () => {
     for (const [w, h] of sizes || SIZES) {
       const p = await b.newPage({ viewport: { width: w, height: h } });
       const errors = []; p.on('pageerror', (e) => errors.push(e.message));
-      await p.goto(base + path, { waitUntil: 'domcontentloaded' });
+      await p.goto(path.startsWith('http') ? path : base + path, { waitUntil: 'domcontentloaded' });
       await p.waitForTimeout(wait);
       if (path.includes('#')) {
         const step = path.split('#')[1];

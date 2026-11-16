@@ -53,6 +53,10 @@
     if (DEMO) return demo();
     connect();
     if (h.get("voice") === "1") toast("Secure connection ready. Tap the microphone to talk.", 4000);
+    if (prefs.wake && SECURE) {                  // iOS needs one tap before a page may listen
+      const b = $("banner"); b.hidden = false; b.innerHTML = "<b>Tap to listen</b> for “Hey JARVIS”.";
+      b.onclick = async () => { b.hidden = true; if (await micOn()) setVoice("wake"); };
+    }
     if (!SECURE) checkSecure(true);
   }
 
@@ -140,7 +144,13 @@
     const e = pending.get(a.id); if (!e) return;
     clearTimeout(e.timer); pending.delete(a.id);
     if (e.btn) flash(e.btn, a.ok);
-    if (a.note && (!a.ok || e.btn)) toast(a.note);            // successes only for the buttons you tapped
+    if (a.note && (!a.ok || e.btn)) toast(a.note, a.ok ? 2600 : 4500);   // successes only for the buttons you tapped
+    if (e.msg.type === "voice" && !a.ok && e.msg.mode !== "off") {      // the Mac said no: don't look like listening
+      voice.mode = "off"; voice.phase = "off"; document.body.dataset.voice = "off";
+      $("mic").setAttribute("aria-pressed", "false");
+      if (prefs.wake) { prefs.wake = false; $("opt-wake").checked = false; store.set("jarvis-wake", "0"); }
+      micOff(); setState(macState);
+    }
   }
   function flash(btn, ok) {
     btn.classList.remove("busy", "ok", "fail"); void btn.offsetWidth;
@@ -301,7 +311,7 @@
     location.href = `https://${location.hostname}:${securePort}/remote#token=${encodeURIComponent(store.get("jarvis-token") || "")}&voice=1`;
   }
   async function checkSecure(quiet) {
-    try { const info = await (await fetch("/remote/api/secure", { cache: "no-store" })).json(); if (info.port) securePort = info.port; } catch (e) {}
+    await secureInfo();
     if (await probeSecure()) {
       const b = $("banner"); b.hidden = false;
       b.innerHTML = "<b>Voice is ready.</b> Tap to switch to the secure app, then add it to your Home Screen again.";
@@ -311,7 +321,16 @@
     if (!quiet) { $("setup-err").textContent = "Not trusted yet. Check step 3: the switch in Certificate Trust Settings must be on."; }
     return false;
   }
-  function openSetup() { $("setup-err").textContent = ""; $("setup").hidden = false; }
+  async function secureInfo() {
+    try {
+      const info = await (await fetch("/remote/api/secure", { cache: "no-store" })).json();
+      if (info.port) securePort = info.port;
+      if (info.name) $("ca-name").textContent = info.name;
+      if (navigator.standalone) $("get-profile").target = "_blank";   // the Home Screen app can't install profiles itself
+      return info;
+    } catch (e) { return {}; }
+  }
+  function openSetup() { $("setup-err").textContent = ""; $("setup").hidden = false; secureInfo(); }
   $("setup-close").onclick = () => ($("setup").hidden = true);
   $("setup-go").onclick = async () => { $("setup-err").textContent = "Checking…"; if (await checkSecure(false)) goSecure(); };
 
@@ -335,7 +354,7 @@
       toast(e.name === "NotAllowedError" ? "Microphone access is off. Allow it in Settings › Safari › Microphone." : "Couldn't open the microphone.", 4500);
       return false;
     }
-    if (navigator.audioSession) navigator.audioSession.type = "play-and-record";
+    try { if (navigator.audioSession) navigator.audioSession.type = "play-and-record"; } catch (e) {}
     voice.src = ctx.createMediaStreamSource(voice.stream);
     const rate = ctx.sampleRate;
     const onFrame = (f32) => pushAudio(f32, rate);
@@ -357,7 +376,7 @@
     try { voice.src && voice.src.disconnect(); voice.node && voice.node.disconnect(); } catch (e) {}
     if (voice.stream) voice.stream.getTracks().forEach((t) => t.stop());
     voice.stream = voice.src = voice.node = null; voice.capturing = false;
-    if (navigator.audioSession) navigator.audioSession.type = "playback";
+    try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
     releaseWakeLock();
   }
   // 16 kHz, 16-bit mono, ~100 ms per message; nothing is sent while he's speaking here
@@ -396,7 +415,10 @@
     setState(macState);
   }
   function voicePhase(e) {
-    if (e.error) toast(e.error, 4500);
+    if (e.error) {
+      toast(e.error, 5000);
+      if (prefs.wake) { prefs.wake = false; $("opt-wake").checked = false; store.set("jarvis-wake", "0"); }   // don't retry in a loop
+    }
     voice.phase = e.phase;
     const shown = e.phase;
     document.body.dataset.voice = shown;
@@ -406,6 +428,7 @@
     if (e.phase === "wake") setState(macState);
     if (e.phase === "off" && e.heard === false) toast("I didn't hear anything.");
     if (e.phase === "off") {
+      setTimeout(() => setState(macState), 0);
       if (prefs.wake) { voice.mode = "wake"; sendVoiceMode("wake"); }       // back to waiting for "Hey JARVIS"
       else { voice.mode = "off"; document.body.dataset.voice = "off"; setTimeout(() => { if (voice.mode === "off") micOff(); }, 400); }
     }
@@ -446,9 +469,13 @@
   // his voice, played here
   let audioMeta = null, playEnd = 0, sources = [];
   const playing = () => ctx && ctx.currentTime < playEnd - 0.05;
-  async function audioIn(buf) {
+  let decoding = Promise.resolve();
+  function audioIn(buf) {                         // decoded one after another, so phrases never swap places
     const meta = audioMeta; audioMeta = null;
     if (!meta) return;
+    decoding = decoding.then(() => playPhrase(buf)).catch(() => {});
+  }
+  async function playPhrase(buf) {
     unlockAudio();
     if (!ctx) return;
     try {

@@ -230,6 +230,7 @@ async def record_utterance(
     max_seconds: float = 30.0,
     preroll: list[np.ndarray] | None = None,
     stop_event: asyncio.Event | None = None,
+    announce: bool = True,
 ) -> Optional[np.ndarray]:
     """Collect frames until the speaker stops. Returns float32 audio or None if nobody spoke."""
     frames: list[np.ndarray] = list(preroll or [])
@@ -253,7 +254,8 @@ async def record_utterance(
             if speech:
                 started = True
                 frames.extend(ring)
-                bus.emit("state", state="listening", hearing=True)
+                if announce:
+                    bus.emit("state", state="listening", hearing=True)
             elif time.monotonic() - t0 > start_timeout:
                 return None
             continue

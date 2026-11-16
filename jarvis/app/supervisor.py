@@ -144,6 +144,13 @@ class Supervisor:
         return f"http://127.0.0.1:{port}/{path.lstrip('/')}"
 
     def show_window(self, url: str | None = None) -> None:
+        """Bring the window forward. Never blocks the caller: pywebview's window calls wait for the
+        main thread (up to 20 s), so they run on a helper thread, never on JARVIS's event loop."""
+        import threading
+
+        threading.Thread(target=self._show_window, args=(url,), daemon=True, name="show-window").start()
+
+    def _show_window(self, url: str | None = None) -> None:
         w = self.window
         if self.mini is not None:
             self.mini.hide()

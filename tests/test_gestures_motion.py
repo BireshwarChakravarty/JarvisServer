@@ -210,7 +210,6 @@ def test_hand_control_settings_switch(cfg):
     assert client.get("/api/setup/state").json()["options"]["hand_control"] is False
     assert client.post("/api/setup/hand-control", json={"enabled": True}).status_code == 400   # not running yet
 
-    state = {"on": False}
     gestures = SimpleNamespace(enabled=False)
 
     def set_hand_control(on):

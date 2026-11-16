@@ -139,10 +139,15 @@ def create_remote_app(supervisor, store, certs=None) -> FastAPI:
         return {"ok": True, "device": device_id, "token": token}
 
     # ── secure (voice) setup ─────────────────────────────────────────────
+    def secure_port() -> int | None:
+        r = getattr(supervisor, "remote", None)
+        return getattr(r, "secure_port", SECURE_PORT) if getattr(r, "secure_running", False) else None
+
     @app.get("/remote/api/secure")
     async def secure_info():
-        ok = certs is not None and getattr(getattr(supervisor, "remote", None), "secure_running", False)
-        return {"available": ok, "port": SECURE_PORT, "fingerprint": certs.fingerprint()[:16] if ok else None}
+        port = secure_port() if certs is not None else None
+        return {"available": port is not None, "port": port or SECURE_PORT,
+                "name": f"JARVIS on {certs.mac_name}" if certs is not None else "JARVIS"}
 
     @app.get("/remote/api/ping")
     async def ping():
@@ -177,7 +182,7 @@ def create_remote_app(supervisor, store, certs=None) -> FastAPI:
         link.put({"type": "hello", "owner": cfg.get("owner.name", ""), "title": cfg.get("owner.title", "sir"),
                   "device": device, "state": bus.state.get("state", "idle"),
                   "voice": {"secure": link.secure, "stt": bool(j is not None and getattr(j, "stt", None)),
-                            "secure_port": SECURE_PORT if getattr(getattr(supervisor, "remote", None), "secure_running", False) else None}})
+                            "secure_port": secure_port()}})
         latest: dict[str, dict] = {}
         for e in list(bus.history):
             if e.get("type") in REPLAY:
@@ -249,18 +254,16 @@ def create_remote_app(supervisor, store, certs=None) -> FastAPI:
     async def command(link: Link, msg: dict) -> tuple[bool, str]:
         kind = msg.get("type")
         if kind == "show":
-            # pywebview waits on the main thread: never on JARVIS's own event loop
-            await asyncio.to_thread(supervisor.show_window)
+            supervisor.show_window()          # returns at once (the window work runs on its own thread)
             return True, "JARVIS is on your Mac's screen"
         j = supervisor.jarvis
         if j is None:
             return False, "JARVIS is still starting on your Mac."
         if kind == "lock":
-            from jarvis.tools.registry import registry
+            from jarvis.mac.system import lock_screen
 
-            r = await registry.call("system_action", {"action": "lock_screen"}, j.ctx)
-            return (not getattr(r, "is_error", False)), ("Mac locked" if not getattr(r, "is_error", False)
-                                                         else str(getattr(r, "content", "Couldn't lock")))
+            await asyncio.to_thread(lock_screen)
+            return True, "Mac locked"
         if kind == "text":
             text = str(msg.get("text", "")).strip()[:2000]
             if not text:
@@ -342,6 +345,7 @@ class RemoteServer:
         self.error = ""
         self.secure_error = ""
         self.secure_running = False
+        self.secure_port = SECURE_PORT
         self.certs = None
 
     @property
@@ -384,6 +388,7 @@ class RemoteServer:
         self.error = ""
         log.info("companion listening on port %s", port)
         self.secure_running = False
+        self.secure_port = secure_port or SECURE_PORT
         if secure_port and self.certs is not None:
             try:
                 pem, key = await asyncio.to_thread(self.certs.ensure_server, [name], [ip] if ip else [])

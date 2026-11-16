@@ -339,6 +339,98 @@ def run() -> int:
             raise RuntimeError(f"started={ok} page={page} js={has_js} pair-with-bad-code={pair}")
         return f"listener on :{port} · page 200 · bad pairing code refused (403)"
 
+    @check("companion voice: secure link a phone can trust, every tap acknowledged, speech heard, reply sent back",
+           timeout=240)
+    def _():
+        import asyncio
+        import json
+        import socket
+        import ssl
+
+        import numpy as np
+        import websockets
+
+        from jarvis.app.supervisor import Supervisor
+        stt = state["stt"]
+        heard_requests = []
+
+        class StandIn:                                   # the real phone path, real Whisper, no brain
+            ctx, wake = None, None
+
+            def __init__(self):
+                self.stt = stt
+
+            async def hud_command(self, msg):
+                pass
+
+            def claim_voice(self, who, hold=4.0):
+                return True
+
+            def queue_request(self, text, source="protocol", route=None, done=None):
+                heard_requests.append((text, source, route))
+                if done is not None:
+                    done.set_result(True)
+
+        sup = Supervisor(state["cfg"])
+        sup.jarvis = StandIn()
+        ports = []
+        for _ in range(2):
+            with socket.socket() as s:
+                s.bind(("127.0.0.1", 0)); ports.append(s.getsockname()[1])
+        audio, sr = state["speech"]
+        pcm16 = (np.clip(resample(audio, sr), -1, 1) * 32767).astype("<i2")
+        silence = np.zeros(8000, dtype="<i2")
+        stream = np.concatenate([silence, pcm16, silence, silence, silence]).tobytes()
+
+        async def go():
+            ok = await sup.remote.start(host="127.0.0.1", port=ports[0], secure_port=ports[1])
+            try:
+                if not sup.remote.secure_running:
+                    raise RuntimeError(f"secure listener didn't start: {sup.remote.secure_error}")
+                code, _ = sup.devices.current_code()
+                token = sup.devices.pair(code, "self-test")[1]
+                ctx = ssl.create_default_context(cafile=str(sup.remote.certs.ca_pem))   # trusts ONLY JARVIS's authority
+                async with websockets.connect(f"wss://localhost:{ports[1]}/remote/ws?token={token}", ssl=ctx,
+                                              max_size=8 * 1024 * 1024) as ws:
+                    async def until(kind, timeout=60):
+                        while True:
+                            m = await asyncio.wait_for(ws.recv(), timeout)
+                            if isinstance(m, str) and json.loads(m).get("type") == kind:
+                                return json.loads(m)
+                    hello = await until("hello")
+                    if not hello["voice"]["secure"]:
+                        raise RuntimeError("the secure link didn't report itself as secure")
+                    for i, msg in enumerate([{"type": "stop"}, {"type": "mute", "muted": False},
+                                             {"type": "protocol", "name": "work_mode"}], 1):
+                        await ws.send(json.dumps({**msg, "id": i}))
+                        a = await until("ack", 10)
+                        if a["id"] != i or not a["ok"]:
+                            raise RuntimeError(f"command {msg['type']} answered {a}")
+                    await ws.send(json.dumps({"type": "voice", "mode": "talk", "speak": True, "id": 9}))
+                    a = await until("ack", 10)
+                    if not a["ok"]:
+                        raise RuntimeError(f"voice refused: {a}")
+                    for i in range(0, len(stream), 3200):
+                        await ws.send(stream[i:i + 3200])
+                    heard = await until("heard", 120)
+                    if "london" not in heard["text"].lower():
+                        raise RuntimeError(f"phone audio transcribed as {heard['text']!r}")
+                    if not heard_requests or not callable(heard_requests[0][2]):
+                        raise RuntimeError("the request wasn't routed back to the phone")
+                    t = np.arange(24000) / 24000
+                    heard_requests[0][2]((0.2 * np.sin(2 * np.pi * 330 * t)).astype("float32"), 24000, "Reply.")
+                    meta = await until("audio", 10)
+                    wav = await asyncio.wait_for(ws.recv(), 10)
+                    if not (isinstance(wav, bytes) and wav[:4] == b"RIFF" and len(wav) == meta["bytes"]):
+                        raise RuntimeError("his voice didn't arrive on the phone as audio")
+                    await ws.send(json.dumps({"type": "voice", "mode": "off"}))
+                prof = sup.remote.certs.mobileconfig()
+                return ok, heard["text"], len(wav), len(prof)
+            finally:
+                await sup.remote.stop()
+        ok, text, nwav, nprof = asyncio.run(go())
+        return f"wss with JARVIS's own certificate · 4 acks · phone audio heard as {text!r} · {nwav} B reply · profile {nprof} B"
+
     @check("email: the Apple Mail scripts compile", timeout=90)
     def _():
         import subprocess

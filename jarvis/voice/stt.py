@@ -42,6 +42,7 @@ class Transcriber:
         self.prompt = ", ".join(["Jarvis"] + (vocabulary or [])) + "."
         self._impl = None
         self._lock = threading.Lock()
+        self._busy = threading.Lock()   # one transcription at a time: the Mac's mic and a phone can overlap
         self.name = "none"
 
     def load(self) -> str:
@@ -95,6 +96,10 @@ class Transcriber:
 
     def transcribe(self, audio: np.ndarray) -> str:
         self.load()
+        with self._busy:
+            return self._transcribe(audio)
+
+    def _transcribe(self, audio: np.ndarray) -> str:
         t0 = time.perf_counter()
         kind, impl = self._impl  # type: ignore[misc]
         if kind == "mlx":
