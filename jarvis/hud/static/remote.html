@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#030508">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -29,8 +29,10 @@
 <main id="app" hidden>
   <header class="top">
     <span class="link"><i class="led" id="led"></i><span id="link">Connecting…</span></span>
-    <span class="wx" id="wx"></span>
+    <span class="top-r"><span class="wx" id="wx"></span>
+      <button class="icon-btn" id="btn-voice" aria-label="Voice settings"><svg viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg></button></span>
   </header>
+  <button class="banner" id="banner" hidden></button>
 
   <section class="presence">
     <div id="core"><canvas id="core-gl"></canvas><canvas id="core-ui"></canvas></div>
@@ -41,7 +43,7 @@
 
   <section class="controls" aria-label="Controls">
     <button class="ctl" id="c-stop" aria-label="Stop"><svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" class="solid"/></svg><span>Stop</span></button>
-    <button class="ctl" id="c-mute" aria-pressed="false" aria-label="Mute the Mac's microphone"><svg viewBox="0 0 24 24"><rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5.5 10.5a6.5 6.5 0 0 0 13 0M12 17v4M8.5 21h7"/><path class="cut" d="M4 3.5l16 17"/><path d="M4 3.5l16 17"/></svg><span>Mute</span></button>
+    <button class="ctl" id="c-mute" aria-pressed="false" aria-label="Mute the Mac's microphone"><svg viewBox="0 0 24 24"><rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5.5 10.5a6.5 6.5 0 0 0 13 0M12 17v4M8.5 21h7"/><path class="cut" d="M4 3.5l16 17"/><path d="M4 3.5l16 17"/></svg><span>Mac mic</span></button>
     <button class="ctl" id="c-hand" aria-pressed="false" aria-label="Hand control"><svg viewBox="0 0 24 24"><path d="M8 12V6.5a1.5 1.5 0 0 1 3 0V11M11 10.5V5a1.5 1.5 0 0 1 3 0v5.5M14 10.5V6.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-.6a5 5 0 0 1-3.9-1.9L4.3 15a1.5 1.5 0 0 1 2.3-1.9L8 14.5"/></svg><span>Hands</span></button>
     <button class="ctl" id="c-lock" aria-label="Lock the Mac"><svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg><span>Lock Mac</span></button>
     <button class="ctl" id="c-show" aria-label="Show JARVIS on the Mac"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12.5" rx="2"/><path d="M9 20.5h6M12 16.5v4"/></svg><span>Show</span></button>
@@ -56,8 +58,40 @@
 
   <form class="ask" id="ask" autocomplete="off">
     <input id="text" placeholder="Ask JARVIS anything…" enterkeyhint="send" aria-label="Ask JARVIS">
-    <button type="submit" id="send" aria-label="Send"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button>
+    <button type="button" id="mic" class="mic" aria-label="Talk to JARVIS" aria-pressed="false">
+      <svg viewBox="0 0 24 24"><rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5.5 10.5a6.5 6.5 0 0 0 13 0M12 17v4M8.5 21h7"/></svg>
+      <i class="ring"></i></button>
+    <button type="submit" id="send" aria-label="Send" hidden><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button>
   </form>
+
+  <!-- one-time setup so Safari allows the microphone -->
+  <div class="sheet tall" id="setup" role="dialog" aria-modal="true" aria-labelledby="setup-h" hidden>
+    <p class="label">Talk to JARVIS</p>
+    <h2 class="sheet-h" id="setup-h">One-time setup for voice</h2>
+    <p class="sheet-p">iOS only lets a web app use the microphone over a secure connection. Your Mac makes its own
+      certificate for that. Install it once on this device:</p>
+    <ol class="steps">
+      <li><a class="btn gold small" id="get-profile" href="/remote/jarvis.mobileconfig">Download the JARVIS profile</a>
+        <span>Tap <b>Allow</b>, then <b>Close</b>.</span></li>
+      <li>Open <b>Settings</b>, tap <b>Profile Downloaded</b> near the top, then <b>Install</b>.</li>
+      <li>In <b>Settings › General › About › Certificate Trust Settings</b>, switch on <b id="ca-name">JARVIS</b>.</li>
+      <li>Come back here and tap <b>Continue</b>.</li>
+    </ol>
+    <p class="err" id="setup-err" role="status"></p>
+    <div class="yn"><button class="btn" id="setup-close">Not now</button><button class="btn gold" id="setup-go">Continue</button></div>
+  </div>
+
+  <div class="sheet tall" id="vset" role="dialog" aria-modal="true" aria-labelledby="vset-h" hidden>
+    <p class="label">Voice</p>
+    <h2 class="sheet-h" id="vset-h">How you talk to JARVIS here</h2>
+    <label class="row"><span><b>Listen for “Hey JARVIS”</b><small>While this app is open on screen. The screen stays on.</small></span>
+      <input type="checkbox" class="switch" id="opt-wake"></label>
+    <label class="row"><span><b>Answer on this device</b><small>His voice plays here instead of on the Mac.</small></span>
+      <input type="checkbox" class="switch" id="opt-speak" checked></label>
+    <p class="sheet-p small" id="vset-note">Tap the microphone to talk. He keeps listening after each answer, so you can carry
+      on hands-free; stay quiet for a few seconds or tap again to finish.</p>
+    <div class="yn one"><button class="btn gold" id="vset-done">Done</button></div>
+  </div>
 
   <div class="sheet" id="confirm" role="dialog" aria-modal="true" aria-labelledby="confirm-q" hidden>
     <p class="label">JARVIS asks</p>

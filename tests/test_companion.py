@@ -36,17 +36,43 @@ def test_home_network_only():
         assert not private_client(ip), ip
 
 
+class FakeJarvis:
+    def __init__(self, got):
+        self.got, self.ctx, self.stt = got, None, None
+
+    async def hud_command(self, msg):
+        if msg.get("type") == "protocol" and msg.get("name") == "boom":
+            raise RuntimeError("kaboom")
+        self.got.append(msg)
+
+    def queue_request(self, text, source="protocol", route=None, done=None):
+        self.got.append({"type": "text", "text": text, "source": source, "route": route})
+
+    def claim_voice(self, who, hold=4.0):
+        return True
+
+
 @pytest.fixture
 def remote(tmp_path, cfg):
     store = DeviceStore(tmp_path / "companion.json")
     got = []
-
-    async def hud_command(msg):
-        got.append(msg)
-
-    sup = SimpleNamespace(cfg=cfg, jarvis=SimpleNamespace(hud_command=hud_command, ctx=None),
+    sup = SimpleNamespace(cfg=cfg, jarvis=FakeJarvis(got),
                           show_window=lambda url=None: got.append({"type": "shown"}))
-    return TestClient(create_remote_app(sup, store)), store, got
+    app = create_remote_app(sup, store)
+    return TestClient(app), store, got
+
+
+def _paired(client, store):
+    code, _ = store.current_code()
+    return client.post("/remote/api/pair", json={"code": code, "name": "iPhone"}).json()["token"]
+
+
+def _until(ws, kind, n=40):
+    for _ in range(n):
+        m = ws.receive_json()
+        if m.get("type") == kind:
+            return m
+    raise AssertionError(f"no {kind}")
 
 
 def test_page_pair_and_live_link(remote):
@@ -57,16 +83,75 @@ def test_page_pair_and_live_link(remote):
         with client.websocket_connect("/remote/ws") as ws:
             ws.receive_json()
     assert client.post("/remote/api/pair", json={"code": "guess", "name": "x"}).status_code == 403
-    code, _ = store.current_code()
-    token = client.post("/remote/api/pair", json={"code": code, "name": "iPhone"}).json()["token"]
+    token = _paired(client, store)
     with client.websocket_connect(f"/remote/ws?token={token}") as ws:
         hello = ws.receive_json()
-        assert hello["type"] == "hello" and hello["device"]
-        ws.send_text(json.dumps({"type": "text", "text": "Lights on"}))
-        ws.send_text(json.dumps({"type": "confirm", "approved": True}))
-        ws.send_text(json.dumps({"type": "shell", "command": "rm -rf /"}))  # not on the list: ignored
-        ws.send_text(json.dumps({"type": "show"}))
-        time.sleep(0.3)
+        assert hello["type"] == "hello" and hello["device"] and hello["voice"]["secure"] is False
+        ws.send_text(json.dumps({"type": "text", "text": "Lights on", "id": 1}))
+        assert _until(ws, "ack") == {"type": "ack", "id": 1, "for": "text", "ok": True, "note": "Sent"}
+        ws.send_text(json.dumps({"type": "confirm", "approved": True, "id": 2}))
+        assert _until(ws, "ack")["id"] == 2
+        ws.send_text(json.dumps({"type": "shell", "command": "rm -rf /", "id": 3}))  # not on the list: ignored
+        ws.send_text(json.dumps({"type": "show", "id": 4}))
+        a = _until(ws, "ack")
+        assert a["id"] == 4 and a["ok"]                                      # no ack at all for 'shell'
     kinds = [m["type"] for m in got]
     assert kinds == ["text", "confirm", "shown"] and got[0]["text"] == "Lights on"
+    assert got[0]["source"] == "phone" and got[0]["route"] is None           # typed, reply on the Mac
     assert "shell" not in COMMANDS
+
+
+def test_every_button_is_acknowledged_and_a_failure_keeps_the_link(remote):
+    client, store, got = remote
+    token = _paired(client, store)
+    with client.websocket_connect(f"/remote/ws?token={token}") as ws:
+        ws.receive_json()
+        ws.send_text(json.dumps({"type": "ping", "t": 5}))
+        assert _until(ws, "pong")["t"] == 5                                  # heartbeat
+        for i, msg in enumerate([{"type": "stop"}, {"type": "mute", "muted": True},
+                                 {"type": "hand_control", "on": True}, {"type": "protocol", "name": "work_mode"}], 10):
+            ws.send_text(json.dumps({**msg, "id": i}))
+            a = _until(ws, "ack")
+            assert a["id"] == i and a["ok"] and a["note"], a
+        ws.send_text(json.dumps({"type": "protocol", "name": "boom", "id": 20}))    # the Mac side raises
+        a = _until(ws, "ack")
+        assert a["id"] == 20 and a["ok"] is False and "didn't work" in a["note"]
+        ws.send_text(json.dumps({"type": "stop", "id": 21}))                 # ...and the link still works
+        assert _until(ws, "ack")["id"] == 21
+        ws.send_text("not json")
+        ws.send_text(json.dumps({"type": "stop", "id": 22}))
+        assert _until(ws, "ack")["id"] == 22
+
+
+def test_voice_needs_the_secure_connection(remote):
+    client, store, got = remote
+    token = _paired(client, store)
+    with client.websocket_connect(f"/remote/ws?token={token}") as ws:
+        ws.receive_json()
+        ws.send_text(json.dumps({"type": "voice", "mode": "talk", "id": 1}))
+        a = _until(ws, "ack")
+        assert a["ok"] is False and "secure" in a["note"]
+        ws.send_bytes(b"\x00\x01" * 800)                                   # stray audio is ignored safely
+        ws.send_text(json.dumps({"type": "stop", "id": 2}))
+        assert _until(ws, "ack")["id"] == 2
+
+
+def test_his_voice_is_sent_to_the_phone_that_asked(remote):
+    import numpy as np
+
+    client, store, got = remote
+    token = _paired(client, store)
+    with client.websocket_connect(f"/remote/ws?token={token}") as ws:
+        ws.receive_json()
+        ws.send_text(json.dumps({"type": "text", "text": "Time?", "speak": True, "id": 1}))
+        _until(ws, "ack")
+        route = got[-1]["route"]
+        assert callable(route)
+        tone = (0.2 * np.sin(np.linspace(0, 400, 24000))).astype(np.float32)
+        assert route(tone, 24000, "It's nine.") is True
+        meta = _until(ws, "audio")
+        assert meta["text"] == "It's nine." and meta["duration"] == 1.0
+        wav = ws.receive_bytes()
+        assert wav[:4] == b"RIFF" and len(wav) == meta["bytes"] and len(wav) > 48000
+    time.sleep(0.2)
+    assert route(tone, 24000, "x") is False                                  # phone gone: the Mac speaks instead

@@ -382,6 +382,8 @@ class Jarvis:
                 except asyncio.TimeoutError:
                     continue
                 if self.wake.process(frame):
+                    if not self.claim_voice("mac"):
+                        continue        # a phone in the room already answered this one
                     self.speaker.play_tone("wake")
                     return None
             else:
@@ -496,7 +498,7 @@ class Jarvis:
                 self.speaker.enqueue(sentence)
 
         filler = asyncio.create_task(self._filler(first, cancel)) if (
-            self.speaker and source in ("voice", "hud", "protocol") and self.cfg.get("voice.tts.fillers", True)) else None
+            self.speaker and source in ("voice", "hud", "protocol", "phone") and self.cfg.get("voice.tts.fillers", True)) else None
         try:
             reply = await self.brain.respond(text, on_sentence=on_sentence, context=await self._live_context(),
                                              images=images, cancel=cancel)
@@ -538,15 +540,19 @@ class Jarvis:
             self.speaker.enqueue(line.format(t=t))
             bus.emit("filler", text=line.format(t=t))
 
-    def queue_request(self, text: str, source: str = "protocol") -> None:
-        self._requests.put_nowait((text, source))
+    def queue_request(self, text: str, source: str = "protocol", route=None,
+                      done: asyncio.Future | None = None) -> None:
+        """`route`: send the spoken reply somewhere other than this Mac's speakers (the phone).
+        `done` is resolved once he has finished answering (spoken reply included)."""
+        self._requests.put_nowait((text, source, route, done))
 
     async def _request_worker(self) -> None:
         while True:
-            text, source = await self._requests.get()
+            text, source, route, done = await self._requests.get()
             try:
                 if self.speaker:
                     await self.speaker.wait_done(timeout=60)
+                    self.speaker.route = route
                 await self.handle_text(text, source=source)
                 if self.speaker:
                     await self.speaker.wait_done(timeout=120)
@@ -555,7 +561,21 @@ class Jarvis:
             except Exception:
                 log.exception("request failed")
             finally:
+                if self.speaker:
+                    self.speaker.route = None
+                if done is not None and not done.done():
+                    done.set_result(True)
                 bus.emit("state", state="idle")
+
+    # The Mac and a phone in the same room both hear "Hey JARVIS". Whoever hears it first answers;
+    # the other ignores it for a few seconds.
+    def claim_voice(self, who: str, hold: float = 4.0) -> bool:
+        now = time.monotonic()
+        by, until = getattr(self, "_voice_claim", ("", 0.0))
+        if by and by != who and now < until:
+            return False
+        self._voice_claim = (who, now + hold)
+        return True
 
     async def _live_context(self) -> dict:
         ctx: dict[str, Any] = {}

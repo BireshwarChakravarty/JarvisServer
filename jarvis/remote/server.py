@@ -1,26 +1,34 @@
 """The iPhone / iPad companion: a small web app on your home network, paired by QR code.
 
-It runs on its own port, separate from the HUD (which stays private to this Mac), and:
+It runs on its own ports, separate from the HUD (which stays private to this Mac), and:
   • answers only devices on a private network (home Wi-Fi), never the internet
-  • needs a per-device key for everything except the page itself and the pairing call
+  • needs a per-device key for everything except the page itself, pairing and the certificate
   • forwards only what the companion shows (state, what he's saying, confirmations, agenda,
     weather, protocols); never the camera, faces or memory
   • accepts only a short list of commands (ask, stop, answer yes/no, protocols, mute,
-    hand control, lock, show on Mac)
+    hand control, lock, show on Mac, voice)
+  • answers every command with an acknowledgement, so the phone can show that it worked (or why not)
+
+Two listeners: plain http on 7778 (pairing, and the certificate for voice) and https on 7779,
+which iOS requires before Safari lets the page use the microphone (see jarvis/remote/tls.py).
 Keys travel in the page, not in cookies, so other websites can't borrow them.
 """
 from __future__ import annotations
 
 import asyncio
+import io
 import ipaddress
 import json
 import logging
 import socket
 import subprocess
+import threading
+import wave
 from pathlib import Path
 
-from fastapi import Body, FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+import numpy as np
+from fastapi import Body, FastAPI, WebSocket
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from jarvis.events import bus
@@ -28,11 +36,12 @@ from jarvis.events import bus
 log = logging.getLogger("jarvis.remote")
 STATIC = Path(__file__).parent.parent / "hud" / "static"
 PORT = 7778
+SECURE_PORT = 7779
 
 FORWARD = {"hello", "state", "speaking", "reply", "transcript", "confirm", "confirm_result", "agenda", "weather",
            "protocols", "hand_control", "mic", "announce", "error", "interrupted", "level"}
 REPLAY = {"agenda", "weather", "protocols", "hand_control", "mic", "state"}
-COMMANDS = {"text", "stop", "confirm", "protocol", "mute", "hand_control", "listen", "show", "lock"}
+COMMANDS = {"text", "stop", "confirm", "protocol", "mute", "hand_control", "listen", "show", "lock", "voice", "ping"}
 
 
 def private_client(host: str | None) -> bool:
@@ -62,8 +71,40 @@ def lan_addresses() -> tuple[str, str | None]:
     return name, ip
 
 
-def create_remote_app(supervisor, store) -> FastAPI:
+def wav_bytes(audio: np.ndarray, sr: int) -> bytes:
+    pcm = (np.clip(audio, -1.0, 1.0) * 32767).astype("<i2").tobytes()
+    out = io.BytesIO()
+    with wave.open(out, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(int(sr))
+        w.writeframes(pcm)
+    return out.getvalue()
+
+
+class Link:
+    """One open companion connection."""
+
+    def __init__(self, device: str, secure: bool) -> None:
+        self.device, self.secure = device, secure
+        self.out: asyncio.Queue = asyncio.Queue(maxsize=600)
+        self.voice = None
+
+    def put(self, item) -> None:
+        if self.out.full():                         # a stalled phone mustn't hold up JARVIS
+            try:
+                self.out.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+        self.out.put_nowait(item)
+
+
+def create_remote_app(supervisor, store, certs=None) -> FastAPI:
     app = FastAPI(title="JARVIS companion", docs_url=None, redoc_url=None, openapi_url=None)
+    links: dict[str, set[Link]] = {}
+    app.state.links = links
+    wake_models: dict[str, object] = {}
+    wake_lock = threading.Lock()
 
     @app.middleware("http")
     async def lan_only(request, call_next):
@@ -97,6 +138,27 @@ def create_remote_app(supervisor, store) -> FastAPI:
         bus.emit("announce", text=f"Paired {str(body.get('name') or 'a new device')[:40]}.", priority="normal")
         return {"ok": True, "device": device_id, "token": token}
 
+    # ── secure (voice) setup ─────────────────────────────────────────────
+    @app.get("/remote/api/secure")
+    async def secure_info():
+        ok = certs is not None and getattr(getattr(supervisor, "remote", None), "secure_running", False)
+        return {"available": ok, "port": SECURE_PORT, "fingerprint": certs.fingerprint()[:16] if ok else None}
+
+    @app.get("/remote/api/ping")
+    async def ping():
+        # the plain page probes the secure port with this to learn whether the certificate is trusted
+        return JSONResponse({"ok": True}, headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"})
+
+    @app.get("/remote/jarvis.mobileconfig")
+    async def profile():
+        if certs is None:
+            return JSONResponse({"error": "not available"}, status_code=404)
+        data = await asyncio.to_thread(certs.mobileconfig)
+        return Response(data, media_type="application/x-apple-aspen-config",
+                        headers={"Content-Disposition": 'attachment; filename="JARVIS.mobileconfig"',
+                                 "Cache-Control": "no-store"})
+
+    # ── the live link ────────────────────────────────────────────────────
     @app.websocket("/remote/ws")
     async def ws(socket: WebSocket):
         if not private_client(socket.client.host if socket.client else None):
@@ -107,100 +169,242 @@ def create_remote_app(supervisor, store) -> FastAPI:
             await socket.close(code=4401)
             return
         await socket.accept()
+        link = Link(device, secure=socket.url.scheme == "wss")
+        links.setdefault(device, set()).add(link)
         q = bus.subscribe()
         cfg = supervisor.cfg
+        j = supervisor.jarvis
+        link.put({"type": "hello", "owner": cfg.get("owner.name", ""), "title": cfg.get("owner.title", "sir"),
+                  "device": device, "state": bus.state.get("state", "idle"),
+                  "voice": {"secure": link.secure, "stt": bool(j is not None and getattr(j, "stt", None)),
+                            "secure_port": SECURE_PORT if getattr(getattr(supervisor, "remote", None), "secure_running", False) else None}})
+        latest: dict[str, dict] = {}
+        for e in list(bus.history):
+            if e.get("type") in REPLAY:
+                latest[e["type"]] = e
+        for e in latest.values():
+            link.put({**e, "replay": True})
+
+        async def forward():
+            while True:
+                e = await q.get()
+                if e.get("type") in FORWARD:
+                    link.put(e)
+
+        async def writer():
+            while True:
+                item = await link.out.get()
+                if isinstance(item, dict):
+                    await socket.send_text(json.dumps(item, default=str))
+                elif isinstance(item, tuple) and item[0] == "audio":
+                    await socket.send_text(json.dumps(item[1]))
+                    await socket.send_bytes(item[2])
+
+        async def reader():
+            while True:
+                msg = await socket.receive()
+                if msg.get("type") == "websocket.disconnect":
+                    return
+                if msg.get("bytes"):
+                    if link.voice is not None:
+                        link.voice.feed(msg["bytes"])
+                    continue
+                try:
+                    data = json.loads(msg.get("text") or "{}")
+                except ValueError:
+                    continue
+                if isinstance(data, dict):
+                    await respond(link, data)
+
+        tasks = [asyncio.ensure_future(t()) for t in (forward, writer, reader)]
         try:
-            await socket.send_json({"type": "hello", "owner": cfg.get("owner.name", ""),
-                                    "title": cfg.get("owner.title", "sir"), "device": device,
-                                    "state": bus.state.get("state", "idle")})
-            latest: dict[str, dict] = {}
-            for e in list(bus.history):
-                if e.get("type") in REPLAY:
-                    latest[e["type"]] = e
-            for e in latest.values():
-                await socket.send_json({**e, "replay": True})
-
-            async def pump():
-                while True:
-                    e = await q.get()
-                    if e.get("type") in FORWARD:
-                        await socket.send_json(e)
-
-            async def listen():
-                while True:
-                    msg = json.loads(await socket.receive_text())
-                    await command(msg)
-
-            await asyncio.gather(pump(), listen())
-        except (WebSocketDisconnect, RuntimeError):
-            pass
-        except Exception as exc:
-            log.debug("companion socket closed: %s", exc)
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         finally:
+            for t in tasks:
+                t.cancel()
+            if link.voice is not None:
+                link.voice.stop()
             bus.unsubscribe(q)
+            links.get(device, set()).discard(link)
+            try:
+                await socket.close()
+            except Exception:
+                pass
 
-    async def command(msg: dict) -> None:
+    async def respond(link: Link, msg: dict) -> None:
         kind = msg.get("type")
         if kind not in COMMANDS:
             return
-        j = supervisor.jarvis
+        if kind == "ping":
+            link.put({"type": "pong", "t": msg.get("t")})
+            return
+        try:
+            ok, note = await command(link, msg)
+        except Exception as exc:              # a failing command must never take the link down
+            log.exception("companion command %s failed", kind)
+            ok, note = False, f"That didn't work on the Mac ({type(exc).__name__})."
+        if msg.get("id") is not None:
+            link.put({"type": "ack", "id": msg.get("id"), "for": kind, "ok": ok, "note": note})
+
+    async def command(link: Link, msg: dict) -> tuple[bool, str]:
+        kind = msg.get("type")
         if kind == "show":
-            supervisor.show_window()
-            return
+            # pywebview waits on the main thread: never on JARVIS's own event loop
+            await asyncio.to_thread(supervisor.show_window)
+            return True, "JARVIS is on your Mac's screen"
+        j = supervisor.jarvis
         if j is None:
-            return
+            return False, "JARVIS is still starting on your Mac."
         if kind == "lock":
             from jarvis.tools.registry import registry
-            await registry.call("system_action", {"action": "lock_screen"}, j.ctx)
-            return
-        if kind == "text":
-            msg = {"type": "text", "text": str(msg.get("text", ""))[:2000]}
-        await j.hud_command(msg)
 
+            r = await registry.call("system_action", {"action": "lock_screen"}, j.ctx)
+            return (not getattr(r, "is_error", False)), ("Mac locked" if not getattr(r, "is_error", False)
+                                                         else str(getattr(r, "content", "Couldn't lock")))
+        if kind == "text":
+            text = str(msg.get("text", "")).strip()[:2000]
+            if not text:
+                return False, "Nothing to send."
+            j.queue_request(text, source="phone", route=route_for(link.device) if msg.get("speak") else None)
+            return True, "Sent"
+        if kind == "voice":
+            return voice(link, msg)
+        if kind == "stop" and link.voice is not None and link.voice.mode == "talk":
+            link.voice.stop()
+            link.put({"type": "voice", "phase": "off"})
+        await j.hud_command(msg)
+        notes = {"stop": "Stopped", "confirm": "Answered", "listen": "Listening on the Mac",
+                 "protocol": f"Running {str(msg.get('name', '')).replace('_', ' ')}",
+                 "mute": "Mac microphone muted" if msg.get("muted") else "Mac microphone on",
+                 "hand_control": "Hand control on" if msg.get("on") else "Hand control off"}
+        return True, notes.get(kind, "Done")
+
+    def voice(link: Link, msg: dict) -> tuple[bool, str]:
+        from jarvis.remote.voice import PhoneVoice
+
+        mode = str(msg.get("mode", "off"))
+        if mode != "off" and not link.secure:
+            return False, "Voice needs the secure connection. Set it up once from the mic button."
+        if link.voice is None:
+            loop = asyncio.get_running_loop()
+
+            def send(m: dict, link=link) -> None:
+                loop.call_soon_threadsafe(link.put, m)
+            link.voice = PhoneVoice(supervisor.jarvis, link.device, send,
+                                    route_factory=lambda d=link.device: route_for(d), wake_factory=load_wake)
+        err = link.voice.set_mode(mode, speak_here=msg.get("speak", True))
+        if err:
+            return False, err
+        return True, {"talk": "Listening", "wake": "Say “Hey JARVIS”", "off": "Voice off"}[mode]
+
+    def load_wake():
+        """A wake-word detector for phone audio (its own state: it never mixes with the Mac's mic)."""
+        with wake_lock:
+            if "w" not in wake_models:
+                j = supervisor.jarvis
+                from jarvis.voice.audio import WakeWord
+
+                mac = getattr(j, "wake", None)
+                w = WakeWord(getattr(mac, "model_name", "hey_jarvis"), getattr(mac, "threshold", 0.5),
+                             getattr(mac, "models_dir", None), announce=False)
+                wake_models["w"] = w if w.load() else None
+            return wake_models["w"]
+
+    def route_for(device: str):
+        """A speaker route that plays his voice on this device (its newest open link)."""
+        loop = asyncio.get_running_loop()
+        counter = {"n": 0}
+
+        def sink(audio, sr, text) -> bool:
+            live = list(links.get(device, ()))
+            if not live:
+                return False
+            counter["n"] += 1
+            data = wav_bytes(audio, sr)
+            meta = {"type": "audio", "n": counter["n"], "text": text, "duration": round(len(audio) / max(1, sr), 2),
+                    "bytes": len(data)}
+            target = live[-1]
+            loop.call_soon_threadsafe(target.put, ("audio", meta, data))
+            return True
+        return sink
+
+    app.state.route_for = route_for
     return app
 
 
 class RemoteServer:
-    """Start/stop the companion listener at runtime (Settings toggle)."""
+    """Start/stop the companion listeners at runtime (Settings toggle)."""
 
     def __init__(self, supervisor, store) -> None:
         self.supervisor, self.store = supervisor, store
-        self._server = None
-        self._task: asyncio.Task | None = None
+        self._servers: list = []
+        self._tasks: list[asyncio.Task] = []
         self.error = ""
+        self.secure_error = ""
+        self.secure_running = False
+        self.certs = None
 
     @property
     def running(self) -> bool:
-        return self._server is not None and self._task is not None and not self._task.done()
+        return bool(self._tasks) and not self._tasks[0].done()
 
-    async def start(self, host: str = "0.0.0.0", port: int = PORT) -> bool:
-        if self.running:
-            return True
+    async def _serve(self, app, host: str, port: int, **ssl) -> bool:
         import uvicorn
 
-        config = uvicorn.Config(create_remote_app(self.supervisor, self.store), host=host, port=port,
-                                log_level="warning", access_log=False)
-        self._server = uvicorn.Server(config)
-        self._server.install_signal_handlers = lambda: None
-        self._task = asyncio.ensure_future(self._server.serve())
+        server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_level="warning", access_log=False,
+                                               ws_max_size=4 * 1024 * 1024, **ssl))
+        server.install_signal_handlers = lambda: None
+        task = asyncio.ensure_future(server.serve())
         for _ in range(50):
             await asyncio.sleep(0.1)
-            if self._server.started:
-                log.info("companion listening on port %s", port)
-                self.error = ""
+            if server.started:
+                self._servers.append(server)
+                self._tasks.append(task)
                 return True
-            if self._task.done():
+            if task.done():
                 break
-        self.error = f"couldn't open port {port} (is something else using it?)"
-        log.warning("companion: %s", self.error)
-        self._server = None
+        server.should_exit = True
         return False
 
-    async def stop(self) -> None:
-        if self._server is not None:
-            self._server.should_exit = True
+    async def start(self, host: str = "0.0.0.0", port: int = PORT, secure_port: int | None = SECURE_PORT) -> bool:
+        if self.running:
+            return True
+        from jarvis.remote.tls import Certificates
+
+        name, ip = await asyncio.to_thread(lan_addresses)
+        home = getattr(self.supervisor.cfg, "home", None)
+        self.certs = Certificates(Path(home) / "companion-tls", name.removesuffix(".local").replace("-", " ")) \
+            if home is not None else None
+        app = create_remote_app(self.supervisor, self.store, self.certs)
+        self.app = app
+        if not await self._serve(app, host, port):
+            self.error = f"couldn't open port {port} (is something else using it?)"
+            log.warning("companion: %s", self.error)
+            return False
+        self.error = ""
+        log.info("companion listening on port %s", port)
+        self.secure_running = False
+        if secure_port and self.certs is not None:
             try:
-                await asyncio.wait_for(self._task, 5)
+                pem, key = await asyncio.to_thread(self.certs.ensure_server, [name], [ip] if ip else [])
+                if await self._serve(app, host, secure_port, ssl_certfile=str(pem), ssl_keyfile=str(key)):
+                    self.secure_running, self.secure_error = True, ""
+                    log.info("companion (secure, for voice) listening on port %s", secure_port)
+                else:
+                    self.secure_error = f"couldn't open port {secure_port}"
+            except Exception as exc:
+                self.secure_error = str(exc)
+            if self.secure_error:
+                log.warning("companion voice unavailable: %s", self.secure_error)
+        return True
+
+    async def stop(self) -> None:
+        for s in self._servers:
+            s.should_exit = True
+        for t in self._tasks:
+            try:
+                await asyncio.wait_for(t, 5)
             except Exception:
                 pass
-        self._server, self._task = None, None
+        self._servers, self._tasks = [], []
+        self.secure_running = False

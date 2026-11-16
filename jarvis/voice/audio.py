@@ -112,8 +112,10 @@ def drain(q: asyncio.Queue) -> None:
 class WakeWord:
     """openWakeWord detector. Ships a pre-trained "hey jarvis" model."""
 
-    def __init__(self, model_name: str = "hey_jarvis", threshold: float = 0.5, models_dir=None) -> None:
+    def __init__(self, model_name: str = "hey_jarvis", threshold: float = 0.5, models_dir=None,
+                 announce: bool = True) -> None:
         self.model_name = model_name
+        self.announce = announce        # False for the phone's detector: the Mac's HUD shouldn't react
         self.models_dir = models_dir
         self.threshold = threshold
         self._model = None
@@ -175,7 +177,8 @@ class WakeWord:
         if score >= self.threshold and now >= self._cooldown_until:
             self._cooldown_until = now + 1.5
             self._model.reset()
-            bus.emit("wake", score=round(float(score), 3))
+            if self.announce:
+                bus.emit("wake", score=round(float(score), 3))
             return True
         return False
 

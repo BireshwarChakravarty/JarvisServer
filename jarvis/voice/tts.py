@@ -295,6 +295,9 @@ class Speaker:
         return not self._idle.is_set()
 
     current_text = ""
+    # Where his voice goes. None: this Mac's speakers. Otherwise a callable(audio, sample_rate, text)
+    # that sends it somewhere else (the iPhone you spoke from) and returns False if it couldn't.
+    route = None
 
     def saying(self, word: str) -> bool:
         """Is the phrase playing right now saying `word`? (Used to ignore his own voice.)"""
@@ -431,6 +434,9 @@ class Speaker:
             # duration lets the HUD pace subtitles to the actual audio, word for word
             bus.emit("speaking", text=text, duration=round(len(audio) / max(1, sr), 2))
             try:
+                sink = self.route
+                if sink is not None and self._send_elsewhere(sink, audio, sr, text, gen):
+                    continue
                 self._play(audio, sr, gen, pause=breath_after(text))
             except Exception as exc:  # no output device, device unplugged … keep the worker alive
                 log.error("audio playback failed: %s", exc)
@@ -440,6 +446,28 @@ class Speaker:
                 self.current_text = ""
                 for _ in range(count):
                     self._done_one()
+
+    def _send_elsewhere(self, sink, audio: np.ndarray, sr: int, text: str, gen: int) -> bool:
+        """Hand the phrase to another device, then keep time as if it were playing here, so
+        'speaking', subtitles, barge-in and the reactor behave exactly the same."""
+        shaped = shape_audio(audio, sr, breath_after(text))
+        try:
+            if not sink(shaped, sr, text):
+                return False
+        except Exception as exc:
+            log.warning("couldn't send speech to the other device: %s", exc)
+            return False
+        block = int(sr * 0.04)
+        start = time.monotonic()
+        for n, i in enumerate(range(0, len(shaped), block)):
+            if self._stop_play.is_set() or gen != self._gen:
+                break
+            chunk = shaped[i:i + block]
+            bus.emit("level", source="tts", value=float(min(1.0, np.sqrt(np.mean(chunk ** 2)) * 6)) if len(chunk) else 0.0)
+            wait = start + (n + 1) * 0.04 - time.monotonic()
+            if wait > 0:
+                time.sleep(wait)
+        return True
 
     def _play(self, audio: np.ndarray, sr: int, gen: int, pause: float = 0.08) -> None:
         block = int(sr * 0.04)
