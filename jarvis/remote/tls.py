@@ -98,7 +98,8 @@ class Certificates:
             (t / "req.cnf").write_text(f"[req]\ndistinguished_name=dn\nprompt=no\n[dn]\nCN={names[0]}\nO=JARVIS\n")
             (t / "ext.cnf").write_text(
                 "basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\n"
-                f"extendedKeyUsage=serverAuth\nsubjectAltName={san}\n")
+                f"extendedKeyUsage=serverAuth\nsubjectAltName={san}\n"
+                "subjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid,issuer\n")
             _run("req", "-new", "-newkey", "rsa:2048", "-nodes", "-sha256", "-keyout", str(t / "k"),
                  "-out", str(t / "csr"), "-config", str(t / "req.cnf"))
             _run("x509", "-req", "-in", str(t / "csr"), "-CA", str(self.ca_pem), "-CAkey", str(self.ca_key),
