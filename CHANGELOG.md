@@ -3,6 +3,15 @@
 All builds are published to the `jarvis-latest` release after passing unit tests, the in-app self-test
 on Apple Silicon, a real launch, packaging, and a clean install on a fresh Mac.
 
+## Gestures fixed: ✌️ listening, and the air mouse no longer hijacks your hand
+- **✌️ (and the HUD mic) stopped listening at once**: the start chime was picked up by the mic, taken for
+  speech, transcribed as nothing, and the conversation ended. Now the chime's audio is discarded, and a
+  noise that turns out to be no words keeps him listening for the rest of the window.
+- **The air mouse is a mode you ask for** ("air mouse", "air mouse off"): it used to switch itself on
+  whenever your hand looked like ☝️ for half a second (often, by accident), then owned the hand: ✋, 👍,
+  ✌️, swipes and the volume dial stopped working and pinches became clicks. When it ends, gestures are
+  back, and the ✋ that ended it doesn't also fire "stop".
+
 ## Faster replies, like talking to a person
 - **Instant answers** for everyday commands (time, date, timers, pause / next song, volume, mute, lock):
   done on the Mac in milliseconds, no AI round trip; his brain is told what he did on the next turn.

@@ -545,14 +545,25 @@ async def walkthrough_memory(ctx, action: str, task: str = ""):
 
 # ═══════════════════════════════ hand control ════════════════════════════════
 @tool("Turn hand control on or off. Hand control covers every gesture: held poses (✋ stop, 👍/👎 yes/no, "
-      "✌️ listen, 🤟 play/pause), swipes for tracks, pinch-and-drag for volume, and the air mouse (hold ☝️ to "
-      "drive the pointer, pinch to click). It is off unless the user asks for it.",
+      "✌️ listen, 🤟 play/pause), swipes for tracks and pinch-and-drag for volume. It is off unless the user "
+      "asks for it. The pointer (air mouse) is separate: use air_mouse.",
       {"on": _p("true to turn on, false to turn off", B)}, ["on"], category="self")
 async def hand_control(ctx, on: bool):
     orch = ctx.orchestrator
     if orch is None:
         return "No orchestrator attached."
     return orch.set_hand_control(bool(on))
+
+
+@tool("Start or stop the air mouse: the user drives the Mac's pointer with their index finger and pinches to "
+      "click. It's a separate mode from hand control (which it switches on); while it runs, other gestures "
+      "pause. It ends when they hold up a palm, take their hand away, or ask.",
+      {"on": _p("true to start, false to stop", B)}, ["on"], category="self")
+async def air_mouse(ctx, on: bool):
+    orch = ctx.orchestrator
+    if orch is None:
+        return "No orchestrator attached."
+    return orch.set_air_mouse(bool(on))
 
 
 @tool("Update JARVIS to the latest version: downloads the newest verified build, installs it (keeping "

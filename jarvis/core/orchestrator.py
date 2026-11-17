@@ -397,6 +397,12 @@ class Jarvis:
             if self._listen_now.is_set():
                 self._listen_now.clear()
                 self.speaker.play_tone("wake")
+                # the mic hears the chime: let it finish and throw that audio away, or the listener
+                # takes the chime for you speaking, "hears" you stop, and gives up at once
+                await asyncio.sleep(0.3)
+                from jarvis.voice.audio import drain
+
+                drain(q)
                 return None
             if self.wake and self.wake.available:
                 try:
@@ -439,6 +445,7 @@ class Jarvis:
         follow_up = False
         pending_text = first_text
         ack_if_pause, self._ack_if_pause = getattr(self, "_ack_if_pause", False), False
+        first_window = time.monotonic() + 6.0      # how long the first listen waits for you in all
         while True:
             if pending_text:
                 text, pending_text = pending_text, None
@@ -462,7 +469,8 @@ class Jarvis:
                         continue
                 audio = await record_utterance(
                     q, self.vad,
-                    start_timeout=float(self.cfg.get("voice.follow_up_seconds", 7)) if follow_up else 6.0,
+                    start_timeout=(float(self.cfg.get("voice.follow_up_seconds", 7)) if follow_up
+                                   else max(0.5, first_window - time.monotonic())),
                     end_silence=0.75 if not stop_evt else 30.0,
                     max_seconds=float(self.cfg.get("voice.max_utterance_seconds", 30)),
                     stop_event=stop_evt,
@@ -477,6 +485,8 @@ class Jarvis:
             if not text:
                 if follow_up:
                     return
+                if time.monotonic() < first_window - 0.5:
+                    continue                # a cough or a click, not words: keep listening for you
                 bus.emit("state", state="idle")
                 return
             if DISMISS.match(text.strip()):
@@ -1019,9 +1029,23 @@ class Jarvis:
         g.set_enabled(on)
         if on:
             mins = int(g.idle_off // 60)
-            return (f"Hand control on. Show me your hand. Hold up one finger for the pointer. "
+            return (f"Hand control on. Show me your hand. Say \"air mouse\" if you want the pointer. "
                     f"I'll switch it off after {mins} minutes without seeing a hand.")
         return "Hand control off."
+
+    def set_air_mouse(self, on: bool) -> str:
+        """The air mouse: a mode you ask for (never from a pose), ended with ✋ or by asking."""
+        g = self.gestures
+        if g is None or not g.available:
+            return ("The air mouse needs the camera and the gesture model; neither is running right now."
+                    if on else "The air mouse is already off.")
+        active = g.airmouse is not None and g.airmouse.active
+        if bool(on) == active:
+            return "The air mouse is already on." if on else "The air mouse is already off."
+        g.set_air_mouse(on)
+        if on:
+            return "Air mouse on. Point to move, pinch to click. Hold up your palm when you're done."
+        return "Air mouse off. Gestures are back."
 
     def _on_gesture_thread(self, gesture: str, action: str) -> None:
         if self.loop:
@@ -1103,6 +1127,9 @@ class Jarvis:
         elif kind == "greet":
             self.memory.set("last_greeting", 0)
             asyncio.create_task(self.greet("login")).add_done_callback(_log_failure)
+        elif kind == "air_mouse":
+            reply = self.set_air_mouse(bool(msg.get("on")))
+            bus.emit("announce", text=reply, priority="normal")
         elif kind == "hand_control":
             on = msg.get("on")
             if on is None and self.gestures is not None:

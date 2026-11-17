@@ -8,6 +8,7 @@
 
 Motion gestures (see motion.py): swipe ← → for tracks, flick ↑ to bring up the HUD,
 pinch and drag up/down for volume, pinch and drag sideways to spin the hologram.
+The air mouse (airmouse.py) is a separate mode you ask for; it never starts from a pose.
 Static poses only count while the hand is held still, so a swipe never reads as ✋.
 """
 from __future__ import annotations
@@ -144,7 +145,6 @@ class GestureEngine:
         self.enabled = on
         if on:
             self._enabled_at = time.monotonic()
-            self.set_air_mouse(True)
         else:
             self.set_air_mouse(False)           # releases a held click, restores the capsule
             self._history.clear()
@@ -158,23 +158,35 @@ class GestureEngine:
             self.on_idle_off()
 
     def set_air_mouse(self, enabled: bool) -> None:
-        """Turn the air mouse feature on or off while running (Settings toggle)."""
+        """Start or stop the air mouse. It's a mode you ask for; it turns hand control on with it,
+        and when it ends (✋, no hand, or asked) every other gesture works again."""
         if not enabled:
-            if self.airmouse is not None and self.airmouse.active:
-                self.airmouse._set(False)          # release any held click, restore the capsule
-            self.airmouse = None
+            am, self.airmouse = self.airmouse, None
+            if am is not None and am.active:
+                am.stop()                          # release any held click, restore the capsule
             return
-        if self.airmouse is not None:
+        if self.airmouse is not None and self.airmouse.active:
             return
+        if not self.enabled:
+            self.set_enabled(True, reason="air mouse")
         from jarvis.vision.airmouse import AirMouse
 
         def changed(on: bool) -> None:
             bus.emit("airmouse", active=on)
-            from jarvis.app.mini import click_through
+            try:
+                from jarvis.app.mini import click_through
 
-            click_through(on)   # the floating capsule must never catch a hand-made click
+                click_through(on)   # the floating capsule must never catch a hand-made click
+            except Exception:
+                pass
+            if not on:
+                # handing the hand back: the ✋ that ended it mustn't also fire "stop"
+                self.airmouse = None
+                self._history.clear()
+                self._cool_until = time.monotonic() + self.cooldown
 
         self.airmouse = AirMouse(on_change=changed)
+        self.airmouse.start(time.monotonic())
 
     def handle_motion(self, now: float, lms: list | None, label: str = "None") -> bool:
         """Feed one frame's landmarks to the motion tracker; publish the cursor and motion events.

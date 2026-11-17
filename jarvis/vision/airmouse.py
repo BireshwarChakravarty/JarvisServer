@@ -1,10 +1,12 @@
-"""Air mouse: drive the real macOS pointer with your hand (opt-in: vision.air_mouse: true).
+"""Air mouse: drive the real macOS pointer with your hand. Its own mode, only when you ask.
 
-  ☝️ hold ½ s        start: the pointer follows your index fingertip
-  pinch              click (pinch and move = drag)
-  ✋ hold ½ s         stop  (or take your hand away for two seconds)
+  "air mouse on" (voice, or the ✋ menu)   start: the pointer follows your index fingertip
+  pinch                                     click (pinch and move = drag)
+  ✋ hold ½ s, "air mouse off", or no hand    stop
 
-While it is on, swipes and the pinch volume dial are paused so nothing fights over your hand.
+It never starts from a pose: ☝️ is a shape the recogniser sees by accident all the time, and an air
+mouse that switched itself on stole the hand from every other gesture (and turned pinches into
+clicks). While it is on, it owns the hand; when it stops, gestures carry on as before.
 The mode logic is pure and testable; MacPointer posts the actual Quartz mouse events, which needs
 the Accessibility permission JARVIS already asks for during setup.
 """
@@ -46,12 +48,13 @@ class MacPointer:
 
 
 class AirMouse:
-    HOLD = 0.5          # seconds a pose must be held to start/stop
-    LOST = 2.0          # hand gone this long: stop
+    HOLD = 0.5          # seconds ✋ must be held to stop
+    LOST = 4.0          # hand gone this long: stop
 
-    def __init__(self, pointer=None, on_change=None) -> None:
+    def __init__(self, pointer=None, on_change=None, pose_start: bool = False) -> None:
         self.pointer = pointer
         self.on_change = on_change or (lambda active: None)
+        self.pose_start = pose_start   # legacy: ☝️ held starts it (off: asked for explicitly)
         self.active = False
         self._pose: str | None = None
         self._pose_since = 0.0
@@ -74,6 +77,15 @@ class AirMouse:
         log.info("air mouse %s", "on" if active else "off")
         self.on_change(active)
 
+    def start(self, t: float = 0.0) -> None:
+        """Asked for: on at once, with a grace period before 'no hand' counts."""
+        self._last_seen = t
+        self._pose, self._pose_since = None, t
+        self._set(True)
+
+    def stop(self) -> None:
+        self._set(False)
+
     def update(self, t: float, label: str, state) -> bool:
         """Feed one frame (pose label + HandState). Returns True while the air mouse owns the hand."""
         if state.visible:
@@ -85,7 +97,7 @@ class AirMouse:
             self._pose, self._pose_since = label, t
         held = t - self._pose_since >= self.HOLD
         if not self.active:
-            if label == "Pointing_Up" and held:
+            if self.pose_start and label == "Pointing_Up" and held:
                 self._set(True)
                 self._pose_since = t   # don't immediately reuse the hold
             return self.active

@@ -140,6 +140,11 @@ def match(text: str, now: dt.datetime | None = None, rng: random.Random | None =
     if re.fullmatch(r"(unmute|unmute (the )?(sound|audio|volume|mac|speakers)|sound on)", t):
         return Quick("mute", {"muted": False}, _pick(["Sound's back.", "Unmuted."], rng), "unmuted the sound")
 
+    if re.fullmatch(r"(turn |switch )?(on )?(the )?air ?mouse( on)?|start (the )?air ?mouse", t):
+        return Quick("air_mouse", {"on": True}, "", note="started the air mouse")
+    if re.fullmatch(r"(turn |switch )?(off )?(the )?air ?mouse off|(turn|switch) off (the )?air ?mouse|"
+                    r"stop (the )?air ?mouse", t):
+        return Quick("air_mouse", {"on": False}, "", note="stopped the air mouse")
     if re.fullmatch(r"lock( the| my)?( mac| screen| computer)?( now)?", t):
         return Quick("system_action", {"action": "lock_screen"}, _pick(["Locking it now.", "Locking."], rng),
                      note="locked the Mac")

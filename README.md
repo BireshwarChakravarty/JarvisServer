@@ -30,7 +30,7 @@ smart home and terminal. Everything shows on a live, holographic HUD.
 | 👁️ **Sees** | "What am I holding?", "How do I look?", "What's on my screen?", "Read this error": camera frames and screenshots go straight to Claude's vision. |
 | 🧑‍🚀 **Knows you** | Face recognition (OpenCV YuNet + SFace) tells you apart from visitors. Optional **sentry mode** photographs unknown faces while you're away; optional auto-lock when you leave. |
 | 🤚 **Gestures** | Hold a pose: ✋ stop · 👍 / 👎 answer a confirmation · ✌️ start listening · 🤟 play/pause music. Or move: **swipe ← →** for the previous or next track · **flick ↑** to bring up the HUD · **pinch and drag up or down** to turn the volume like a dial · **pinch and drag sideways** to spin the hologram core. A reticle on the HUD follows your hand, so you can see what he sees. |
-| 🖱️ **Air mouse** | Part of hand control: hold ☝️ for half a second and the Mac's pointer follows your fingertip, a pinch clicks (pinch and move drags), ✋ stops. |
+| 🖱️ **Air mouse** | Say *"air mouse"*: the Mac's pointer follows your fingertip, a pinch clicks (pinch and move drags), ✋ stops. It never starts by itself. |
 | 🫧 **Mini JARVIS** | Minimise or close the window (or ⌘H) and a small floating capsule stays on screen: his state, the line he's saying, your next meeting. It floats over every Space and full-screen apps, never takes focus, opens top-centre clear of notifications and the Dock, and remembers where you drag it. Click it to bring the HUD back. |
 | 🔐 **Walk away, come back** | With "Lock the Mac when I leave" on, he locks when you walk off and wakes the screen when he recognises you again. Unlocking stays with macOS (Apple Watch, Touch ID or your password): he never stores or types your password. |
 | ✉️ **Email** | "Anything in my email that needs me?" He reads unread mail from Apple Mail (Gmail, iCloud, Outlook, work: any account added in System Settings › Internet Accounts), ranks it on your Mac, and tells you the **top 3** that need you: who, what, and a suggested next step. "Read me the second one" or "open it" works too. If Mail is open, his morning greeting mentions anything urgent. No passwords; macOS asks once before he may read Mail. |
@@ -140,16 +140,17 @@ arm's length from the camera; keep your hand in the middle of the camera's view 
 | Pinch thumb and index, drag up or down | Volume dial: up is louder. A gold arc around the core shows the level |
 | Pinch, drag sideways | Spin the hologram core |
 
-**Air mouse** (part of hand control; moving the pointer needs the Accessibility permission)
+**Air mouse** (a mode you ask for; moving the pointer needs the Accessibility permission)
 
 | Do this | What happens |
 |---|---|
-| ☝️ Point up, hold half a second | Air mouse on: the Mac's pointer follows your fingertip |
+| Say *"air mouse"* (or *"air mouse on"*) | The Mac's pointer follows your index fingertip (hand control comes on with it) |
 | Pinch | Click |
 | Pinch, move, release | Drag |
-| ✋ Open palm, hold half a second (or take your hand away for 2 s) | Air mouse off |
+| ✋ Open palm, hold half a second, say *"air mouse off"*, or take your hand away for 4 s | Air mouse off; every gesture works again |
 
-While the air mouse is on, swipes and the volume dial pause so nothing fights over your hand.
+It never switches itself on from a pose, so ✋, 👍, ✌️, swipes and the volume dial always behave as gestures
+unless you've asked for the pointer.
 
 **Tips**
 

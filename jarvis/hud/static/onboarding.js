@@ -475,7 +475,7 @@
   }
   $("speech-next").onclick = nextStep;
   // Hand control: a live switch (nothing saved; it always starts off)
-  const HAND_D = "Every gesture and the air mouse, only while this is on. Ask me any time: “hand control on”.";
+  const HAND_D = "Every gesture, only while this is on. Ask me any time: “hand control on”. The pointer is separate: say “air mouse”.";
   $("opt-hand").onchange = async () => {
     const on = $("opt-hand").checked;
     try {
@@ -483,7 +483,7 @@
       $("opt-hand").checked = !!r.enabled;
       $("hand-d").textContent = r.needs_permission
         ? "On. For the air mouse, allow JARVIS under Accessibility in the window that just opened."
-        : r.enabled ? "On. Show me your hand; hold up one finger for the pointer." : HAND_D;
+        : r.enabled ? "On. Show me your hand. Say “air mouse” if you want the pointer." : HAND_D;
       caption(r.message || "");
     } catch (e) { $("opt-hand").checked = !on; caption(e.message); }
   };

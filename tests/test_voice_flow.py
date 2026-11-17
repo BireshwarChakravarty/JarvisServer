@@ -93,3 +93,26 @@ def test_dismissal_ends_conversation_without_llm_call(cfg):
         return client
 
     assert asyncio.run(run()).requests == []
+
+
+def test_listen_trigger_survives_its_own_chime(cfg):
+    """✌️ / the mic button play a chime: the mic hears it. That used to end listening at once."""
+    from jarvis.core.orchestrator import Jarvis
+
+    cfg.data["voice"]["follow_up_seconds"] = 0.4
+
+    async def run():
+        app = Jarvis(cfg, headless=True)
+        await app.start()
+        app.vad, app.wake = energy_vad(), None
+        app.stt = FakeSTT(["", "how was the market today?"])          # the chime transcribes as nothing
+        client = FakeClient([message([text_block("Up nine points, sir.")])])
+        app.brain._client = client
+        q = asyncio.Queue()
+        for f in frames("speech", 3) + frames("silence", 12) + frames("speech", 12) + frames("silence", 14):
+            q.put_nowait(f)
+        await asyncio.wait_for(app._converse(q, None), 15)
+        return client
+
+    client = asyncio.run(run())
+    assert client.requests and client.requests[0]["messages"][0]["content"][-1]["text"] == "how was the market today?"

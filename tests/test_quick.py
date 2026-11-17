@@ -51,6 +51,8 @@ def test_time_and_date_are_answered_from_the_clock():
     ("turn it up", "volume_step", {"delta": 15}), ("a bit quieter please", "volume_step", {"delta": -15}),
     ("mute", "mute", {"muted": True}), ("unmute the sound", "mute", {"muted": False}),
     ("lock the mac", "system_action", {"action": "lock_screen"}), ("cancel the timers", "cancel_timer", {}),
+    ("air mouse", "air_mouse", {"on": True}), ("turn on the air mouse", "air_mouse", {"on": True}),
+    ("air mouse off", "air_mouse", {"on": False}), ("stop the air mouse", "air_mouse", {"on": False}),
 ])
 def test_everyday_commands(text, tool, args):
     q = m(text)

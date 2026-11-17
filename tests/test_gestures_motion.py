@@ -139,7 +139,19 @@ class FakePointer:
     def up(self, x, y): self.log.append("up")
 
 
-def test_air_mouse_modes():
+def test_air_mouse_never_starts_from_a_pose():
+    from jarvis.vision.airmouse import AirMouse
+
+    p, changes = FakePointer(), []
+    am, m = AirMouse(p, changes.append), HandMotion()
+    t = 0.0
+    for _ in range(48):                                                # ☝️ held for two whole seconds
+        t += 1 / 24
+        assert not am.update(t, "Pointing_Up", m.update(t, hand(0.5, 0.5, True)))
+    assert not am.active and changes == [] and p.log == []            # no pointer, no clicks
+
+
+def test_air_mouse_when_asked_clicks_and_hands_back_on_palm():
     from jarvis.vision.airmouse import AirMouse
 
     p, changes = FakePointer(), []
@@ -151,10 +163,7 @@ def test_air_mouse_modes():
         t += 1 / 24
         return am.update(t, label, m.update(t, frame))
 
-    for _ in range(6):
-        assert not step("Pointing_Up", hand(0.5, 0.5))                 # not yet: hold ½ s
-    for _ in range(10):
-        step("Pointing_Up", hand(0.5, 0.5))
+    am.start(t)
     assert am.active and changes == [True]
     for _ in range(5):
         step("None", hand(0.5 + 0.01 * i, 0.5))
@@ -168,18 +177,49 @@ def test_air_mouse_modes():
     assert not am.active and changes == [True, False]
 
 
-def test_air_mouse_can_be_switched_at_runtime():
+def test_air_mouse_stops_when_the_hand_is_gone():
+    from jarvis.vision.airmouse import AirMouse
+
+    am, m = AirMouse(FakePointer()), HandMotion()
+    am.start(0.0)
+    t = 0.0
+    while t < 5.0:
+        t += 1 / 24
+        am.update(t, "None", m.update(t, None))
+    assert not am.active
+
+
+def test_gestures_work_again_after_the_air_mouse():
+    import time
     from pathlib import Path
 
     from jarvis.vision.gestures import GestureEngine
 
-    eng = GestureEngine(Path("."), lambda g, a: None)
-    assert eng.airmouse is None
+    fired = []
+    eng = GestureEngine(Path("."), lambda g, a: fired.append(a))
+    eng.airmouse = None
+    eng.set_enabled(True)
+    assert eng.airmouse is None                          # hand control alone: gestures, no pointer
+    from jarvis.vision import airmouse as am_mod
+    am_mod.MacPointer = FakePointer                      # no real pointer in tests
     eng.set_air_mouse(True)
-    assert eng.airmouse is not None
-    eng.airmouse.active = True
+    assert eng.airmouse is not None and eng.airmouse.active
     eng.set_air_mouse(False)
-    assert eng.airmouse is None
+    assert eng.airmouse is None and eng.enabled          # hand control stays on
+    assert eng._cool_until > time.monotonic()            # the ✋ that ended it doesn't also fire "stop"
+
+
+def test_asking_for_the_air_mouse_turns_hand_control_on():
+    from pathlib import Path
+
+    from jarvis.vision import airmouse as am_mod
+    from jarvis.vision.gestures import GestureEngine
+
+    am_mod.MacPointer = FakePointer
+    eng = GestureEngine(Path("."), lambda g, a: None)
+    assert not eng.enabled
+    eng.set_air_mouse(True)
+    assert eng.enabled and eng.airmouse.active
 
 
 def test_hand_control_is_off_until_asked_and_turns_itself_off():
@@ -195,7 +235,7 @@ def test_hand_control_is_off_until_asked_and_turns_itself_off():
     assert eng.enabled is False
     eng.process(np.zeros((8, 8, 3), np.uint8))          # off: does nothing at all (no model needed)
     eng.set_enabled(True)
-    assert eng.enabled and eng.airmouse is not None      # the air mouse comes with it
+    assert eng.enabled and eng.airmouse is None          # gestures only: the pointer is separate
     eng._enabled_at = eng._seen = time.monotonic() - 601  # ten minutes without a hand
     eng.process(np.zeros((8, 8, 3), np.uint8))
     assert not eng.enabled and eng.airmouse is None and idled == [1]
