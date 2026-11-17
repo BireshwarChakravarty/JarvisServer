@@ -112,7 +112,9 @@ class Transcriber:
             text = result.get("text", "")
         else:
             segments, _ = impl.transcribe(
-                audio, language=self.language, beam_size=1, vad_filter=True,
+                audio, language=self.language, beam_size=1,
+                # the audio is already trimmed to your speech: skip the extra VAD pass on short turns
+                vad_filter=len(audio) > 16000 * 20, without_timestamps=True,
                 initial_prompt=self.prompt, condition_on_previous_text=False,
             )
             text = " ".join(s.text for s in segments)

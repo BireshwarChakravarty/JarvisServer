@@ -55,8 +55,8 @@ def test_converse_full_turn_then_follow_up_timeout(cfg):
         app = Jarvis(cfg, headless=True)
         await app.start()
         app.vad, app.wake = energy_vad(), None
-        app.stt = FakeSTT(["Hey Jarvis, what time is it?"])
-        client = FakeClient([message([text_block("It's nine o'clock, sir.")])])
+        app.stt = FakeSTT(["Hey Jarvis, how was the market today?"])
+        client = FakeClient([message([text_block("Up nine points, sir.")])])
         app.brain._client = client
         events = bus.subscribe()
         q = asyncio.Queue()
@@ -70,7 +70,7 @@ def test_converse_full_turn_then_follow_up_timeout(cfg):
 
     client, seen = asyncio.run(run())
     user_text = client.requests[0]["messages"][0]["content"][-1]["text"]
-    assert user_text == "what time is it?"  # wake phrase stripped
+    assert user_text == "how was the market today?"  # wake phrase stripped
     assert any(e["type"] == "reply" and "nine" in e["text"] for e in seen)
     states = [e["state"] for e in seen if e["type"] == "state"]
     assert "transcribing" in states and "thinking" in states and states[-1] == "idle"

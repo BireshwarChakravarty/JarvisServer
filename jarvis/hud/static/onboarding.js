@@ -177,6 +177,7 @@
     try { B = await api("/api/setup/brain"); } catch (e) { B = { provider: "claude-code", claude: {}, codex: {}, has_key: S.has_key }; }
     provider = B.provider === "anthropic" && !B.has_key ? "claude-code" : B.provider;
     if (B.claude_model) $("claude-model").value = B.claude_model;
+    if (B.speed) $("brain-speed").value = B.speed;
     else if (B.recommended_model) {   // signed in with Pro: Sonnet is quicker and easier on your allowance
       $("claude-model").value = B.recommended_model;
       api("/api/setup/brain", { provider, claude_model: B.recommended_model }).catch(() => {});
@@ -198,7 +199,9 @@
     ["claude-code", "codex", "anthropic"].forEach((p) => ($("tag-" + p).textContent = ready(p) ? "✓ ready" : ""));
     const cli = provider !== "anthropic";
     $("cli-panel").hidden = !cli; $("key-panel").hidden = cli;
-    $("claude-model-field").hidden = provider !== "claude-code" || !ready("claude-code");   // only once signed in
+    $("claude-model-field").hidden = provider !== "claude-code" || !ready("claude-code") ||
+      $("brain-speed").value === "fast";                              // fast always uses the quick model
+    $("speed-field").hidden = !provider;
     if (cli) {
       const st = B[CLI[provider]] || {}, [app, plan] = NAMES[provider];
       $("cs-install-t").textContent = `Install ${app}`;
@@ -220,6 +223,10 @@
     api("/api/setup/brain", { provider }).catch(() => {});
   }));
   $("claude-model").onchange = () => api("/api/setup/brain", { provider, claude_model: $("claude-model").value }).catch(() => {});
+  $("brain-speed").onchange = () => {
+    api("/api/setup/brain", { provider, speed: $("brain-speed").value }).catch(() => {});
+    $("claude-model-field").hidden = provider !== "claude-code" || !ready("claude-code") || $("brain-speed").value === "fast";
+  };
   function logLine(line) {
     const el = $("cli-log"); el.hidden = false;
     el.textContent += (el.textContent ? "\n" : "") + line; el.scrollTop = el.scrollHeight;

@@ -31,10 +31,14 @@ def clean_for_speech(text: str) -> str:
 class SentenceSplitter:
     """Feed streamed text deltas; get back complete sentences as soon as they end."""
 
-    def __init__(self, min_chars: int = 12, soft_limit: int = 160) -> None:
+    def __init__(self, min_chars: int = 12, soft_limit: int = 160, first_clause: int = 60) -> None:
         self.buf = ""
         self.min_chars = min_chars
         self.soft_limit = soft_limit
+        # the first thing he says starts sooner: a long opening sentence is spoken from its first
+        # natural pause (a comma past ~25 characters) instead of waiting for the full stop
+        self.first_clause = first_clause
+        self.emitted = False
 
     def feed(self, delta: str) -> list[str]:
         self.buf += delta
@@ -46,6 +50,7 @@ class SentenceSplitter:
             sentence, self.buf = self.buf[:cut].strip(), self.buf[cut:]
             if sentence:
                 out.append(sentence)
+                self.emitted = True
         return out
 
     def flush(self) -> list[str]:
@@ -70,6 +75,10 @@ class SentenceSplitter:
                 continue
             # decimals like 3.5 never match because we require whitespace after the period
             return end
+        if not self.emitted and self.first_clause and len(buf) > self.first_clause:
+            idx = buf.find(", ", 25, self.first_clause + 40)
+            if idx != -1:
+                return idx + 1
         if len(buf) > self.soft_limit:
             # long run-on: break at the last comma/semicolon/colon
             idx = max(buf.rfind(", ", 0, self.soft_limit), buf.rfind("; ", 0, self.soft_limit),

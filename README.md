@@ -254,6 +254,13 @@ for… ten minutes"* isn't cut off at the pause. When an answer takes a moment h
 fits (*"Checking your calendar."*), never the same line twice running, and after answering he keeps
 listening for a few seconds so you can carry on without his name.
 
+**How fast he answers.** Everyday commands (the time, the date, timers, pause, next song, volume,
+mute, lock) are answered instantly on your Mac, with no AI round trip. Everything else goes to his
+brain on the **Fast** setting by default: a quick model with little deliberation, so his first words
+come in about a second, and if a lookup is obviously needed he says so straight away ("Checking your
+calendar."). For harder questions choose **Balanced** or **Thorough** in Settings › Intelligence ›
+Replies.
+
 ### "Show me how": on-screen guidance
 
 Ask how to do something on your Mac and JARVIS shows you instead of describing it: a light flies to the

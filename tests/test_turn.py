@@ -94,6 +94,13 @@ def test_mid_thought_gives_up_after_the_patience_window():
     assert 1.0 + 1.4 <= secs <= 1.0 + 2.0 and left > 0
 
 
+def test_an_unsure_verdict_waits_the_normal_pause():
+    t = Turn([0.55])                       # neither clearly finished nor clearly mid-thought
+    audio, _ = run([(1.0, True), (3.0, False)], t)
+    secs = len(audio) / SAMPLE_RATE
+    assert 1.0 + 0.7 <= secs <= 1.0 + 1.3
+
+
 def test_without_a_model_the_silence_timeout_applies():
     audio, _ = run([(1.0, True), (3.0, False)], None)
     secs = len(audio) / SAMPLE_RATE

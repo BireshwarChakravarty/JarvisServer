@@ -213,6 +213,7 @@ def make_router(sup) -> APIRouter:
             asyncio.to_thread(brain_setup.status, "codex", cfg.get("brain.codex_path")))
         return {"provider": cfg.get("brain.provider", "anthropic"), "claude": claude, "codex": codex,
                 "has_key": _has_key(), "claude_model": cfg.get("brain.claude_model") or "",
+                "speed": cfg.get("brain.speed", "fast") or "fast",
                 "recommended_model": recommended_model(claude.get("subscription", ""))}
 
     @r.post("/api/setup/brain")
@@ -223,7 +224,18 @@ def make_router(sup) -> APIRouter:
         patch = {"brain": {"provider": provider}}
         if "claude_model" in body:
             patch["brain"]["claude_model"] = body.get("claude_model") or None
+        if "speed" in body:
+            from jarvis.core.speed import SPEEDS
+
+            if body.get("speed") not in SPEEDS:
+                return JSONResponse({"ok": False, "error": "unknown speed"}, status_code=400)
+            patch["brain"]["speed"] = body["speed"]
         _write_user_config(sup.cfg, patch)
+        if ("speed" in body or "claude_model" in body) and sup.jarvis is not None and getattr(sup.jarvis, "brain", None):
+            try:
+                sup.jarvis.brain.reset()        # the next reply starts with the new model and effort
+            except Exception:
+                pass
         return {"ok": True}
 
     @r.post("/api/setup/brain/{which}/{action}")

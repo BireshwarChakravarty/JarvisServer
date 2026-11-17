@@ -555,6 +555,10 @@ class Jarvis:
     # ═════════════════════════════ turns ═════════════════════════════════
     async def handle_text(self, text: str, source: str = "text", images: list | None = None) -> str:
         bus.emit("transcript", text=text, source=source)
+        if not images and source in ("voice", "hud", "phone", "text") and self.cfg.get("brain.quick_answers", True):
+            quick = await self._quick_answer(text)
+            if quick is not None:
+                return quick
         cancel = asyncio.Event()
         self._cancel_turn = cancel
         self._turn_active = True
@@ -587,6 +591,52 @@ class Jarvis:
                 filler.cancel()
         self._note_opening(reply if isinstance(reply, str) else "")
         return reply
+
+    async def _quick_answer(self, text: str) -> str | None:
+        """Everyday commands answered at once, without the brain (see jarvis/core/quick.py)."""
+        from jarvis.core import quick
+        from jarvis.tools.registry import registry
+
+        q = quick.match(text)
+        if q is None:
+            return None
+        t0 = time.perf_counter()
+        try:
+            if q.tool == "volume_step":
+                from jarvis.mac import system as mac
+
+                level = await asyncio.to_thread(mac.get_volume)
+                await asyncio.to_thread(mac.set_volume, max(0, min(100, level + int(q.args["delta"]))))
+            elif q.tool:
+                if q.tool == "system_action":          # say it before the screen locks
+                    self._say_quick(q.reply)
+                    await asyncio.sleep(0.6)
+                res = await registry.call(q.tool, q.args, self.ctx)
+                if getattr(res, "is_error", False):
+                    log.info("quick %s failed (%s): handing to the brain", q.tool, str(res.content)[:120])
+                    return None
+                if not q.reply:
+                    q.reply = str(res.content)[:200]
+                if q.tool == "system_action":
+                    q.reply = ""
+        except Exception as exc:
+            log.info("quick answer failed (%s): handing to the brain", exc)
+            return None
+        if q.reply:
+            self._say_quick(q.reply)
+        if q.note:
+            notes = getattr(self, "_quick_notes", [])
+            self._quick_notes = (notes + [q.note])[-4:]
+        log.info("quick answer in %.0f ms: %r", (time.perf_counter() - t0) * 1000, text[:60])
+        return q.reply or "Done."
+
+    def _say_quick(self, line: str) -> None:
+        if not line:
+            return
+        bus.emit("reply", text=line)
+        bus.emit("state", state="speaking")
+        if self.speaker:
+            self.speaker.enqueue(line)
 
     # A person answers within a second or so, even if only to say they're on it. When the model is
     # slow to its first word (a tool call, a web search) JARVIS says so instead of leaving silence,
@@ -623,7 +673,9 @@ class Jarvis:
         return line
 
     async def _filler(self, first: asyncio.Event, cancel: asyncio.Event, text: str = "") -> None:
-        for delay, slow in ((1.3, False), (9.0, True)):
+        # a lookup is obviously coming ("what's on my calendar"): say so sooner, as a person would
+        topical = any(re.search(p, text or "", re.I) for p, _ in self.TOPICAL)
+        for delay, slow in ((0.7 if topical else 1.3, False), (9.0, True)):
             try:
                 await asyncio.wait_for(first.wait(), delay)
                 return
@@ -693,6 +745,9 @@ class Jarvis:
         alarms = self.scheduler.list()
         if alarms:
             ctx["active timers"] = ", ".join(f"{a['message']} ({max(0, a['in_seconds'])}s)" for a in alarms[:3])
+        notes, self._quick_notes = list(getattr(self, "_quick_notes", [])), []
+        if notes:
+            ctx["you just did, without thinking it through"] = "; ".join(notes)
         openings = list(getattr(self, "_openings", []))
         if openings:
             # so he doesn't open every reply the same way ("Done, sir." … "Done, sir.")

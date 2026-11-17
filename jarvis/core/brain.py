@@ -175,14 +175,17 @@ class Brain:
 
     # ── the agent loop ───────────────────────────────────────────────────
     def _request_params(self, session: Session) -> dict:
+        from jarvis.core import speed
+
         b = self.cfg.get
+        model, effort = speed.api(self.cfg)
         params: dict[str, Any] = {
-            "model": b("brain.model", "claude-opus-5-5"),
+            "model": model,
             "max_tokens": int(b("brain.max_tokens", 8000)),
             "system": [{"type": "text", "text": session.system, "cache_control": {"type": "ephemeral"}}],
             "tools": session.tools,
             "messages": session.messages,
-            "output_config": {"effort": b("brain.effort", "low")},
+            "output_config": {"effort": effort},
             "cache_control": {"type": "ephemeral"},  # auto-cache the growing conversation
         }
         betas: list[str] = []

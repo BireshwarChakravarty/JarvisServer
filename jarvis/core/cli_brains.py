@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from jarvis.aio import spawn
+from jarvis.core import speed
 from jarvis.core.persona import build_system_prompt, context_line
 from jarvis.events import bus
 from jarvis.voice.text import SentenceSplitter, clean_for_speech
@@ -165,10 +166,21 @@ class ClaudeCodeBrain(_CLIBrain):
                 "--allowedTools", "mcp__jarvis", "WebSearch", "WebFetch",
                 "--permission-mode", "dontAsk"]
         args += ["--resume", self.session_id] if resume else ["--session-id", self.session_id]
-        model = self.cfg.get("brain.claude_model")
+        model, _ = speed.claude_code(self.cfg)
         if model:
             args += ["--model", str(model)]
         return args
+
+    def _env(self) -> dict:
+        _, effort = speed.claude_code(self.cfg)
+        return {
+            "CLAUDE_CODE_EFFORT_LEVEL": effort,            # how long it deliberates before answering
+            "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",        # JARVIS keeps his own memory
+            "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",         # no project files to read into every turn
+            "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS": "1",
+            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+            **(self.cfg.get("brain.cli_env") or {}),
+        }
 
     async def _start(self, resume: bool) -> None:
         self.binary = find_binary("claude", self.cfg.get("brain.claude_path"))
@@ -178,7 +190,7 @@ class ClaudeCodeBrain(_CLIBrain):
         await self._stop()
         self.proc = await asyncio.create_subprocess_exec(
             self.binary, *self._args(url, resume), cwd=str(self.workspace),
-            env=child_env(self.cfg.get("brain.cli_env")),
+            env=child_env(self._env()),
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             limit=32 * 1024 * 1024)
         self._stderr_task = asyncio.ensure_future(self._pump_stderr(self.proc))
@@ -387,6 +399,7 @@ class CodexBrain(_CLIBrain):
         model = self.cfg.get("brain.codex_model")
         if model:
             args += ["-m", str(model)]
+        args += ["-c", f'model_reasoning_effort="{speed.codex(self.cfg)}"']
         return args + [prompt]
 
     async def respond(self, text: str | None, *, on_sentence: SentenceCallback | None = None,

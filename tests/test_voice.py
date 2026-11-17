@@ -170,3 +170,15 @@ def test_switching_voices_reuses_the_loaded_model(cfg, monkeypatch):
     sup.jarvis = live
     cfg.data["voice"]["tts"]["voice"] = "fable"
     assert sup.setup_speaker() is live.speaker and live.speaker.backend.voice == "fable"   # applies to JARVIS now
+
+
+def test_first_words_start_at_the_first_natural_pause():
+    from jarvis.voice.text import SentenceSplitter
+
+    sp = SentenceSplitter()
+    out = sp.feed("Your next meeting is the design review with Pepper, at two in the afternoon in the big room")
+    assert out == ["Your next meeting is the design review with Pepper,"]       # spoken before the full stop
+    assert sp.feed(". It runs an hour, then you're clear. ") == ["at two in the afternoon in the big room.",
+                                                                 "It runs an hour, then you're clear."]
+    short = SentenceSplitter()
+    assert short.feed("Right, done") == []                                       # short openers wait as before

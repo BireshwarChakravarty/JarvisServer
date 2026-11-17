@@ -3,6 +3,19 @@
 All builds are published to the `jarvis-latest` release after passing unit tests, the in-app self-test
 on Apple Silicon, a real launch, packaging, and a clean install on a fresh Mac.
 
+## Faster replies, like talking to a person
+- **Instant answers** for everyday commands (time, date, timers, pause / next song, volume, mute, lock):
+  done on the Mac in milliseconds, no AI round trip; his brain is told what he did on the next turn.
+- **Fast by default**: a quick model at low effort (Claude Code: Haiku, effort low; API: Haiku; ChatGPT:
+  low reasoning effort), with Balanced and Thorough in Settings › Intelligence › Replies. Claude Code
+  skips loading memory files and bundled skills on every turn.
+- **Sooner first words**: a long opening sentence is spoken from its first natural pause; obvious lookups
+  get "Checking your calendar." at 0.7 s instead of 1.3 s.
+- **Faster transcription**: no timestamps and no second voice-detection pass on short turns.
+- **Smarter end of turn**: answer at once when Smart Turn is confident you've finished (≥ 0.7), wait the
+  normal pause when it's unsure, and up to 2 s only when you're clearly mid-thought (tuned on the Mac
+  self-test, where a cut-off phrase scored 0.59).
+
 ## "Show me how" on-screen guidance; a more natural conversation
 - **On-screen guidance.** "How do I…?" → he finds the button or menu (Accessibility, with Apple Vision text
   recognition as the fallback), flies a light to it, lassos it with a caption and says why, waits for your

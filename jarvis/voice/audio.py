@@ -234,14 +234,15 @@ async def record_utterance(
     turn=None,
     turn_quick: float = 0.24,
     turn_patience: float = 2.0,
-    turn_threshold: float = 0.5,
+    turn_threshold: float = 0.7,
+    turn_unsure: float = 0.4,
 ) -> Optional[np.ndarray]:
     """Collect frames until the speaker stops. Returns float32 audio or None if nobody spoke.
 
     With a `turn` detector (Smart Turn) the end isn't a fixed silence: after a short pause
     (`turn_quick`) the model judges whether the thought is finished. Finished → stop now, so a
-    crisp answer gets a quick reply. Mid-thought ("set a timer for… ten minutes") → keep
-    listening for up to `turn_patience` seconds of silence. No verdict → `end_silence` as before.
+    crisp answer gets a quick reply. Clearly mid-thought ("set a timer for… ten minutes") → keep
+    listening for up to `turn_patience` seconds of silence. Unsure, or no verdict → `end_silence`.
     """
     frames: list[np.ndarray] = list(preroll or [])
     ring: collections.deque = collections.deque(maxlen=6)  # ~0.5 s pre-roll
@@ -282,7 +283,7 @@ async def record_utterance(
             so_far = np.concatenate(frames).astype(np.float32) / 32768.0
             p = await asyncio.to_thread(turn.probability, so_far)
             if p is not None:
-                verdict = p >= turn_threshold
+                verdict = True if p >= turn_threshold else (False if p < turn_unsure else None)
                 log.debug("turn: p(finished)=%.2f after %.2fs pause", p, silence)
                 if verdict:
                     break

@@ -43,7 +43,7 @@ def test_streams_sentences_and_runs_tools(cfg, tmp_path):
 
     # request shape: cached frozen system prompt, eager tools, server web search, effort, fallbacks
     req = client.requests[0]
-    assert req["model"] == "claude-opus-5-5"
+    assert req["model"] == "claude-haiku-5-5"                 # speed: fast (the default)
     assert req["system"][0]["cache_control"] == {"type": "ephemeral"}
     assert req["output_config"] == {"effort": "low"}
     assert req["fallbacks"] == "default" and "server-side-fallback-2026-07-01" in req["betas"]
