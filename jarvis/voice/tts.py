@@ -299,6 +299,31 @@ class Speaker:
     # that sends it somewhere else (the iPhone you spoke from) and returns False if it couldn't.
     route = None
 
+    _cache: dict = {}
+
+    def prepare(self, texts: list[str]) -> None:
+        """Synthesise short phrases ahead of time (in the background) so they play instantly."""
+        def work():
+            for t in texts:
+                if t in self._cache:
+                    continue
+                try:
+                    self._cache = {**self._cache, t: self.backend.synth(speech_form(t))}
+                except Exception as exc:
+                    log.debug("couldn't pre-render %r: %s", t, exc)
+        threading.Thread(target=work, daemon=True, name="tts-prepare").start()
+
+    def say_now(self, text: str) -> bool:
+        """Play a pre-rendered phrase at once (no synthesis delay). False if it isn't ready."""
+        audio = self._cache.get(text)
+        if audio is None:
+            return False
+        with self._pending_lock:
+            self._pending += 1
+            self._idle.clear()
+        self._audio_q.put((self._gen, text, audio, self.backend.sample_rate, 1))
+        return True
+
     def saying(self, word: str) -> bool:
         """Is the phrase playing right now saying `word`? (Used to ignore his own voice.)"""
         return word.lower() in (self.current_text or "").lower()

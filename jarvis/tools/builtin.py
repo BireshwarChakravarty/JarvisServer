@@ -494,6 +494,55 @@ def open_email(ctx, id: str):
     return mail.open_message(id)
 
 
+# ═══════════════════════════════ on-screen guidance ══════════════════════════
+@tool("Find buttons, menus, fields, tabs or text on screen in the frontmost app (then anywhere on screen), "
+      "to point at them. Returns the best matches with an id, label, kind and where they are (menu bar, "
+      "window, menu, toolbar). Use when the user asks how to do something on their Mac or where something is.",
+      {"query": _p("What to look for, in the app's own words when you know them, e.g. 'AutoSum', 'Format', "
+                   "'Share', 'Export as PDF'")}, ["query"], category="guide")
+async def find_on_screen(ctx, query: str):
+    g = getattr(ctx.orchestrator, "guide", None)
+    if g is None:
+        return "On-screen guidance isn't available."
+    hits = await g.find(query)
+    if not hits:
+        return {"matches": [], "advice": "Nothing like that is on screen. It may be inside a menu that isn't open "
+                                         "yet (point at the menu first), in another app, or need the window open."}
+    return {"matches": hits}
+
+
+@tool("Show the user where to click: a light flies to the item, circles it and shows a caption; your `say` "
+      "line is spoken as it arrives. Waits until they click it (or about a minute) and reports back. Guide one "
+      "step per call; after a click that opens a menu or window, call find_on_screen again for the next step. "
+      "Pass the same `task` for every step of a walkthrough so it's remembered: the first time it's shown in "
+      "full, then only as a hint, and after a few times they'll know it.",
+      {"target": _p("An id from find_on_screen (best), or a short description of the item"),
+       "say": _p("One short spoken sentence: what to click and why. Not read aloud in hint mode."),
+       "task": _p("What they're trying to do, the same for every step, e.g. 'total a column in Numbers'"),
+       "step": _p("This step's number", I), "total": _p("How many steps in all (your best estimate)", I),
+       "style": _p("auto (default: full the first time, then hints), full or hint",
+                   enum=["auto", "full", "hint"])},
+      ["target", "say"], category="guide")
+async def point_at(ctx, target: str, say: str, task: str = "", step: int = 1, total: int = 1, style: str = "auto"):
+    g = getattr(ctx.orchestrator, "guide", None)
+    if g is None:
+        return "On-screen guidance isn't available."
+    return await g.point(target, say=say, task=task, step=max(1, int(step)), total=max(1, int(total), int(step)),
+                         style=style)
+
+
+@tool("Check or forget a remembered walkthrough. 'check' says whether you've shown them this before and how "
+      "often they've done it (so you can offer to let them try alone). 'forget' makes the next one full again.",
+      {"action": _p("check or forget", enum=["check", "forget"]),
+       "task": _p("The task, as you named it in point_at; empty with forget = forget them all")},
+      ["action"], category="guide")
+async def walkthrough_memory(ctx, action: str, task: str = ""):
+    g = getattr(ctx.orchestrator, "guide", None)
+    if g is None:
+        return "On-screen guidance isn't available."
+    return g.forget(task) if action == "forget" else g.known(task)
+
+
 # ═══════════════════════════════ hand control ════════════════════════════════
 @tool("Turn hand control on or off. Hand control covers every gesture: held poses (✋ stop, 👍/👎 yes/no, "
       "✌️ listen, 🤟 play/pause), swipes for tracks, pinch-and-drag for volume, and the air mouse (hold ☝️ to "

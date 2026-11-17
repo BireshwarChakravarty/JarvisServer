@@ -3,6 +3,21 @@
 All builds are published to the `jarvis-latest` release after passing unit tests, the in-app self-test
 on Apple Silicon, a real launch, packaging, and a clean install on a fresh Mac.
 
+## "Show me how" on-screen guidance; a more natural conversation
+- **On-screen guidance.** "How do I…?" → he finds the button or menu (Accessibility, with Apple Vision text
+  recognition as the fallback), flies a light to it, lassos it with a caption and says why, waits for your
+  click, then the next step. Walkthroughs are remembered and help fades: full, then hints, then "you've got
+  this". A transparent, click-through layer above every app, on whichever display holds the target.
+- **He knows when you've finished.** Smart Turn v3 (open model, 8 MB, ~25 ms) judges the end of your turn from
+  your voice instead of a fixed silence: quick replies to short answers, no cutting off mid-thought pauses.
+  Features computed in numpy and checked against Whisper's reference implementation.
+- **"Sir?" instead of a beep** when you say his name and pause (pre-rendered, so it's instant; never spoken
+  over you, and never transcribed as your words).
+- **Fillers that fit** ("Checking your calendar.", "Looking through your inbox.") and never repeat back to back
+  (fixed a bug where lines containing your title could).
+- **Conversation style**: spoken examples instead of adjectives in his instructions, and he's told how his
+  last replies opened so he varies them.
+
 ## Talk to JARVIS from your iPhone or iPad; companion buttons fixed
 - **Companion buttons were unreliable.** Tapping *Show* ran a window call on JARVIS's own event loop that
   could freeze every command for up to 20 s, and after the phone slept iOS could leave a dead connection

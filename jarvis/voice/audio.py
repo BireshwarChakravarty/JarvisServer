@@ -231,12 +231,25 @@ async def record_utterance(
     preroll: list[np.ndarray] | None = None,
     stop_event: asyncio.Event | None = None,
     announce: bool = True,
+    turn=None,
+    turn_quick: float = 0.24,
+    turn_patience: float = 2.0,
+    turn_threshold: float = 0.5,
 ) -> Optional[np.ndarray]:
-    """Collect frames until the speaker stops. Returns float32 audio or None if nobody spoke."""
+    """Collect frames until the speaker stops. Returns float32 audio or None if nobody spoke.
+
+    With a `turn` detector (Smart Turn) the end isn't a fixed silence: after a short pause
+    (`turn_quick`) the model judges whether the thought is finished. Finished → stop now, so a
+    crisp answer gets a quick reply. Mid-thought ("set a timer for… ten minutes") → keep
+    listening for up to `turn_patience` seconds of silence. No verdict → `end_silence` as before.
+    """
     frames: list[np.ndarray] = list(preroll or [])
     ring: collections.deque = collections.deque(maxlen=6)  # ~0.5 s pre-roll
     started = False
     silence = 0.0
+    use_turn = turn is not None and stop_event is None and getattr(turn, "available", True)
+    asked = False             # asked the model during this pause already
+    verdict = None            # True finished · False mid-thought · None unknown
     t0 = time.monotonic()
     frame_s = FRAME / SAMPLE_RATE
     while True:
@@ -260,8 +273,21 @@ async def record_utterance(
                 return None
             continue
         frames.append(frame)
-        silence = 0.0 if speech else silence + frame_s
-        if silence >= end_silence or len(frames) * frame_s >= max_seconds:
+        if speech:
+            silence, asked, verdict = 0.0, False, None
+        else:
+            silence += frame_s
+        if use_turn and not asked and silence >= turn_quick:
+            asked = True
+            so_far = np.concatenate(frames).astype(np.float32) / 32768.0
+            p = await asyncio.to_thread(turn.probability, so_far)
+            if p is not None:
+                verdict = p >= turn_threshold
+                log.debug("turn: p(finished)=%.2f after %.2fs pause", p, silence)
+                if verdict:
+                    break
+        limit = turn_patience if verdict is False else end_silence
+        if silence >= limit or len(frames) * frame_s >= max_seconds:
             break
     if not started or not frames:
         return None

@@ -136,7 +136,8 @@ class PhoneVoice:
             # (the phone shows "hearing you" from its own microphone level; the Mac's HUD stays as it is)
             audio = await record_utterance(self.q, vad,
                                            start_timeout=FOLLOW_UP_SECONDS if follow_up else FIRST_LISTEN_SECONDS,
-                                           end_silence=0.8, max_seconds=30.0, announce=False)
+                                           end_silence=0.8, max_seconds=30.0, announce=False,
+                                           turn=getattr(self.j, "turn", None))
             if audio is None:
                 return follow_up                  # False: nobody spoke at all
             self._busy = True

@@ -42,6 +42,9 @@ voice:
   barge_in: true           # say "Jarvis" / raise your palm while he talks to interrupt
   push_to_talk_key: "alt_r"  # hold to talk (needs Accessibility permission); null to disable
   max_utterance_seconds: 30
+  smart_turn: true         # judge when you've finished speaking from your voice, not a fixed silence
+  turn_patience: 2.0       # mid-thought pauses: wait up to this long before answering
+  spoken_acks: true        # answer "Hey Jarvis" with a word ("Yes?") instead of a chime
   stt:
     backend: auto          # auto | faster-whisper | mlx
     model: "small.en"      # small.en is fast and accurate; medium.en is more accurate, slower

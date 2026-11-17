@@ -86,6 +86,8 @@ class Jarvis:
         self.wake = None
         self.vad = None
         self.stt = None
+        self.turn = None          # Smart Turn end-of-turn detector (optional)
+        self.guide = self._make_guide()   # on-screen guidance ("show me how")
         self.camera = None
         self.faces = None
         self.presence = None
@@ -172,11 +174,21 @@ class Jarvis:
             tts_task, asyncio.to_thread(self.wake.load), asyncio.to_thread(self._load_stt))
         self.speaker = Speaker(backend, cfg.get("voice.output_device"))
         self.speaker.start()
+        if self.guide is not None:
+            self.guide.speaker = self.speaker
+        if cfg.get("voice.spoken_acks", True):
+            self.speaker.prepare(self.ack_phrases())     # ready to say instantly
         self.capabilities.update(tts=backend.name, wake_word=wake_ok, stt=stt_name)
         self.boot(f"Voice synthesis: {backend.name}", backend.name != "silent")
         self.boot(f"Speech recognition: {stt_name or 'unavailable'}", bool(stt_name))
         self.boot("Wake word: 'Hey Jarvis'" if wake_ok else "Wake word: transcript fallback", wake_ok)
         self.vad = VAD()
+        if cfg.get("voice.smart_turn", True):
+            from jarvis.voice.turn import TurnDetector
+
+            self.turn = TurnDetector(cfg.models_dir)
+            turn_ok = await asyncio.to_thread(self.turn.load)
+            self.boot("Turn detection: Smart Turn" if turn_ok else "Turn detection: silence timeout", True)
         try:
             self.mic = Microphone(cfg.get("voice.input_device"))
             self.mic.start(self.loop)
@@ -194,6 +206,16 @@ class Jarvis:
                 self.boot("Push-to-talk: hold right ⌥")
             elif self.ptt.start():
                 self.boot(f"Push-to-talk: hold {key}")
+
+    def _make_guide(self):
+        from jarvis.core.guide import Guide
+        from jarvis.mac.system import IS_MAC
+
+        if not IS_MAC:
+            return Guide(self.memory)
+        from jarvis.mac import screen_elements as se
+
+        return Guide(self.memory, find=se.find, resolve=se.resolve, frontmost=lambda: se.frontmost()[1])
 
     def _load_stt(self) -> str | None:
         try:
@@ -384,7 +406,10 @@ class Jarvis:
                 if self.wake.process(frame):
                     if not self.claim_voice("mac"):
                         continue        # a phone in the room already answered this one
-                    self.speaker.play_tone("wake")
+                    if self.cfg.get("voice.spoken_acks", True):
+                        self._ack_if_pause = True   # listen at once; answer "Sir?" only if you pause
+                    else:
+                        self.speaker.play_tone("wake")
                     return None
             else:
                 # Fallback: transcribe short bursts of speech and look for "Jarvis"
@@ -413,18 +438,35 @@ class Jarvis:
 
         follow_up = False
         pending_text = first_text
+        ack_if_pause, self._ack_if_pause = getattr(self, "_ack_if_pause", False), False
         while True:
             if pending_text:
                 text, pending_text = pending_text, None
             else:
                 bus.emit("state", state="listening", follow_up=follow_up)
                 stop_evt = self._ptt_stop if (self.ptt and self.ptt.down) else None
+                if ack_if_pause and not follow_up and stop_evt is None:
+                    # "Hey Jarvis, what's the time" runs straight on; "Hey Jarvis." … gets a "Sir?"
+                    ack_if_pause = False
+                    head = await record_utterance(q, self.vad, start_timeout=0.9, end_silence=0.75,
+                                                  max_seconds=float(self.cfg.get("voice.max_utterance_seconds", 30)),
+                                                  turn=self.turn, turn_patience=float(self.cfg.get("voice.turn_patience", 2.0)))
+                    if head is None:
+                        await self._acknowledge(q)
+                    else:
+                        bus.emit("state", state="transcribing")
+                        text = await asyncio.to_thread(self.stt.transcribe, head) if self.stt else ""
+                        _, pending_text = strip_wake_phrase(text)
+                        if not pending_text:
+                            await self._acknowledge(q)
+                        continue
                 audio = await record_utterance(
                     q, self.vad,
                     start_timeout=float(self.cfg.get("voice.follow_up_seconds", 7)) if follow_up else 6.0,
                     end_silence=0.75 if not stop_evt else 30.0,
                     max_seconds=float(self.cfg.get("voice.max_utterance_seconds", 30)),
                     stop_event=stop_evt,
+                    turn=self.turn, turn_patience=float(self.cfg.get("voice.turn_patience", 2.0)),
                 )
                 if audio is None:
                     bus.emit("state", state="idle")
@@ -451,6 +493,31 @@ class Jarvis:
             await asyncio.sleep(0.25)  # let the room's echo die down
             drain(q)
 
+    ACKS = ["Yes, {t}?", "{T}?", "Mm?", "Yes?", "I'm listening.", "Go ahead, {t}."]
+
+    def ack_phrases(self) -> list[str]:
+        t = self.cfg.get("owner.title", "sir")
+        return [a.format(t=t, T=t[:1].upper() + t[1:]) for a in self.ACKS]
+
+    async def _acknowledge(self, q: asyncio.Queue) -> None:
+        """A word, as a person would, when you've said his name and paused. Never over your voice:
+        it plays only after a pause, and what the mic hears while he says it is thrown away."""
+        import random
+
+        from jarvis.voice.audio import drain
+
+        options = [a for a in self.ack_phrases() if a != getattr(self, "_last_ack", None)]
+        line = random.choice(options)
+        self._last_ack = line
+        if not (self.speaker and self.speaker.say_now(line)):
+            if self.speaker:
+                self.speaker.play_tone("wake")
+            return
+        await self.speaker.wait_done(timeout=3)
+        await asyncio.sleep(0.12)          # the room's echo
+        drain(q)
+        bus.emit("state", state="listening")
+
     async def _monitor_barge_in(self, q: asyncio.Queue, turn: asyncio.Task) -> str:
         """While JARVIS thinks/talks, watch for the wake word or a ✋ to interrupt."""
         self._interrupt.clear()
@@ -465,8 +532,9 @@ class Jarvis:
                 frame = await asyncio.wait_for(q.get(), timeout=0.1)
             except asyncio.TimeoutError:
                 continue
-            if barge and self.speaker.speaking and self.wake.process(frame) and not self.speaker.saying("jarvis"):
-                # (ignored while he's saying "Jarvis" himself: that's his own voice in the mic)
+            if barge and self.wake.process(frame) and not (self.speaker.speaking and self.speaker.saying("jarvis")):
+                # any time during the turn: while he talks, and while he's quietly waiting (a guided
+                # click, a slow tool). Ignored while he's saying "Jarvis" himself: that's his own voice.
                 self.interrupt()
                 self.speaker.play_tone("wake")
                 return "barge"
@@ -478,6 +546,8 @@ class Jarvis:
         """Stop talking and abandon the current turn."""
         if self.speaker:
             self.speaker.stop()
+        if self.guide is not None:
+            self.guide.cancel()
         if self._cancel_turn is not None:
             self._cancel_turn.set()
         bus.emit("interrupted")
@@ -497,7 +567,7 @@ class Jarvis:
             if self.speaker:
                 self.speaker.enqueue(sentence)
 
-        filler = asyncio.create_task(self._filler(first, cancel)) if (
+        filler = asyncio.create_task(self._filler(first, cancel, text)) if (
             self.speaker and source in ("voice", "hud", "protocol", "phone") and self.cfg.get("voice.tts.fillers", True)) else None
         try:
             reply = await self.brain.respond(text, on_sentence=on_sentence, context=await self._live_context(),
@@ -515,19 +585,45 @@ class Jarvis:
             self._turn_active = False
             if filler:
                 filler.cancel()
+        self._note_opening(reply if isinstance(reply, str) else "")
         return reply
 
     # A person answers within a second or so, even if only to say they're on it. When the model is
-    # slow to its first word (a tool call, a web search) JARVIS says so instead of leaving silence.
-    FILLERS = ["One moment, {t}.", "Right away, {t}.", "Just a moment.", "Bear with me, {t}.", "Let me see.",
+    # slow to its first word (a tool call, a web search) JARVIS says so instead of leaving silence,
+    # in words that fit what you asked, and never the same line twice in a row.
+    FILLERS = ["One moment, {t}.", "Just a moment.", "Bear with me, {t}.", "Let me see.", "Right, let me check.",
                "Give me a second, {t}.", "On it."]
-    STILL = ["Still working on it, {t}.", "Nearly there.", "This is taking a little longer than I'd like, {t}."]
+    STILL = ["Still working on it, {t}.", "Nearly there.", "This is taking a little longer than I'd like, {t}.",
+             "Almost there, {t}."]
+    TOPICAL = [
+        (r"\b(e-?mails?|inbox|mail|messages?)\b", ["Looking through your inbox.", "Let me check your mail.", "Checking your messages."]),
+        (r"\b(calendar|meeting|schedule|agenda|appointment|free|busy)\b", ["Checking your calendar.", "Let me look at your day.", "One moment, checking your schedule."]),
+        (r"\b(weather|rain|temperature|forecast|umbrella|sunny|cold|hot)\b", ["Checking the forecast.", "Let me look outside, so to speak."]),
+        (r"\b(news|latest|headline|score|price|stock|who won|search|look up|google)\b", ["Let me look that up.", "Searching now.", "Checking the latest."]),
+        (r"\b(screen|see|look at|what am i|holding|camera)\b", ["Let me take a look.", "Having a look now."]),
+        (r"\b(play|song|music|playlist|album)\b", ["Finding it.", "Let me find that."]),
+        (r"\b(remind|reminder|note|write down)\b", ["Noting it.", "Writing that down."]),
+        (r"\b(how do i|show me|where is|how to)\b", ["Let me show you.", "Let me find it for you."]),
+    ]
 
-    async def _filler(self, first: asyncio.Event, cancel: asyncio.Event) -> None:
+    def filler_line(self, text: str, slow: bool = False) -> str:
         import random
 
         t = self.cfg.get("owner.title", "sir")
-        for delay, lines in ((1.3, self.FILLERS), (9.0, self.STILL)):
+        pool = self.STILL if slow else self.FILLERS
+        if not slow:
+            for pattern, lines in self.TOPICAL:
+                if re.search(pattern, text or "", re.I):
+                    pool = lines
+                    break
+        recent = getattr(self, "_recent_fillers", [])
+        lines = [x.format(t=t) for x in pool]
+        line = random.choice([x for x in lines if x not in recent] or lines)
+        self._recent_fillers = (recent + [line])[-4:]
+        return line
+
+    async def _filler(self, first: asyncio.Event, cancel: asyncio.Event, text: str = "") -> None:
+        for delay, slow in ((1.3, False), (9.0, True)):
             try:
                 await asyncio.wait_for(first.wait(), delay)
                 return
@@ -535,10 +631,10 @@ class Jarvis:
                 pass
             if cancel.is_set() or (self.speaker and self.speaker.speaking):
                 return
-            pool = [x for x in lines if x != getattr(self, "_last_filler", None)]
-            self._last_filler = line = random.choice(pool)
-            self.speaker.enqueue(line.format(t=t))
-            bus.emit("filler", text=line.format(t=t))
+            line = self.filler_line(text, slow)
+            self._last_filler = line
+            self.speaker.enqueue(line)
+            bus.emit("filler", text=line)
 
     def queue_request(self, text: str, source: str = "protocol", route=None,
                       done: asyncio.Future | None = None) -> None:
@@ -597,7 +693,21 @@ class Jarvis:
         alarms = self.scheduler.list()
         if alarms:
             ctx["active timers"] = ", ".join(f"{a['message']} ({max(0, a['in_seconds'])}s)" for a in alarms[:3])
+        openings = list(getattr(self, "_openings", []))
+        if openings:
+            # so he doesn't open every reply the same way ("Done, sir." … "Done, sir.")
+            ctx["your last replies began (vary yours)"] = " | ".join(f'"{o}"' for o in openings)
         return ctx
+
+    def _note_opening(self, reply: str) -> None:
+        import collections
+
+        words = (reply or "").strip().split()
+        if not words:
+            return
+        if not hasattr(self, "_openings"):
+            self._openings = collections.deque(maxlen=4)
+        self._openings.append(" ".join(words[:4]))
 
     # ═════════════════════════════ confirmation ══════════════════════════
     async def confirm(self, action: str) -> bool:

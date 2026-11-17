@@ -38,6 +38,8 @@ apple = [
   "pyobjc-framework-Quartz>=10.0; platform_system == 'Darwin'",
   "pyobjc-framework-Cocoa>=10.0; platform_system == 'Darwin'",
   "pyobjc-framework-EventKit>=10.0; platform_system == 'Darwin'",
+  "pyobjc-framework-ApplicationServices>=10.0; platform_system == 'Darwin'",
+  "pyobjc-framework-Vision>=10.0; platform_system == 'Darwin'",
 ]
 vision = [
   "opencv-contrib-python>=4.9",
@@ -158,12 +160,14 @@ requires = [
   "pyobjc-framework-contacts==13.0",
   "pyobjc-framework-coreaudio==13.0",
   "pyobjc-framework-coremedia==13.0",
+  "pyobjc-framework-coreml==13.0",
   "pyobjc-framework-coretext==13.0",
   "pyobjc-framework-eventkit==13.0",
   "pyobjc-framework-quartz==13.0",
   "pyobjc-framework-security==13.0",
   "pyobjc-framework-servicemanagement==13.0",
   "pyobjc-framework-uniformtypeidentifiers==13.0",
+  "pyobjc-framework-vision==13.0",
   "pyobjc-framework-webkit==13.0",
   "pyparsing==3.3.3",
   "python-dateutil==4.0.0",

@@ -78,7 +78,9 @@ def test_filler_covers_slow_starts_only():
 
     said = []
     fake = SimpleNamespace(cfg=SimpleNamespace(get=lambda k, d=None: "sir"), FILLERS=Orchestrator.FILLERS,
-                           STILL=Orchestrator.STILL, speaker=SimpleNamespace(speaking=False, enqueue=said.append))
+                           STILL=Orchestrator.STILL, TOPICAL=Orchestrator.TOPICAL,
+                           speaker=SimpleNamespace(speaking=False, enqueue=said.append))
+    fake.filler_line = lambda text, slow=False: Orchestrator.filler_line(fake, text, slow)
 
     async def run(first_after):
         first, cancel = asyncio.Event(), asyncio.Event()
@@ -91,6 +93,25 @@ def test_filler_covers_slow_starts_only():
     assert said == []
     asyncio.run(run(1.6))      # a slow one: exactly one acknowledgement
     assert len(said) == 1 and said[0] in [f.format(t="sir") for f in Orchestrator.FILLERS]
+
+
+def test_fillers_fit_the_request_and_dont_repeat():
+    from types import SimpleNamespace
+
+    from jarvis.core.orchestrator import Jarvis as Orchestrator
+
+    fake = SimpleNamespace(cfg=SimpleNamespace(get=lambda k, d=None: "sir"), FILLERS=Orchestrator.FILLERS,
+                           STILL=Orchestrator.STILL, TOPICAL=Orchestrator.TOPICAL)
+    line = lambda text, slow=False: Orchestrator.filler_line(fake, text, slow)
+    topical = dict((pat, lines) for pat, lines in Orchestrator.TOPICAL)
+    pool = lambda word: next(lines for pat, lines in topical.items() if word in pat)
+    for _ in range(10):                                                # random, so check every draw
+        assert line("Am I free at three tomorrow?") in pool("calendar")
+        assert line("anything important in my email?") in pool("inbox")
+        assert line("how do I add a column in Excel") in pool("how do i")
+    said = [line("Tell me about Lisbon") for _ in range(6)]
+    assert all(a != b for a, b in zip(said, said[1:]))                 # never the same line twice running
+    assert line("x", slow=True) in [s.format(t="sir") for s in Orchestrator.STILL]
 
 
 def test_pro_plan_gets_sonnet_by_default():

@@ -111,6 +111,13 @@ def run_app() -> None:
     mini.create()
     sup.mini = mini
 
+    # On-screen guidance: the click-through layer he draws on to show you where to click
+    from jarvis.app.guide_overlay import GuideOverlay
+
+    guide_overlay = GuideOverlay(f"http://{host}:{port}/guide")
+    guide_overlay.create()
+    sup.guide_overlay = guide_overlay
+
     def on_closing():
         if menubar.is_quit_shortcut():
             return True   # ⌘Q: really quit

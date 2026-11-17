@@ -209,6 +209,31 @@ def run() -> int:
             raise RuntimeError(f"said {line!r}, heard {text!r}")
         return f"said {line!r}; Whisper heard {text!r}"
 
+    @check("ears: Smart Turn hears a finished question vs a sentence cut off mid-thought", timeout=240)
+    def _():
+        from jarvis.voice.tts import KokoroONNX
+        from jarvis.voice.turn import TurnDetector
+        det = TurnDetector(state["cfg"].models_dir)
+        if not det.load():
+            raise RuntimeError(f"model didn't load from {det.path}")
+        tts = KokoroONNX("bm_george", 1.0, state["cfg"].models_dir)
+        done = resample(tts.synth("What time is it in London?"), tts.sample_rate)
+        cut = resample(tts.synth("Could you set a timer for"), tts.sample_rate)
+        t0 = time.time()
+        p_done, p_cut = det.probability(done), det.probability(cut)
+        ms = (time.time() - t0) * 500
+        state["turn"] = (p_done, p_cut)
+        if p_done is None or p_cut is None:
+            raise RuntimeError("no verdict")
+        return f"finished question p={p_done:.2f} · cut-off phrase p={p_cut:.2f} · {ms:.0f} ms each"
+
+    @check("ears: Smart Turn ranks the finished question above the cut-off one", required=False)
+    def _():
+        p_done, p_cut = state["turn"]
+        if not p_done > p_cut:
+            raise RuntimeError(f"finished {p_done:.2f} ≤ cut-off {p_cut:.2f}")
+        return f"{p_done:.2f} > {p_cut:.2f}"
+
     @check("eyes: face engine")
     def _():
         import numpy as np
@@ -289,6 +314,55 @@ def run() -> int:
         from jarvis.vision.airmouse import MacPointer  # noqa: F401
         vf = AppKit.NSScreen.mainScreen().visibleFrame() if AppKit.NSScreen.mainScreen() else None
         return f"AppKit + Quartz symbols present; visible frame {vf.size.width:.0f}x{vf.size.height:.0f}" if vf else "symbols present"
+
+    @check("guidance: Accessibility reads a real app's interface (Finder's menu bar)", timeout=60)
+    def _():
+        import ApplicationServices as AS
+        from AppKit import NSRunningApplication
+
+        from jarvis.mac import screen_elements as se
+        if not AS.AXIsProcessTrusted():
+            return "skipped: Accessibility not granted to this process"
+        finder = NSRunningApplication.runningApplicationsWithBundleIdentifier_("com.apple.finder")
+        if not finder:
+            raise RuntimeError("Finder isn't running")
+        els = se.ax_elements(int(finder[0].processIdentifier()), "Finder")
+        menus = [e for e in els if e.role == "AXMenuBarItem"]
+        top = se.rank(els, "the Go menu")
+        if not menus or not top or top[0][0].label != "Go":
+            raise RuntimeError(f"{len(els)} elements, menus={[m.label for m in menus][:8]}, top={top[:1]}")
+        g = top[0][0]
+        if g.w < 5 or g.h < 5:
+            raise RuntimeError(f"'Go' has no usable frame: {g}")
+        return f"{len(els)} elements · 'Go' menu at ({g.x:.0f}, {g.y:.0f}) {g.w:.0f}×{g.h:.0f}"
+
+    @check("guidance: Vision reads text and locates it (fallback for apps without Accessibility)", timeout=60)
+    def _():
+        import tempfile
+
+        from PIL import Image, ImageDraw, ImageFont
+
+        from jarvis.mac import screen_elements as se
+        img = Image.new("RGB", (900, 300), "white")
+        d = ImageDraw.Draw(img)
+        try:
+            font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 48)
+        except Exception:
+            font = ImageFont.load_default()
+        d.text((60, 60), "Export as PDF", fill="black", font=font)
+        d.text((520, 200), "AutoSum", fill="black", font=font)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = f"{tmp}/t.png"
+            img.save(path)
+            found = se.recognise_text(path)
+        texts = {t.lower(): b for t, b, _ in found}
+        hit = next((b for t, b in texts.items() if "autosum" in t), None)
+        if hit is None:
+            raise RuntimeError(f"read {list(texts)}")
+        x, y, w, h = se.vision_box_to_global(hit, (0, 0, 900, 300))
+        if not (480 <= x <= 560 and 180 <= y <= 230):
+            raise RuntimeError(f"'AutoSum' placed at ({x:.0f}, {y:.0f}), expected near (520, 200)")
+        return f"read {sorted(texts)} · 'AutoSum' at ({x:.0f}, {y:.0f})"
 
     @check("lock: the permission-free lock call is available (not called)")
     def _():
@@ -455,7 +529,8 @@ def run() -> int:
         client = TestClient(create_app(supervisor=sup))
         out = {}
         for path in ("/setup", "/", "/api/setup/state", "/static/onboarding.js", "/static/reactor.js",
-                     "/mini", "/static/mini.js", "/static/mini.css"):
+                     "/mini", "/static/mini.js", "/static/mini.css", "/guide", "/static/guide.js",
+                     "/static/guide.css"):
             r = client.get(path)
             out[path] = r.status_code
             if r.status_code != 200:

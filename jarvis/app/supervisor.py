@@ -29,6 +29,7 @@ class Supervisor:
         self.faces = None           # setup-time face engine
         self.speaker = None         # setup-time voice
         self.window = None          # pywebview window, set by the runner
+        self.guide_overlay = None   # on-screen guidance layer, set by the runner
         self.loop: asyncio.AbstractEventLoop | None = None
         self._downloads: asyncio.Task | None = None
         self._jarvis_task: asyncio.Task | None = None
@@ -63,6 +64,11 @@ class Supervisor:
         self.cfg = load_config()
         self.jarvis = Jarvis(self.cfg)
         self.jarvis.show_window = self.show_window   # flick ↑ brings the HUD forward
+        if getattr(self, "guide_overlay", None) is not None and self.jarvis.guide is not None:
+            from jarvis.app.guide_overlay import mouse_state
+
+            self.jarvis.guide.overlay = self.guide_overlay
+            self.jarvis.guide.mouse = mouse_state
         self._jarvis_task = asyncio.ensure_future(self.jarvis.run(greet=greet))
         self._jarvis_task.add_done_callback(self._jarvis_done)
         log.info("JARVIS started")

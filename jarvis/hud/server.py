@@ -63,6 +63,10 @@ def create_app(jarvis=None, supervisor=None) -> FastAPI:
     async def mini_page():
         return FileResponse(STATIC / "mini.html", headers=NO_STORE)
 
+    @app.get("/guide")
+    async def guide_page():
+        return FileResponse(STATIC / "guide.html", headers=NO_STORE)
+
     @app.get("/api/status")
     async def status():
         cfg = CFG()

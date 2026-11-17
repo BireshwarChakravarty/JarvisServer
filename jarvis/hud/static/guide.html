@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JARVIS guide</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/guide.css">
+</head>
+<body>
+<!-- A transparent, click-through layer over the whole screen. JARVIS draws on it to show where to click. -->
+<svg id="layer" aria-hidden="true">
+  <defs>
+    <radialGradient id="orb-g">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="0.35" stop-color="#bff6ff"/>
+      <stop offset="0.75" stop-color="#3fd0f5" stop-opacity="0.55"/><stop offset="1" stop-color="#3fd0f5" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3.2" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <path id="trail" d=""/>
+  <path id="lasso" d=""/>
+  <path id="lasso-glow" d=""/>
+  <circle id="orb" r="14" fill="url(#orb-g)"/>
+</svg>
+<div id="card" class="card" role="status" aria-live="polite" hidden>
+  <div class="kick"><span id="k-step"></span><span id="k-kind"></span></div>
+  <div id="say" class="say"></div>
+</div>
+<script src="/static/guide.js"></script>
+</body>
+</html>

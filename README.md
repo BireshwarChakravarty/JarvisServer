@@ -244,7 +244,27 @@ Build the app yourself with `pip install briefcase` and then `briefcase build ma
 - *"Run git status in my projects folder."* (confirmed first)
 - *"Remember that my sister's name is Priya."* · *"What do you know about me?"*
 - *"Engage work mode."* · *"House party protocol."* · *"Good night, Jarvis."*
+- *"How do I total this column?"* · *"Where's the export button?"* → he shows you on screen (below)
 - *"That's all, thanks."* ends the conversation.
+
+**How the conversation flows.** Say *"Hey Jarvis"* and go straight on with your request; if you pause
+after his name he answers *"Sir?"* first, the way a person would. He judges when you've finished from
+your voice (Smart Turn), not a fixed silence: a crisp *"Yes."* gets an instant reply, while *"Set a timer
+for… ten minutes"* isn't cut off at the pause. When an answer takes a moment he says something that
+fits (*"Checking your calendar."*), never the same line twice running, and after answering he keeps
+listening for a few seconds so you can carry on without his name.
+
+### "Show me how": on-screen guidance
+
+Ask how to do something on your Mac and JARVIS shows you instead of describing it: a light flies to the
+right button or menu, circles it, and he says why in a sentence. Click it and he moves on to the next
+step. He remembers each walkthrough and steps back as you learn: the first time in full, then just the
+ring, and after a few times he offers to let you try it alone (*"show me properly"* brings the full
+version back; *"forget that walkthrough"* resets it).
+
+He finds things through the app's own Accessibility description (precise, needs the Accessibility
+permission) and falls back to reading the text on screen (needs Screen Recording) for apps that don't
+describe themselves. The layer he draws on never takes a click: everything you click goes to your app.
 
 You can also type into the HUD's command bar. The HUD's centrepiece is the core: its rings show live audio, work in progress, and a dial of your next 12 hours with meetings drawn on it ([DESIGN.md](DESIGN.md)). Shortcuts: **Space** listens, **Esc** stops, **/** focuses the command bar. **⌘⇧J** shows or hides the HUD.
 
