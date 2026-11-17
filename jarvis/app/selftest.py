@@ -618,8 +618,10 @@ def _claude_code_roundtrip(cfg, claude_bin: str) -> str:
                                  "content": [{"type": "text", "text": "OK"}], "stop_reason": "end_turn",
                                  "stop_sequence": None, "usage": {"input_tokens": 1, "output_tokens": 1}})
         tools = [t.get("name") for t in body.get("tools", [])]
-        last = body["messages"][-1]
-        done = isinstance(last.get("content"), list) and any(b.get("type") == "tool_result" for b in last["content"])
+        # done once our tool's result is anywhere in the conversation (Claude Code can add a note after it,
+        # e.g. "<total_tokens>…" on Haiku, so it isn't always the last block)
+        done = any(isinstance(m.get("content"), list) and any(b.get("type") == "tool_result" for b in m["content"])
+                   for m in body["messages"] if m.get("role") == "user")
         if "mcp__jarvis__selftest_ping" in tools and not done:
             blocks = [{"type": "tool_use", "id": f"toolu_{len(seen)}", "name": "mcp__jarvis__selftest_ping", "input": {}}]
             stop = "tool_use"
