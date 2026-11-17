@@ -505,20 +505,51 @@ def run() -> int:
         ok, text, nwav, nprof = asyncio.run(go())
         return f"wss with JARVIS's own certificate · 4 acks · phone audio heard as {text!r} · {nwav} B reply · profile {nprof} B"
 
-    @check("email: the Apple Mail scripts compile", timeout=90)
+    @check("email: reads Thunderbird's local mail and ranks what needs you", timeout=60)
     def _():
-        import subprocess
+        import datetime as dt
         import tempfile
-        from jarvis.mac import mail
-        out = []
-        for name, src in mail.scripts().items():
-            with tempfile.NamedTemporaryFile(suffix=".scpt") as f:
-                r = subprocess.run(["/usr/bin/osacompile", "-o", f.name, "-e", src], capture_output=True, text=True,
-                                   timeout=60)
-            if r.returncode != 0:
-                raise RuntimeError(f"{name}: {r.stderr.strip()[:300]}")
-            out.append(name)
-        return "compiled: " + ", ".join(out)
+        from email.utils import format_datetime
+        from pathlib import Path as P
+
+        from jarvis.mac import thunderbird as tb
+        now = dt.datetime.now(dt.timezone.utc)
+
+        def m(mid, frm, subj, body, status="0001", extra=""):
+            return (f"From - Mon Jan  1 00:00:00 2026\nX-Mozilla-Status: {status}\nMessage-ID: <{mid}>\nFrom: {frm}\n"
+                    f"Subject: {subj}\nDate: {format_datetime(now - dt.timedelta(hours=1))}\n{extra}"
+                    f"Content-Type: text/plain; charset=utf-8\n\n{body}\n\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            base = P(tmp)
+            prof = base / "Profiles" / "x.default-release"
+            inbox = prof / "ImapMail" / "imap.example.com"
+            inbox.mkdir(parents=True)
+            (base / "profiles.ini").write_text("[Profile0]\nName=d\nIsRelative=1\nPath=Profiles/x.default-release\nDefault=1\n")
+            # IMAP as Thunderbird writes it: every stored copy says "read"; the .msf index has the truth
+            (inbox / "INBOX").write_text(
+                m("a@x", "Pepper <pepper@stark.com>", "Can you approve the contract today?", "Sign by 5pm?")
+                + m("b@x", "Deals <newsletter@shop.com>", "50% off", "Sale", extra="List-Unsubscribe: <mailto:u@x>\n")
+                + m("c@x", "Happy <happy@stark.com>", "Read already", "ok"))
+            ts = int((now - dt.timedelta(hours=1)).timestamp())
+            dollar = "$"
+            (inbox / "INBOX.msf").write_text(
+                "// <!-- <mdb:mork:z v=\"1.4\"/> -->\n< <(a=c)> // (f=iso-8859-1)\n"
+                "  (80=ns:msg:db:row:scope:msgs:all)(81=subject)(82=sender)(83=message-id)(86=date)(88=flags)>\n"
+                "<(A0=a@x)(A1=b@x)(A2=c@x)(A3=Pepper <pepper@stark.com>)(A4=Deals <newsletter@shop.com>)"
+                "(A5=Happy <happy@stark.com>)>\n{1:^80 {(k^96:c)(s=9)}\n"
+                f"  [1(^83^A0)(^82^A3)(^81=Can you approve the contract today?)(^86={ts:x})(^88=0)]\n"
+                f"  [2(^83^A1)(^82^A4)(^81=50% off)(^86={ts:x})(^88=0)]\n"
+                f"  [3(^83^A2)(^82^A5)(^81=Read already)(^86={ts:x})(^88=0)]}}\n"
+                f"@{dollar * 2}{{2{{@[3:^80(^88=1)]@{dollar * 2}}}2}}@\n")   # marked read later, appended
+            found = tb.profile_dir(base)
+            got = tb.unread(days=2, profile=found)
+            if isinstance(got, str) or [g["id"] for g in got] != ["a@x", "b@x"]:
+                raise RuntimeError(f"profile {found}, got {got}")
+            body = tb.read("a@x", profile=found)
+        real = tb.profile_dir()
+        return (f"sample profile ranked {[g['id'] for g in got]} · read() ok ({len(body['body'])} chars) · "
+                f"this Mac's profile: {'found' if real else 'none (Thunderbird not set up here)'} · "
+                f"Thunderbird {'installed' if tb.installed() else 'not installed'}")
 
     @check("setup + HUD server")
     def _():

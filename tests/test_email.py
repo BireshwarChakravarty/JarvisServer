@@ -37,12 +37,14 @@ def test_check_email_tool(monkeypatch):
     msgs = mail.parse(RAW)
     for m in msgs:
         m["score"] = mail.score(m, NOW)
-    monkeypatch.setattr(mail, "unread", lambda **k: sorted(msgs, key=lambda m: m["score"], reverse=True))
+    from jarvis.mac import thunderbird
+
+    monkeypatch.setattr(thunderbird, "unread", lambda **k: sorted(msgs, key=lambda m: m["score"], reverse=True))
     out = builtin.check_email(None)
     assert out["pick_at_most"] == 3 and out["unread_total"] == 5 and out["candidates"][0]["id"] in ("b", "d", "e")
-    monkeypatch.setattr(mail, "unread", lambda **k: "Apple Mail has no email accounts yet.")
-    assert "no email accounts" in builtin.check_email(None)
-    monkeypatch.setattr(mail, "unread", lambda **k: [])
+    monkeypatch.setattr(thunderbird, "unread", lambda **k: thunderbird.SETUP_HINT)
+    assert "Thunderbird" in builtin.check_email(None)
+    monkeypatch.setattr(thunderbird, "unread", lambda **k: [])
     assert "No unread email" in builtin.check_email(None)
 
 

@@ -58,16 +58,16 @@ def _battery() -> dict:
 
 
 def _mail() -> int | None:
-    from jarvis.mac.pim import mail_unread
+    from jarvis.mac import thunderbird
 
-    return mail_unread()
+    return thunderbird.unread_count(days=2)
 
 
 def _mail_attention() -> list[dict] | None:
-    """Top unread mail by this Mac's score, only if Mail is already running (never launches it)."""
-    from jarvis.mac import mail
+    """Top unread mail by this Mac's score, from Thunderbird's local copy (never opens anything)."""
+    from jarvis.mac import thunderbird
 
-    got = mail.unread(days=2, limit=30, launch=False)
+    got = thunderbird.unread(days=2, limit=30)
     if not isinstance(got, list):
         return None
     top = [m for m in got if m["score"] >= 2][:3]

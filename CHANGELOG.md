@@ -3,6 +3,17 @@
 All builds are published to the `jarvis-latest` release after passing unit tests, the in-app self-test
 on Apple Silicon, a real launch, packaging, and a clean install on a fresh Mac.
 
+## Email from Thunderbird
+- Email now comes from **Thunderbird** instead of Apple Mail: he reads Thunderbird's local copy of your mail
+  (profile from installs.ini / profiles.ini; IMAP and POP/Local inboxes; mbox or maildir), only the newest part
+  of each inbox so big mailboxes stay quick. Same top-3 ranking. "Open it" shows the message in Thunderbird.
+  No passwords, no add-on, no permission prompt.
+- Read / flagged / deleted for IMAP accounts (Gmail included) comes from each folder's `.msf` index, read
+  with a new Mork reader: Thunderbird's source shows IMAP offline copies are always written as "read" and never
+  updated. Checked against Thunderbird's own test indexes and the edge cases its parser is tested on. Unread
+  mail without an offline copy still shows (sender and subject).
+- Setup no longer prompts for (or launches) Apple Mail.
+
 ## Gestures fixed: ✌️ listening, and the air mouse no longer hijacks your hand
 - **✌️ (and the HUD mic) stopped listening at once**: the start chime was picked up by the mic, taken for
   speech, transcribed as nothing, and the conversation ended. Now the chime's audio is discarded, and a

@@ -455,7 +455,7 @@ def list_protocols(ctx):
 
 
 # ═══════════════════════════════ email ═══════════════════════════════════════
-@tool("Check the user's email (Apple Mail, every account) and find what needs their attention. Returns "
+@tool("Check the user's email (Thunderbird, every account) and find what needs their attention. Returns "
       "candidate unread messages, best first, already scored on this Mac. Pick AT MOST the requested number "
       "(default 3) that genuinely need the user: a real person waiting on them, a deadline, a payment, an "
       "approval, a question, something time-sensitive. Skip newsletters, promotions, receipts and automated "
@@ -464,9 +464,9 @@ def list_protocols(ctx):
       {"top": _p("How many to pick (default 3)", I), "days": _p("How far back to look, in days (default 3)", I)},
       category="communication")
 def check_email(ctx, top: int = 3, days: int = 3):
-    from jarvis.mac import mail
+    from jarvis.mac import thunderbird
 
-    got = mail.unread(days=max(1, min(int(days or 3), 14)))
+    got = thunderbird.unread(days=max(1, min(int(days or 3), 14)))
     if isinstance(got, str):
         return got
     if not got:
@@ -480,18 +480,18 @@ def check_email(ctx, top: int = 3, days: int = 3):
 @tool("Read one email in full (use the id from check_email), e.g. when the user says 'read me the second one'.",
       {"id": _p("Message id from check_email")}, ["id"], category="communication")
 def read_email(ctx, id: str):
-    from jarvis.mac import mail
+    from jarvis.mac import thunderbird
 
-    m = mail.read(id)
+    m = thunderbird.read(id)
     return m or "I couldn't find that email any more."
 
 
-@tool("Open an email in the Mail app on screen (use the id from check_email).",
+@tool("Open an email in Thunderbird on screen (use the id from check_email).",
       {"id": _p("Message id from check_email")}, ["id"], category="communication")
 def open_email(ctx, id: str):
-    from jarvis.mac import mail
+    from jarvis.mac import thunderbird
 
-    return mail.open_message(id)
+    return thunderbird.open_message(id)
 
 
 # ═══════════════════════════════ on-screen guidance ══════════════════════════

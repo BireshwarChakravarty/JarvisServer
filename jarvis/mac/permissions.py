@@ -150,8 +150,8 @@ def _automation_probe(prompt: bool) -> str:
         status = "denied"
     else:
         status = "unknown"
-    # Finder and Mail too (trash/reveal; reading email): each prompts separately
-    for app in ("Finder", "Mail"):
+    # Finder too (trash/reveal) prompts separately. Email comes from Thunderbird's local files: no prompt.
+    for app in ("Finder",):
         subprocess.run(["/usr/bin/osascript", "-e", f'tell application "{app}" to return name'],
                        capture_output=True, text=True, timeout=120)
     _automation_cache["status"] = status
