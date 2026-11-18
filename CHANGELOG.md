@@ -3,7 +3,18 @@
 All builds are published to the `jarvis-latest` release after passing unit tests, the in-app self-test
 on Apple Silicon, a real launch, packaging, and a clean install on a fresh Mac.
 
-## Email from Thunderbird
+## Email from Mailspring
+- Email now comes from **[Mailspring](https://www.getmailspring.com)** instead of Thunderbird. He reads
+  Mailspring's local database (`~/Library/Application Support/Mailspring/edgehill.db`) read-only, laid out as
+  Mailspring's own sync engine defines it: every account you've added, inbox only (IMAP inbox folders and Gmail's
+  inbox label), unread and not drafts, with starred, sender, subject, snippet and newsletter headers. Same top-3
+  ranking. "Read me that one" uses the full text Mailspring has downloaded. "Open it" brings Mailspring to the
+  front (it has no link to one message, so he says which one).
+- Safe while Mailspring is syncing: a read-only connection sees only finished changes; if the database can't
+  be opened in place he reads a private copy. No passwords, no plugin, no permission prompt.
+- The Thunderbird reader (and its Mork index parser) is gone.
+
+## Email from Thunderbird (replaced by Mailspring, above)
 - Email now comes from **Thunderbird** instead of Apple Mail: he reads Thunderbird's local copy of your mail
   (profile from installs.ini / profiles.ini; IMAP and POP/Local inboxes; mbox or maildir), only the newest part
   of each inbox so big mailboxes stay quick. Same top-3 ranking. "Open it" shows the message in Thunderbird.

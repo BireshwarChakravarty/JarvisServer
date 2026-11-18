@@ -33,10 +33,10 @@ smart home and terminal. Everything shows on a live, holographic HUD.
 | 🖱️ **Air mouse** | Say *"air mouse"*: the Mac's pointer follows your fingertip, a pinch clicks (pinch and move drags), ✋ stops. It never starts by itself. |
 | 🫧 **Mini JARVIS** | Minimise or close the window (or ⌘H) and a small floating capsule stays on screen: his state, the line he's saying, your next meeting. It floats over every Space and full-screen apps, never takes focus, opens top-centre clear of notifications and the Dock, and remembers where you drag it. Click it to bring the HUD back. |
 | 🔐 **Walk away, come back** | With "Lock the Mac when I leave" on, he locks when you walk off and wakes the screen when he recognises you again. Unlocking stays with macOS (Apple Watch, Touch ID or your password): he never stores or types your password. |
-| ✉️ **Email** | "Anything in my email that needs me?" He reads unread mail from [Thunderbird](https://www.thunderbird.net/) (every account you've added there: Gmail, iCloud, Outlook, work), ranks it on your Mac, and tells you the **top 3** that need you: who, what, and a suggested next step. "Read me the second one" works, and "open it" shows it in Thunderbird. His morning greeting mentions anything urgent. He reads Thunderbird's own copy of your mail on this Mac: no passwords, no add-on, nothing leaves the Mac. For IMAP accounts keep *Keep messages for this account on this computer* on (Thunderbird's default). |
+| ✉️ **Email** | "Anything in my email that needs me?" He reads unread mail from [Mailspring](https://www.getmailspring.com) (every account you've added there: Gmail, iCloud, Outlook, work), ranks it on your Mac, and tells you the **top 3** that need you: who, what, and a suggested next step. "Read me the second one" works, and "open it" brings Mailspring up with that message named. His morning greeting mentions anything urgent. He reads Mailspring's own local copy of your mail on this Mac, read-only: no passwords, no plugin, nothing leaves the Mac. Install Mailspring, add your accounts, and that's it. |
 | 👁️ **Attention** | He notices whether you're facing the screen: the HUD's side panels rest when you look away and wake when you look back. |
 | 🖥️ **Runs your Mac** | Opens and quits apps, volume, brightness, dark mode, lock, sleep, notifications, clipboard, typing, Spotlight file search, reading files, Finder, screenshots |
-| 📅 **Your life** | Calendar (read and create), Reminders (they sync to your iPhone), Contacts, iMessage, Notes, unread email (Thunderbird) |
+| 📅 **Your life** | Calendar (read and create), Reminders (they sync to your iPhone), Contacts, iMessage, Notes, unread email (Mailspring) |
 | 🎵 **Music** | Plays songs, artists and playlists in Music or Spotify; play, pause, skip, "what's playing?" |
 | 🏠 **Smart home & everything else** | Runs any **macOS Shortcut**, which covers HomeKit scenes, lights, thermostats, Focus modes and any app with Shortcuts actions |
 | 🛠️ **Developer mode** | Shell commands (confirmed first), AppleScript, git and brew |
@@ -98,7 +98,7 @@ Say *"Jarvis, engage …"* (or any alias) or tap one on the HUD (**More** lists 
 | Good night | "good night" | Pause, then lock the Mac |
 | Morning | "good morning" | Weather (jacket or not), first events, unread mail, reminders |
 | Meeting mode | "I'm going into a meeting" | Pause, volume 15, who's in your next meeting and its link |
-| Presentation mode | "showtime" | Quit Messages, Thunderbird, Slack, WhatsApp; hide every other window |
+| Presentation mode | "showtime" | Quit Messages, Mailspring, Slack, WhatsApp; hide every other window |
 | Focus sprint | "pomodoro" | Focus music and a 25-minute timer |
 | Break time | "take a break" | Pause, a 5-minute timer, display off |
 | Declutter | "clear my screen" | Hide every window except JARVIS |

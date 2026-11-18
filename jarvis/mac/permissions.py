@@ -150,7 +150,7 @@ def _automation_probe(prompt: bool) -> str:
         status = "denied"
     else:
         status = "unknown"
-    # Finder too (trash/reveal) prompts separately. Email comes from Thunderbird's local files: no prompt.
+    # Finder too (trash/reveal) prompts separately. Email comes from Mailspring's local database: no prompt.
     for app in ("Finder",):
         subprocess.run(["/usr/bin/osascript", "-e", f'tell application "{app}" to return name'],
                        capture_output=True, text=True, timeout=120)

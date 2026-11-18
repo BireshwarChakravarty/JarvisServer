@@ -98,7 +98,7 @@ presentation_mode:
   say: "Clearing the stage."
   steps:
     - media: pause
-    - quit_apps: ["Messages", "Thunderbird", "Slack", "WhatsApp"]
+    - quit_apps: ["Messages", "Mailspring", "Slack", "WhatsApp"]
     - hide_others: true
     - volume: 50
 
