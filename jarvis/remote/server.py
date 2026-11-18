@@ -364,7 +364,7 @@ class RemoteServer:
                                                ws_max_size=4 * 1024 * 1024, **ssl))
         server.install_signal_handlers = lambda: None
         task = asyncio.ensure_future(server.serve())
-        for _ in range(50):
+        for _ in range(150):        # up to 15 s: at login the Mac is busy loading models
             await asyncio.sleep(0.1)
             if server.started:
                 self._servers.append(server)
@@ -395,15 +395,18 @@ class RemoteServer:
         self.secure_running = False
         self.secure_port = secure_port or SECURE_PORT
         if secure_port and self.certs is not None:
-            try:
-                pem, key = await asyncio.to_thread(self.certs.ensure_server, [name], [ip] if ip else [])
-                if await self._serve(app, host, secure_port, ssl_certfile=str(pem), ssl_keyfile=str(key)):
-                    self.secure_running, self.secure_error = True, ""
-                    log.info("companion (secure, for voice) listening on port %s", secure_port)
-                else:
+            for attempt in (1, 2):
+                try:
+                    pem, key = await asyncio.to_thread(self.certs.ensure_server, [name], [ip] if ip else [])
+                    if await self._serve(app, host, secure_port, ssl_certfile=str(pem), ssl_keyfile=str(key)):
+                        self.secure_running, self.secure_error = True, ""
+                        log.info("companion (secure, for voice) listening on port %s", secure_port)
+                        break
                     self.secure_error = f"couldn't open port {secure_port}"
-            except Exception as exc:
-                self.secure_error = str(exc)
+                except Exception as exc:
+                    self.secure_error = f"{type(exc).__name__}: {exc}"
+                log.warning("companion voice: attempt %d failed: %s", attempt, self.secure_error)
+                await asyncio.sleep(1)
             if self.secure_error:
                 log.warning("companion voice unavailable: %s", self.secure_error)
         return True

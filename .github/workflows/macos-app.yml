@@ -223,7 +223,13 @@ jobs:
         run: |
           CA="$HOME/Library/Application Support/JARVIS/companion-tls/ca.pem"
           for i in $(seq 1 30); do [ -f "$CA" ] && curl -sf --cacert "$CA" https://localhost:7779/remote/api/ping >/dev/null && break; sleep 1; done
-          curl -sf --cacert "$CA" https://localhost:7779/remote/api/ping && echo " ← secure port trusted with only JARVIS's authority ✓"
+          if ! curl -sf --cacert "$CA" https://localhost:7779/remote/api/ping; then
+            echo "secure port not answering; the app says:"; curl -s http://127.0.0.1:7777/api/remote; echo
+            ls -la "$(dirname "$CA")" || true
+            grep -iE "companion|tls|certif|7779" "$HOME/Library/Application Support/JARVIS/jarvis.log" | tail -n 30 2>/dev/null || true
+            exit 1
+          fi
+          echo " ← secure port trusted with only JARVIS's authority ✓"
           openssl x509 -in "$CA" -noout -subject
           curl -sf -D headers.txt -o JARVIS.mobileconfig http://127.0.0.1:7778/remote/jarvis.mobileconfig
           grep -qi "application/x-apple-aspen-config" headers.txt && plutil -lint JARVIS.mobileconfig && echo "iOS profile ✓"

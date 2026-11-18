@@ -26,7 +26,9 @@
     const s = await api("/api/remote").catch((e) => ({ enabled: false, error: e.message, devices: [] }));
     $("off").hidden = !!(s.enabled && s.running);
     $("on").hidden = !(s.enabled && s.running);
-    $("err").textContent = s.enabled && !s.running ? (s.error || "The companion couldn't start.") : "";
+    $("err").textContent = s.enabled && !s.running ? (s.error || "The companion couldn't start.")
+      : (s.enabled && s.voice && !s.voice.running && s.voice.error)
+        ? `Talking through the phone isn't available: ${s.voice.error}. Buttons and typing still work.` : "";
     if (s.enabled && s.running) {
       drawQR(s.url);
       $("host").textContent = s.host;

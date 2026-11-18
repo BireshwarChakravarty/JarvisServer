@@ -461,6 +461,8 @@ def make_router(sup) -> APIRouter:
 
         enabled = bool(sup.cfg.get("app.companion", False))
         out = {"enabled": enabled, "running": sup.remote.running, "error": sup.remote.error,
+               "voice": {"running": bool(getattr(sup.remote, "secure_running", False)),
+                         "error": getattr(sup.remote, "secure_error", "")},
                "devices": sup.devices.list()}
         if enabled and sup.remote.running:
             name, ip = await asyncio.to_thread(lan_addresses)
