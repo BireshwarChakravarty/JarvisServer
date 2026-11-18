@@ -393,3 +393,24 @@ def test_talking_straight_after_the_gesture_chime_keeps_your_first_words(cfg):
     app, asked = sim(cfg, [("silence", 0.25, ""), ("say", 0.4, "play"), ("say", 0.8, "some jazz"),
                            ("silence", 4.5, "")], extra=press)
     assert asked == ["play some jazz"], (asked, app.stt.heard)
+
+
+def test_when_the_phone_answered_first_the_mac_stays_quiet_and_its_hud_goes_back_to_standby(cfg):
+    from jarvis.events import bus
+
+    def phone_has_it(app):
+        app._voice_claim = ("phone:ipad", time.monotonic() + 100)
+        fire = app.wake.process
+
+        def process(frame):            # like the real detector, which tells the HUD it heard you
+            hit = fire(frame)
+            if hit:
+                bus.emit("wake", score=0.9)
+            return hit
+        app.wake.process = process
+        bus.history.clear()
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.0, "what's the weather"),
+                           ("silence", 1.5, "")], setup=phone_has_it)
+    assert asked == [] and app.speaker.said == []
+    seq = [e.get("state") or e["type"] for e in bus.history if e.get("type") in ("state", "wake")]
+    assert "wake" in seq and seq[-1] == "idle", seq                         # not left showing "Listening"

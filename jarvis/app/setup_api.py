@@ -300,7 +300,7 @@ def make_router(sup) -> APIRouter:
     async def open_url(body: dict = Body(...)):
         url = body.get("url", "")
         if url.startswith(("https://console.anthropic.com", "https://platform.claude.com", "x-apple.systempreferences:")):
-            subprocess.run(["/usr/bin/open", url], capture_output=True)
+            await asyncio.to_thread(subprocess.run, ["/usr/bin/open", url], capture_output=True)
         return {"ok": True}
 
     # ── permissions ───────────────────────────────────────────────────────
@@ -565,11 +565,14 @@ def make_router(sup) -> APIRouter:
         if bundle is None:
             return JSONResponse({"ok": False, "error": "Not running as an app."}, status_code=400)
         dest = Path("/Applications") / bundle.name
-        try:
+        def copy():
             if dest.exists():
                 shutil.rmtree(dest)
             subprocess.run(["/usr/bin/ditto", str(bundle), str(dest)], check=True, capture_output=True)
             subprocess.run(["/usr/bin/xattr", "-dr", "com.apple.quarantine", str(dest)], capture_output=True)
+
+        try:
+            await asyncio.to_thread(copy)      # a big bundle takes seconds: keep the window responsive
         except Exception as exc:
             return JSONResponse({"ok": False, "error": f"Couldn't copy to Applications: {exc}"}, status_code=500)
 

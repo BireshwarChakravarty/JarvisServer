@@ -163,6 +163,7 @@ def test_acknowledgement_is_a_prepared_phrase_and_the_echo_is_dropped():
     vad._vad = None
     j = SimpleNamespace(cfg=SimpleNamespace(get=lambda k, d=None: "sir"), ACKS=Jarvis.ACKS, speaker=Speaker(), vad=vad)
     j.ack_phrases = lambda: Jarvis.ack_phrases(j)
+    j._settle_keep = lambda q, **kw: Jarvis._settle_keep(j, q, **kw)
 
     async def go():
         q = asyncio.Queue()

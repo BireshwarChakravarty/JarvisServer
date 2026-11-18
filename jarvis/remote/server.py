@@ -85,8 +85,12 @@ def wav_bytes(audio: np.ndarray, sr: int) -> bytes:
 class Link:
     """One open companion connection."""
 
+    _count = 0
+
     def __init__(self, device: str, secure: bool) -> None:
         self.device, self.secure = device, secure
+        Link._count += 1
+        self.order = Link._count                    # newer links win (a reconnect leaves an old one dying)
         self.out: asyncio.Queue = asyncio.Queue(maxsize=600)
         self.voice = None
 
@@ -326,7 +330,8 @@ def create_remote_app(supervisor, store, certs=None) -> FastAPI:
             data = wav_bytes(audio, sr)
             meta = {"type": "audio", "n": counter["n"], "text": text, "duration": round(len(audio) / max(1, sr), 2),
                     "bytes": len(data)}
-            target = live[-1]
+            # the link that's listening to you, else the newest (a set has no order of its own)
+            target = max(live, key=lambda ln: (ln.voice is not None and ln.voice.mode != "off", ln.order))
             loop.call_soon_threadsafe(target.put, ("audio", meta, data))
             return True
         return sink

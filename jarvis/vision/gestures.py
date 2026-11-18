@@ -196,7 +196,8 @@ class GestureEngine:
             # x/y: the cursor in window fractions (y down), already mirrored and smoothed
             bus.emit("hand", visible=st.visible, x=round(st.px, 4), y=round(st.py, 4), pinch=st.pinch)
         self._was_visible = st.visible
-        if self.airmouse is not None and self.airmouse.update(now, label, st):
+        am = self.airmouse            # read once: "air mouse off" from the event loop can clear it meanwhile
+        if am is not None and am.update(now, label, st):
             return True
         for ev in st.events:
             if ev.kind == "swipe":

@@ -427,6 +427,7 @@ class Jarvis:
                     # the detector decides a moment after "Hey Jarvis" ends: keep what was said meanwhile
                     self._wake_preroll = list(recent)
                     if not self.claim_voice("mac"):
+                        bus.emit("state", state="idle")   # the HUD lit up on "wake": put it back
                         continue        # a phone in the room already answered this one
                     if self.cfg.get("voice.spoken_acks", True):
                         self._ack_if_pause = True   # listen at once; answer "Sir?" only if you pause
@@ -591,9 +592,12 @@ class Jarvis:
             guiding = self.guide is not None and getattr(self.guide, "_cancel", None) is not None
             if not (self.speaker.speaking or guiding):
                 continue                # thinking: a false "Hey Jarvis" here would throw your request away
-            if barge and self.wake.process(frame) and not (self.speaker.speaking and self.speaker.saying("jarvis")):
-                # while he talks, or quietly waits for your click on a guided step. Ignored while he's
-                # saying "Jarvis" himself: that's his own voice.
+            if barge and self.wake.process(frame):
+                if self.speaker.speaking and self.speaker.saying("jarvis"):
+                    # his own voice saying "Jarvis": not you. The HUD flashed "listening" on it.
+                    bus.emit("state", state="speaking")
+                    continue
+                # while he talks, or quietly waits for your click on a guided step
                 self.interrupt()
                 self.speaker.play_tone("wake")
                 return "barge"

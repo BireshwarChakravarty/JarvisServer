@@ -126,20 +126,26 @@ class PhoneVoice:
         from jarvis.core.orchestrator import DISMISS
         from jarvis.voice.stt import strip_wake_phrase
 
+        import time
+
         vad = VAD()
         follow_up = False
+        heard_any = False
+        window = time.monotonic() + FIRST_LISTEN_SECONDS     # this listen's deadline
+        fresh = True
         while True:
-            drain(self.q)
+            if fresh:
+                drain(self.q)
+            fresh = True
             # while you're talking through the phone, the Mac doesn't also answer a "Hey JARVIS" it overhears
             self.j.claim_voice(f"phone:{self.device}", hold=FIRST_LISTEN_SECONDS + 30)
             self._phase("listening", follow_up=follow_up)
             # (the phone shows "hearing you" from its own microphone level; the Mac's HUD stays as it is)
-            audio = await record_utterance(self.q, vad,
-                                           start_timeout=FOLLOW_UP_SECONDS if follow_up else FIRST_LISTEN_SECONDS,
+            audio = await record_utterance(self.q, vad, start_timeout=max(0.5, window - time.monotonic()),
                                            end_silence=0.8, max_seconds=30.0, announce=False,
                                            turn=getattr(self.j, "turn", None))
             if audio is None:
-                return follow_up                  # False: nobody spoke at all
+                return heard_any                  # False: nobody spoke at all
             self._busy = True
             try:
                 self._phase("transcribing")
@@ -148,9 +154,12 @@ class PhoneVoice:
                 text = text.strip()
                 self.send({"type": "heard", "text": text})
                 if not text:
-                    if follow_up:
-                        return True
-                    continue                      # nothing understood: keep listening once more
+                    # a cough or a door, not words: keep listening for what's left of this window
+                    if time.monotonic() < window - 0.5:
+                        fresh = False
+                        continue
+                    return heard_any
+                heard_any = True
                 if DISMISS.match(text):           # "that's all", "never mind": end quietly
                     self.send({"type": "dismissed"})
                     return True
@@ -162,6 +171,7 @@ class PhoneVoice:
             finally:
                 self._busy = False
             follow_up = True
+            window = time.monotonic() + FOLLOW_UP_SECONDS
 
     def _route(self):
         return self.route_factory() if self.speak_here else None

@@ -265,3 +265,50 @@ def test_mac_and_phone_dont_both_answer(cfg):
     assert j.claim_voice("phone:a") is True
     j._voice_claim = ("phone:a", time.monotonic() - 1)
     assert j.claim_voice("mac") is True
+
+
+def test_a_cough_on_the_phone_doesnt_end_the_conversation(energy_vad, monkeypatch):
+    """Noise that transcribes as nothing: keep listening for what's left of the window, then go quiet."""
+    monkeypatch.setattr(rvoice, "FIRST_LISTEN_SECONDS", 3.0)
+
+    class Script(FakeSTT):
+        def transcribe(self, audio):
+            self.calls.append(len(audio))
+            return "" if len(self.calls) == 1 else "What time is it?"
+
+    async def run():
+        j = FakeJarvis()
+        j.stt = Script("")
+        sent = []
+        v = rvoice.PhoneVoice(j, "d", sent.append, route_factory=lambda: None, wake_factory=lambda: None)
+        v.set_mode("talk")
+        await asyncio.sleep(0.05)
+        await _feed(v, speech(0.5) + speech(1.0, loud=False) + speech(1.0) + speech(1.2, loud=False))
+        for _ in range(100):
+            if any(m.get("phase") == "off" for m in sent):
+                break
+            await asyncio.sleep(0.05)
+        return j, sent
+
+    j, sent = asyncio.run(run())
+    assert [r[0] for r in j.requests] == ["What time is it?"], sent
+
+
+def test_endless_noise_on_the_phone_still_ends(energy_vad):
+    async def run():
+        j = FakeJarvis("")
+        sent = []
+        v = rvoice.PhoneVoice(j, "d", sent.append, route_factory=lambda: None, wake_factory=lambda: None)
+        v.set_mode("talk")
+        for _ in range(8):
+            await _feed(v, speech(0.4) + speech(0.9, loud=False))
+            if any(m.get("phase") == "off" for m in sent):
+                break
+        for _ in range(60):
+            if any(m.get("phase") == "off" for m in sent):
+                break
+            await asyncio.sleep(0.05)
+        return j, sent
+
+    j, sent = asyncio.run(run())
+    assert j.requests == [] and any(m.get("phase") == "off" for m in sent)
