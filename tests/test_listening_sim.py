@@ -155,9 +155,10 @@ async def run_script(app, script, echo=True, extra=None):
     """Feed the script at real pace (plus 1.5 s of trailing room tone), echoing his voice."""
     mic = app.mic
     for kind, amp in script.frames + [("silence", None)] * int(1.5 / FRAME_S):
-        if extra:
-            await extra(time.monotonic())
-        if kind == "wake":
+        override = await extra(time.monotonic()) if extra else None
+        if override is not None:
+            f = override                        # a scenario speaking at a moment it picks
+        elif kind == "wake":
             f = tone(WAKE_AMP)
         elif kind == "say":
             f = tone(amp)
@@ -201,6 +202,7 @@ async def simulate(cfg, parts, replies=None, echo=True, turn=True, extra=None, s
     app, asked, respond = make_app(cfg, script, replies, turn)
     await app.start()
     app.speaker, app.mic = app.speaker if isinstance(app.speaker, FakeSpeaker) else FakeSpeaker(), app.mic
+    app.stt.speaker = app.speaker               # his echo transcribes as his own last words
     app.brain.respond = respond
     if setup:
         setup(app)
@@ -255,8 +257,9 @@ def test_his_own_voice_is_never_taken_for_yours(cfg):
 def test_mid_thought_pause_is_one_request(cfg):
     app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 0.8, "set a timer for…"),
                            ("silence", 1.0, ""), ("say", 0.8, "ten minutes"), ("silence", 4.0, "")])
-    assert asked == ["set a timer for… ten minutes"] or app.speaker.said, (asked, app.stt.heard)
-    assert len([h for h in app.stt.heard if h]) == 1, app.stt.heard
+    assert asked == ["set a timer for… ten minutes"], (asked, app.stt.heard)
+    yours = [h for h in app.stt.heard if h and "ten minutes" in h or "timer" in h]
+    assert len(yours) == 1, app.stt.heard                                 # one utterance, not two
 
 
 def test_quick_answer_by_voice_and_then_a_follow_up(cfg):
@@ -358,3 +361,35 @@ def test_late_wake_without_spoken_acks_keeps_the_first_words_too(cfg):
     app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 0.24, "what's"),
                            ("say", 1.0, "the weather like"), ("silence", 4.5, "")], setup=late)
     assert asked == ["what's the weather like"], (asked, app.stt.heard)
+
+
+def test_a_quick_yes_right_after_his_question_is_heard(cfg):
+    """You answer the moment he stops, while his voice still hangs in the room."""
+    YES = 7777
+    state = {}
+
+    async def answer(app, now):
+        sp = app.speaker
+        if "Pepper" in (sp.said[-1] if sp.said else "") and not sp.speaking and "t" not in state:
+            state["t"] = now + 0.1                          # 0.1 s after he stops
+        t = state.get("t")
+        if t is not None and t <= now < t + 0.5:
+            return tone(YES)
+        return None
+
+    def words(app):
+        app.stt.words[YES] = "yes"
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 0.9, "send the report"),
+                           ("silence", 6.0, "")], replies={"send the report": "Shall I send it to Pepper?"},
+                     extra=answer, setup=words)
+    assert asked == ["send the report", "yes"], (asked, app.stt.heard)
+
+
+def test_talking_straight_after_the_gesture_chime_keeps_your_first_words(cfg):
+    async def press(app, now):
+        if not getattr(app, "_pressed", False):
+            app._pressed = True
+            app.trigger_listen()
+    app, asked = sim(cfg, [("silence", 0.25, ""), ("say", 0.4, "play"), ("say", 0.8, "some jazz"),
+                           ("silence", 4.5, "")], extra=press)
+    assert asked == ["play some jazz"], (asked, app.stt.heard)

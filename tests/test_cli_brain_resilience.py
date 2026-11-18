@@ -65,3 +65,70 @@ def test_a_hung_turn_is_stopped(cfg, tmp_path):
 
     reply, took = asyncio.run(run())
     assert "taking far too long" in reply and took < 10
+
+
+CODEX = textwrap.dedent('''\
+    #!{py}
+    import json, os, sys, time
+    mode = os.environ["FAKE_MODE"]
+    if mode == "noisy":
+        for _ in range(4000):                      # ~1.4 MB of logs: far more than a pipe holds
+            sys.stderr.write("codex debug: " + "x" * 340 + "\\n")
+        sys.stderr.flush()
+    print(json.dumps({{"type": "thread.started", "thread_id": "t1"}}), flush=True)
+    if mode == "slow":
+        time.sleep(30)
+    print(json.dumps({{"type": "item.completed", "item": {{"type": "agent_message", "text": "Done, sir."}}}}), flush=True)
+''')
+
+
+def make_codex(cfg, tmp_path, mode):
+    from jarvis.core.cli_brains import CodexBrain
+    from jarvis.core.memory import Memory
+    from jarvis.tools.context import ToolContext
+    from jarvis.tools.registry import ToolRegistry
+
+    exe = tmp_path / "codex"
+    exe.write_text(CODEX.format(py=sys.executable))
+    exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
+    cfg.data["brain"].update(provider="codex", codex_path=str(exe), turn_timeout_seconds=3,
+                             cli_env={"FAKE_MODE": mode})
+    mem = Memory(tmp_path / "m.db")
+    return CodexBrain(cfg, ToolRegistry(), mem, ToolContext(cfg=cfg, memory=mem))
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="posix script")
+def test_codex_with_lots_of_log_output_still_answers(cfg, tmp_path):
+    brain = make_codex(cfg, tmp_path, "noisy")
+
+    async def run():
+        r = await asyncio.wait_for(brain.respond("Status?"), 20)
+        await brain.mcp.stop()
+        return r
+    assert asyncio.run(run()) == "Done, sir."
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="posix script")
+def test_interrupting_codex_brings_no_apology(cfg, tmp_path):
+    brain = make_codex(cfg, tmp_path, "slow")
+    spoken = []
+
+    async def run():
+        cancel = asyncio.Event()
+        asyncio.get_running_loop().call_later(0.8, cancel.set)
+        r = await asyncio.wait_for(brain.respond("Status?", cancel=cancel,
+                                                 on_sentence=lambda s: spoken.append(s) or asyncio.sleep(0)), 10)
+        await brain.mcp.stop()
+        return r
+    assert asyncio.run(run()) == "" and spoken == []
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="posix script")
+def test_a_hung_codex_turn_is_stopped(cfg, tmp_path):
+    brain = make_codex(cfg, tmp_path, "slow")
+
+    async def run():
+        r = await asyncio.wait_for(brain.respond("Status?"), 15)
+        await brain.mcp.stop()
+        return r
+    assert "taking far too long" in asyncio.run(run())

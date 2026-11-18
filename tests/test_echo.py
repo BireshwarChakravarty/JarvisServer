@@ -19,6 +19,12 @@ def test_his_tail_then_yours_keeps_yours():
     assert strip_echo("the clock. What's the weather?", SAID) == "What's the weather?"
 
 
+def test_a_whole_line_of_his_is_dropped_however_short():
+    assert strip_echo("Sir?", ["Sir?"]) == ""
+    assert strip_echo("mm", ["Mm?"]) == ""
+    assert strip_echo("sir, what's the time", ["Sir?"]) == "sir, what's the time"
+
+
 def test_short_answers_to_him_are_kept():
     assert strip_echo("send it", SAID) == "send it"              # you, answering "Shall I send it?"
     assert strip_echo("yes", SAID) == "yes"
@@ -63,3 +69,24 @@ def test_settle_gives_up_after_max_wait():
         await settle(q, quiet_vad(), quiet=0.24, max_wait=0.3)
         return asyncio.get_running_loop().time() - t
     assert asyncio.run(go()) < 0.5
+
+
+def test_settle_keeps_you_answering_straight_after_him():
+    async def go():
+        q = asyncio.Queue()
+        for f in frames("speech", 2) + frames("silence", 1) + frames("speech", 6) + frames("silence", 4):
+            q.put_nowait(f)
+        kept = []
+        quiet = await settle(q, quiet_vad(), quiet=0.24, max_wait=2, keep=kept, tail=0.4)
+        return quiet, len(kept)
+    assert asyncio.run(go()) == (False, 12)                      # your words came back, not thrown away
+
+
+def test_settle_reports_quiet_when_only_his_tail_was_there():
+    async def go():
+        q = asyncio.Queue()
+        for f in frames("speech", 3) + frames("silence", 4):
+            q.put_nowait(f)
+        kept = []
+        return await settle(q, quiet_vad(), quiet=0.24, max_wait=2, keep=kept, tail=0.4), kept
+    assert asyncio.run(go()) == (True, [])

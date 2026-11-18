@@ -362,6 +362,14 @@ class ClaudeCodeBrain(_CLIBrain):
             await self._stop()
 
 
+async def _drain_lines(stream, name: str) -> None:
+    while True:
+        line = await stream.readline()
+        if not line:
+            return
+        log.debug("%s: %s", name, line.decode(errors="replace").rstrip())
+
+
 def _friendly_error(text: str) -> str:
     t = text.lower()
     if "limit" in t and ("usage" in t or "reset" in t or "rate" in t):
@@ -424,10 +432,20 @@ class CodexBrain(_CLIBrain):
                 binary, *self._args(url, prompt), cwd=str(self.workspace), env=child_env(self.cfg.get("brain.cli_env")),
                 stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
                 limit=32 * 1024 * 1024)
+            # Codex logs to stderr: unread, a full pipe would freeze it mid-answer
+            stderr_task = asyncio.ensure_future(_drain_lines(proc.stderr, "codex"))
             splitter, spoken, err = SentenceSplitter(), [], ""
+            stopped = False
+            deadline = time.monotonic() + float(self.cfg.get("brain.turn_timeout_seconds", 240))
             while True:
                 if cancel is not None and cancel.is_set():
+                    stopped = True          # you interrupted: no apology for an answer you stopped
                     proc.kill()
+                    break
+                if time.monotonic() > deadline:
+                    log.error("codex turn exceeded its time limit; stopping it")
+                    proc.kill()
+                    err = err or "timed out"
                     break
                 try:
                     raw = await asyncio.wait_for(proc.stdout.readline(), timeout=0.25)
@@ -452,6 +470,12 @@ class CodexBrain(_CLIBrain):
                 elif et in ("turn.failed", "error"):
                     err = str((ev.get("error") or {}).get("message") or ev.get("message") or "")
             await proc.wait()
+            stderr_task.cancel()
+            if stopped:
+                return " ".join(spoken)
+            if not spoken and err == "timed out":
+                return await self._speak_error("That was taking far too long, so I've stopped it. Shall I try again?",
+                                               on_sentence)
             if not spoken:
                 return await self._speak_error(_friendly_error(err) if err else
                                                "Codex didn't answer. Check you're signed in under Settings.", on_sentence)

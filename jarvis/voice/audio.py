@@ -100,20 +100,38 @@ def _put_drop_oldest(q: asyncio.Queue, item) -> None:
             pass
 
 
-async def settle(q: asyncio.Queue, vad, quiet: float = 0.24, max_wait: float = 0.8) -> None:
+async def settle(q: asyncio.Queue, vad, quiet: float = 0.24, max_wait: float = 0.8,
+                 keep: list | None = None, tail: float = 0.4) -> bool:
     """After he speaks, wait until the mic has heard `quiet` seconds of silence in a row (his voice
     lingers in the room for a few tenths of a second after the speakers stop), at most `max_wait`,
-    and throw that audio away. Anything you say after that is kept."""
+    and throw that audio away. Anything you say after that is kept.
+
+    Returns False when someone else was talking in it: speech later than `tail` seconds in (his
+    own echo never lasts that long), or a room that never went quiet. That's you answering at once
+    ("Shall I send it?" … "Yes"). Pass `keep` to get those frames back so your words aren't lost;
+    any of his own tail among them is removed from the transcript later (jarvis/voice/echo.py)."""
     frame_s = FRAME / SAMPLE_RATE
     need, still, end = max(1, round(quiet / frame_s)), 0, time.monotonic() + max_wait
+    frames: list = []
+    late_speech = False
     while time.monotonic() < end:
         try:
             frame = await asyncio.wait_for(q.get(), timeout=max(0.01, end - time.monotonic()))
         except asyncio.TimeoutError:
             break
-        still = 0 if vad.is_speech(frame) else still + 1
+        frames.append(frame)
+        speech = vad.is_speech(frame)
+        if speech and len(frames) * frame_s > tail:
+            late_speech = True
+        still = 0 if speech else still + 1
         if still >= need:
-            return
+            break
+    went_quiet = still >= need or not frames
+    if went_quiet and not late_speech:
+        return True
+    if keep is not None:
+        keep.extend(frames)
+    return False
 
 
 def drain(q: asyncio.Queue) -> None:
@@ -252,6 +270,7 @@ async def record_utterance(
     turn_patience: float = 2.0,
     turn_threshold: float = 0.7,
     turn_unsure: float = 0.4,
+    in_speech: bool = False,
 ) -> Optional[np.ndarray]:
     """Collect frames until the speaker stops. Returns float32 audio or None if nobody spoke.
 
@@ -259,10 +278,13 @@ async def record_utterance(
     (`turn_quick`) the model judges whether the thought is finished. Finished → stop now, so a
     crisp answer gets a quick reply. Clearly mid-thought ("set a timer for… ten minutes") → keep
     listening for up to `turn_patience` seconds of silence. Unsure, or no verdict → `end_silence`.
+
+    `in_speech`: the preroll ends with you mid-sentence (frames a settle() kept), so the utterance
+    has already begun and only its end is still to come.
     """
     frames: list[np.ndarray] = list(preroll or [])
     ring: collections.deque = collections.deque(maxlen=6)  # ~0.5 s pre-roll
-    started = False
+    started = bool(in_speech and frames)
     silence = 0.0
     use_turn = turn is not None and stop_event is None and getattr(turn, "available", True)
     asked = False             # asked the model during this pause already

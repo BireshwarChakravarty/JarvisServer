@@ -182,3 +182,29 @@ def test_first_words_start_at_the_first_natural_pause():
                                                                  "It runs an hour, then you're clear."]
     short = SentenceSplitter()
     assert short.feed("Right, done") == []                                       # short openers wait as before
+
+
+def test_an_interrupted_phrase_never_ends_the_next_one_early():
+    """stop() then a new line straight away (greeting fallback, barge-in): the old phrase finishing
+    must not mark him as done while the new line is still to play, or the mic hears him as you."""
+    sp = Speaker(SilentTTS())
+    sp.enqueue("an old phrase")
+    old_gen = sp._gen
+    sp.stop()
+    sp.enqueue("the new line")
+    sp._done_one(old_gen)                      # the old phrase's playback ends after the stop
+    assert sp.speaking
+    sp._done_one(sp._gen)
+    assert not sp.speaking
+
+
+def test_say_now_never_blocks_when_the_player_is_busy():
+    import queue as _q
+
+    sp = Speaker(SilentTTS())
+    sp._cache = {"Sir?": np.zeros(10, np.float32)}
+    for _ in range(3):
+        sp._audio_q.put_nowait((0, "x", None, 24000, 1))
+    assert sp.say_now("Sir?") is False and not sp.speaking
+    with pytest.raises(_q.Empty):
+        sp._text_q.get_nowait()

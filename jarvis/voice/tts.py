@@ -322,7 +322,12 @@ class Speaker:
         with self._pending_lock:
             self._pending += 1
             self._idle.clear()
-        self._audio_q.put((self._gen, text, audio, self.backend.sample_rate, 1))
+            gen = self._gen
+        try:
+            self._audio_q.put_nowait((gen, text, audio, self.backend.sample_rate, 1))
+        except queue.Full:          # mid-answer with phrases queued: never block the event loop
+            self._done_one(gen)
+            return False
         return True
 
     def saying(self, word: str) -> bool:
@@ -349,7 +354,8 @@ class Speaker:
         with self._pending_lock:
             self._pending += 1
             self._idle.clear()
-        self._text_q.put((self._gen, text))
+            gen = self._gen
+        self._text_q.put((gen, text))
 
     async def say(self, text: str) -> None:
         self.enqueue(text)
@@ -359,7 +365,8 @@ class Speaker:
 
     def stop(self) -> None:
         """Interrupt immediately and drop anything queued."""
-        self._gen += 1
+        with self._pending_lock:
+            self._gen += 1
         self._stop_play.set()
         for q in (self._text_q, self._audio_q):
             while True:
@@ -402,8 +409,10 @@ class Speaker:
             pass
 
     # ── workers ──────────────────────────────────────────────────────────
-    def _done_one(self) -> None:
+    def _done_one(self, gen: int | None = None) -> None:
         with self._pending_lock:
+            if gen is not None and gen != self._gen:
+                return      # stop() already wrote this one off; counting it again would end what's queued now
             self._pending = max(0, self._pending - 1)
             if self._pending == 0:
                 self._idle.set()
@@ -447,7 +456,7 @@ class Speaker:
             except Exception as exc:
                 log.error("TTS failed: %s", exc)
                 for _ in range(count):
-                    self._done_one()
+                    self._done_one(gen)
                 continue
             if gen != self._gen:
                 continue
@@ -484,7 +493,7 @@ class Speaker:
                 self._playing.clear()
                 self.current_text = ""
                 for _ in range(count):
-                    self._done_one()
+                    self._done_one(gen)
 
     def _send_elsewhere(self, sink, audio: np.ndarray, sr: int, text: str, gen: int) -> bool:
         """Hand the phrase to another device, then keep time as if it were playing here, so

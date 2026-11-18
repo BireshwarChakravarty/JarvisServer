@@ -6,6 +6,7 @@ is the safety net on the words themselves:
 
   • heard starts with the last words he said, then yours  →  his part is removed, yours is kept
   • heard is only a run of his own words (three or more)   →  dropped
+  • heard is exactly one whole line of his ("Sir?")         →  dropped
   • short replies are never dropped: "send it" after "Shall I send it?" is you answering him
 """
 from __future__ import annotations
@@ -32,6 +33,8 @@ def strip_echo(heard: str, said: list[str]) -> str:
     recent = [words(s) for s in said[-3:] if s]
     if len(hw) >= 3 and any(_contiguous_in(hw, ws) for ws in recent):
         return ""                                            # only his own words
+    if any(hw == ws for ws in recent):
+        return ""                                            # the whole of one of his lines ("Sir?")
     best = 0
     for ws in recent[-2:]:
         for k in range(min(len(ws), len(hw) - 1), 1, -1):    # at least two of his words, and some of yours after

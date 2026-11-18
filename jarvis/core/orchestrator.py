@@ -19,6 +19,7 @@ import logging
 import os
 import re
 import time
+from pathlib import Path
 from typing import Any
 
 from jarvis.aio import spawn
@@ -410,11 +411,11 @@ class Jarvis:
                 self.speaker.play_tone("wake")
                 # the mic hears the chime: let it finish and throw that audio away, or the listener
                 # takes the chime for you speaking, "hears" you stop, and gives up at once
-                from jarvis.voice.audio import drain, settle
+                from jarvis.voice.audio import drain
 
                 await asyncio.sleep(0.15)
                 drain(q)
-                await settle(q, self.vad, quiet=0.16, max_wait=0.5)
+                await self._settle_keep(q, quiet=0.16, max_wait=0.5, tail=0.25)
                 return None
             if self.wake and self.wake.available:
                 try:
@@ -457,8 +458,6 @@ class Jarvis:
         from jarvis.voice.audio import record_utterance
         from jarvis.voice.stt import strip_wake_phrase
 
-        from jarvis.voice.audio import settle
-
         follow_up = False
         pending_text = first_text
         ack_if_pause, self._ack_if_pause = getattr(self, "_ack_if_pause", False), False
@@ -473,10 +472,10 @@ class Jarvis:
                 if ack_if_pause and not follow_up and stop_evt is None:
                     # "Hey Jarvis, what's the time" runs straight on; "Hey Jarvis." … gets a "Sir?"
                     ack_if_pause = False
-                    preroll = self._take_preroll()
+                    preroll, live = self._take_preroll()
                     head = await record_utterance(q, self.vad, start_timeout=0.9, end_silence=0.75,
                                                   max_seconds=float(self.cfg.get("voice.max_utterance_seconds", 30)),
-                                                  preroll=preroll, turn=self.turn,
+                                                  preroll=preroll, in_speech=live, turn=self.turn,
                                                   turn_patience=float(self.cfg.get("voice.turn_patience", 2.0)))
                     if head is None:
                         await self._acknowledge(q)
@@ -487,13 +486,14 @@ class Jarvis:
                         if not pending_text:
                             await self._acknowledge(q)
                         continue
+                preroll, live = self._take_preroll()
                 audio = await record_utterance(
                     q, self.vad,
                     start_timeout=max(0.5, window - time.monotonic()),
                     end_silence=0.75 if not stop_evt else 30.0,
                     max_seconds=float(self.cfg.get("voice.max_utterance_seconds", 30)),
                     stop_event=stop_evt,
-                    preroll=self._take_preroll() if not follow_up else None,
+                    preroll=preroll, in_speech=live,
                     turn=self.turn, turn_patience=float(self.cfg.get("voice.turn_patience", 2.0)),
                 )
                 if audio is None:
@@ -519,13 +519,24 @@ class Jarvis:
             if outcome == "barge":
                 window = time.monotonic() + 6.0
                 continue  # user interrupted with the wake word: listen right away
-            await settle(q, self.vad)   # his voice lingers in the room for a moment: let it fade first
+            await self._settle_keep(q)  # his voice lingers in the room for a moment: let it fade first
             window = time.monotonic() + float(self.cfg.get("voice.follow_up_seconds", 7))
 
     def _take_preroll(self):
-        """The audio from just before the wake word fired (once; then it's spent)."""
+        """Audio heard before this listen began (once; then it's spent): what was said around the
+        wake word, or you already talking while his voice or chime faded. → (frames, mid-speech)"""
         pre, self._wake_preroll = getattr(self, "_wake_preroll", None), None
-        return pre
+        live, self._preroll_live = getattr(self, "_preroll_live", False), False
+        return pre, bool(live and pre)
+
+    async def _settle_keep(self, q: asyncio.Queue, **kw) -> None:
+        """Let his voice (or the chime) fade from the room; if you were already talking over the
+        end of it, keep that for the next listen instead of throwing your first words away."""
+        from jarvis.voice.audio import settle
+
+        kept: list = []
+        if not await settle(q, self.vad, keep=kept, **kw) and kept:
+            self._wake_preroll, self._preroll_live = kept, True
 
     def _without_echo(self, text: str) -> str:
         """What you said, minus any of his own voice that reached the mic."""
@@ -560,9 +571,7 @@ class Jarvis:
         await self.speaker.wait_done(timeout=3)
         await asyncio.sleep(0.05)
         drain(q)
-        from jarvis.voice.audio import settle
-
-        await settle(q, self.vad, quiet=0.2, max_wait=0.7)      # "Sir?" still ringing in the room
+        await self._settle_keep(q, quiet=0.2, max_wait=0.7, tail=0.4)   # "Sir?" still ringing in the room
         bus.emit("state", state="listening")
 
     async def _monitor_barge_in(self, q: asyncio.Queue, turn: asyncio.Task) -> str:
@@ -832,15 +841,22 @@ class Jarvis:
         voice_task = None
         if self.mic is not None and self.stt is not None and not self.mic.muted:
             async def by_voice() -> bool | None:
+                from jarvis.voice.audio import settle
+
                 q = self.mic.subscribe()
                 try:
                     bus.emit("state", state="listening", confirm=True)
-                    audio = await record_utterance(q, self.vad, start_timeout=8, end_silence=0.6, max_seconds=6)
+                    # the end of "Shall I …?" is still in the room: recording it would end the listen
+                    # on his own voice before you've said a word. Let it fade; keep you if you were quick.
+                    kept: list = []
+                    live = not await settle(q, self.vad, keep=kept)
+                    audio = await record_utterance(q, self.vad, start_timeout=8, end_silence=0.6, max_seconds=6,
+                                                   preroll=kept if live else None, in_speech=live)
                 finally:
                     self.mic.unsubscribe(q)
                 if audio is None:
                     return None
-                reply = await asyncio.to_thread(self.stt.transcribe, audio)
+                reply = self._without_echo(await asyncio.to_thread(self.stt.transcribe, audio))
                 bus.emit("transcript", text=reply, source="voice")
                 if NO.search(reply):
                     return False
@@ -1195,7 +1211,7 @@ class Jarvis:
             stats = {
                 "cpu": psutil.cpu_percent(),
                 "mem": psutil.virtual_memory().percent,
-                "disk": psutil.disk_usage("/").percent,
+                "disk": psutil.disk_usage(str(Path.home())).percent,   # the data volume, not the sealed system one
                 "net_down": (net.bytes_recv - last_net.bytes_recv) / dt_s,
                 "net_up": (net.bytes_sent - last_net.bytes_sent) / dt_s,
             }
