@@ -468,6 +468,10 @@ class Jarvis:
             if pending_text:
                 text, pending_text = pending_text, None
             else:
+                if self._listen_now.is_set():
+                    # a mic tap / ✌️ while already in a conversation: keep listening, don't queue another
+                    self._listen_now.clear()
+                    window = max(window, time.monotonic() + 6.0)
                 bus.emit("state", state="listening", follow_up=follow_up)
                 stop_evt = self._ptt_stop if (self.ptt and self.ptt.down) else None
                 if ack_if_pause and not follow_up and stop_evt is None:

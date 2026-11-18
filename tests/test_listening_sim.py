@@ -414,3 +414,14 @@ def test_when_the_phone_answered_first_the_mac_stays_quiet_and_its_hud_goes_back
     assert asked == [] and app.speaker.said == []
     seq = [e.get("state") or e["type"] for e in bus.history if e.get("type") in ("state", "wake")]
     assert "wake" in seq and seq[-1] == "idle", seq                         # not left showing "Listening"
+
+
+def test_a_mic_tap_during_a_conversation_doesnt_start_a_second_one_afterwards(cfg):
+    async def tap(app, now):
+        if app.speaker.said and not getattr(app, "_tapped", False):
+            app._tapped = True
+            app.trigger_listen()                 # tapped while he answers
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 0.9, "what's the news"),
+                           ("silence", 8.0, "")], extra=tap)
+    assert asked == ["what's the news"], (asked, app.stt.heard)
+    assert app.speaker.tones.count("wake") <= 1, app.speaker.tones          # no surprise second listen
