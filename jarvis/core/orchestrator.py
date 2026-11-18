@@ -340,6 +340,10 @@ class Jarvis:
     def trigger_listen(self) -> None:
         if self.speaker and self.speaker.speaking:
             self.interrupt()
+        self._request_listen()
+
+    def _request_listen(self) -> None:
+        self._listen_at = time.monotonic()
         self._listen_now.set()
 
     def ptt_event(self, down: bool) -> None:
@@ -392,24 +396,35 @@ class Jarvis:
         from jarvis.voice.audio import record_utterance
         from jarvis.voice.stt import strip_wake_phrase
 
-        self._listen_now.clear()
+        import collections
+
+        recent: collections.deque = collections.deque(maxlen=8)     # the last ~0.64 s of audio
+        self._wake_preroll = None
+        # forget a press left over from a conversation that has ended, but not one made just now
+        # (a ✌️ or mic tap that lands as he goes back to waiting must still count)
+        if time.monotonic() - getattr(self, "_listen_at", 0.0) > 1.5:
+            self._listen_now.clear()
         while True:
             if self._listen_now.is_set():
                 self._listen_now.clear()
                 self.speaker.play_tone("wake")
                 # the mic hears the chime: let it finish and throw that audio away, or the listener
                 # takes the chime for you speaking, "hears" you stop, and gives up at once
-                await asyncio.sleep(0.3)
-                from jarvis.voice.audio import drain
+                from jarvis.voice.audio import drain, settle
 
+                await asyncio.sleep(0.15)
                 drain(q)
+                await settle(q, self.vad, quiet=0.16, max_wait=0.5)
                 return None
             if self.wake and self.wake.available:
                 try:
                     frame = await asyncio.wait_for(q.get(), timeout=0.2)
                 except asyncio.TimeoutError:
                     continue
+                recent.append(frame)
                 if self.wake.process(frame):
+                    # the detector decides a moment after "Hey Jarvis" ends: keep what was said meanwhile
+                    self._wake_preroll = list(recent)
                     if not self.claim_voice("mac"):
                         continue        # a phone in the room already answered this one
                     if self.cfg.get("voice.spoken_acks", True):
@@ -439,13 +454,16 @@ class Jarvis:
                     return rest or None
 
     async def _converse(self, q: asyncio.Queue, first_text: str | None) -> None:
-        from jarvis.voice.audio import drain, record_utterance
+        from jarvis.voice.audio import record_utterance
         from jarvis.voice.stt import strip_wake_phrase
+
+        from jarvis.voice.audio import settle
 
         follow_up = False
         pending_text = first_text
         ack_if_pause, self._ack_if_pause = getattr(self, "_ack_if_pause", False), False
         first_window = time.monotonic() + 6.0      # how long the first listen waits for you in all
+        window = first_window                      # the current listen's deadline (first, then each follow-up)
         while True:
             if pending_text:
                 text, pending_text = pending_text, None
@@ -455,25 +473,27 @@ class Jarvis:
                 if ack_if_pause and not follow_up and stop_evt is None:
                     # "Hey Jarvis, what's the time" runs straight on; "Hey Jarvis." … gets a "Sir?"
                     ack_if_pause = False
+                    preroll = self._take_preroll()
                     head = await record_utterance(q, self.vad, start_timeout=0.9, end_silence=0.75,
                                                   max_seconds=float(self.cfg.get("voice.max_utterance_seconds", 30)),
-                                                  turn=self.turn, turn_patience=float(self.cfg.get("voice.turn_patience", 2.0)))
+                                                  preroll=preroll, turn=self.turn,
+                                                  turn_patience=float(self.cfg.get("voice.turn_patience", 2.0)))
                     if head is None:
                         await self._acknowledge(q)
                     else:
                         bus.emit("state", state="transcribing")
                         text = await asyncio.to_thread(self.stt.transcribe, head) if self.stt else ""
-                        _, pending_text = strip_wake_phrase(text)
+                        _, pending_text = strip_wake_phrase(self._without_echo(text))
                         if not pending_text:
                             await self._acknowledge(q)
                         continue
                 audio = await record_utterance(
                     q, self.vad,
-                    start_timeout=(float(self.cfg.get("voice.follow_up_seconds", 7)) if follow_up
-                                   else max(0.5, first_window - time.monotonic())),
+                    start_timeout=max(0.5, window - time.monotonic()),
                     end_silence=0.75 if not stop_evt else 30.0,
                     max_seconds=float(self.cfg.get("voice.max_utterance_seconds", 30)),
                     stop_event=stop_evt,
+                    preroll=self._take_preroll() if not follow_up else None,
                     turn=self.turn, turn_patience=float(self.cfg.get("voice.turn_patience", 2.0)),
                 )
                 if audio is None:
@@ -481,12 +501,10 @@ class Jarvis:
                     return
                 bus.emit("state", state="transcribing")
                 text = await asyncio.to_thread(self.stt.transcribe, audio) if self.stt else ""
-                _, text = strip_wake_phrase(text)
+                _, text = strip_wake_phrase(self._without_echo(text))
             if not text:
-                if follow_up:
-                    return
-                if time.monotonic() < first_window - 0.5:
-                    continue                # a cough or a click, not words: keep listening for you
+                if time.monotonic() < window - 0.5:
+                    continue                # a cough, a click or his own echo, not your words: keep listening
                 bus.emit("state", state="idle")
                 return
             if DISMISS.match(text.strip()):
@@ -499,9 +517,25 @@ class Jarvis:
                 return
             follow_up = True
             if outcome == "barge":
+                window = time.monotonic() + 6.0
                 continue  # user interrupted with the wake word: listen right away
-            await asyncio.sleep(0.25)  # let the room's echo die down
-            drain(q)
+            await settle(q, self.vad)   # his voice lingers in the room for a moment: let it fade first
+            window = time.monotonic() + float(self.cfg.get("voice.follow_up_seconds", 7))
+
+    def _take_preroll(self):
+        """The audio from just before the wake word fired (once; then it's spent)."""
+        pre, self._wake_preroll = getattr(self, "_wake_preroll", None), None
+        return pre
+
+    def _without_echo(self, text: str) -> str:
+        """What you said, minus any of his own voice that reached the mic."""
+        from jarvis.voice.echo import strip_echo
+
+        said = self.speaker.heard_recently() if self.speaker and hasattr(self.speaker, "heard_recently") else []
+        cleaned = strip_echo(text, said)
+        if cleaned != text:
+            log.info("ignored my own voice in the mic: %r → %r", text[:80], cleaned[:80])
+        return cleaned
 
     ACKS = ["Yes, {t}?", "{T}?", "Mm?", "Yes?", "I'm listening.", "Go ahead, {t}."]
 
@@ -524,8 +558,11 @@ class Jarvis:
                 self.speaker.play_tone("wake")
             return
         await self.speaker.wait_done(timeout=3)
-        await asyncio.sleep(0.12)          # the room's echo
+        await asyncio.sleep(0.05)
         drain(q)
+        from jarvis.voice.audio import settle
+
+        await settle(q, self.vad, quiet=0.2, max_wait=0.7)      # "Sir?" still ringing in the room
         bus.emit("state", state="listening")
 
     async def _monitor_barge_in(self, q: asyncio.Queue, turn: asyncio.Task) -> str:
@@ -542,9 +579,12 @@ class Jarvis:
                 frame = await asyncio.wait_for(q.get(), timeout=0.1)
             except asyncio.TimeoutError:
                 continue
+            guiding = self.guide is not None and getattr(self.guide, "_cancel", None) is not None
+            if not (self.speaker.speaking or guiding):
+                continue                # thinking: a false "Hey Jarvis" here would throw your request away
             if barge and self.wake.process(frame) and not (self.speaker.speaking and self.speaker.saying("jarvis")):
-                # any time during the turn: while he talks, and while he's quietly waiting (a guided
-                # click, a slow tool). Ignored while he's saying "Jarvis" himself: that's his own voice.
+                # while he talks, or quietly waits for your click on a guided step. Ignored while he's
+                # saying "Jarvis" himself: that's his own voice.
                 self.interrupt()
                 self.speaker.play_tone("wake")
                 return "barge"
@@ -715,7 +755,7 @@ class Jarvis:
                 if self.speaker:
                     await self.speaker.wait_done(timeout=120)
                 if source in ("hud", "protocol") and self.mic is not None and not self.mic.muted:
-                    self._listen_now.set()  # allow a spoken follow-up
+                    self._request_listen()  # allow a spoken follow-up
             except Exception:
                 log.exception("request failed")
             finally:
@@ -893,7 +933,7 @@ class Jarvis:
             if self.speaker:
                 await self.speaker.wait_done(timeout=90)
             if self.mic is not None and not self.mic.muted:
-                self._listen_now.set()  # answer the "what shall we do today?" without the wake word
+                self._request_listen()  # answer the "what shall we do today?" without the wake word
 
     def _return_kind(self, away_for: float) -> str:
         """First time at the Mac today (or after a long absence) earns the full daily briefing."""

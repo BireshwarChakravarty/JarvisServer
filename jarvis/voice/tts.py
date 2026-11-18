@@ -318,6 +318,7 @@ class Speaker:
         audio = self._cache.get(text)
         if audio is None:
             return False
+        self._remember_said(text)
         with self._pending_lock:
             self._pending += 1
             self._idle.clear()
@@ -328,10 +329,23 @@ class Speaker:
         """Is the phrase playing right now saying `word`? (Used to ignore his own voice.)"""
         return word.lower() in (self.current_text or "").lower()
 
+    def heard_recently(self, within: float = 20.0) -> list[str]:
+        """What he has said in the last `within` seconds (to recognise his own voice in the mic)."""
+        now = time.monotonic()
+        return [t for at, t in list(getattr(self, "recent", [])) if now - at <= within]
+
+    def _remember_said(self, text: str) -> None:
+        import collections
+
+        if not hasattr(self, "recent"):
+            self.recent = collections.deque(maxlen=8)
+        self.recent.append((time.monotonic(), text))
+
     def enqueue(self, text: str) -> None:
         text = text.strip()
         if not text:
             return
+        self._remember_said(text)
         with self._pending_lock:
             self._pending += 1
             self._idle.clear()

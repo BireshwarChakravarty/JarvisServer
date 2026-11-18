@@ -100,6 +100,22 @@ def _put_drop_oldest(q: asyncio.Queue, item) -> None:
             pass
 
 
+async def settle(q: asyncio.Queue, vad, quiet: float = 0.24, max_wait: float = 0.8) -> None:
+    """After he speaks, wait until the mic has heard `quiet` seconds of silence in a row (his voice
+    lingers in the room for a few tenths of a second after the speakers stop), at most `max_wait`,
+    and throw that audio away. Anything you say after that is kept."""
+    frame_s = FRAME / SAMPLE_RATE
+    need, still, end = max(1, round(quiet / frame_s)), 0, time.monotonic() + max_wait
+    while time.monotonic() < end:
+        try:
+            frame = await asyncio.wait_for(q.get(), timeout=max(0.01, end - time.monotonic()))
+        except asyncio.TimeoutError:
+            break
+        still = 0 if vad.is_speech(frame) else still + 1
+        if still >= need:
+            return
+
+
 def drain(q: asyncio.Queue) -> None:
     while not q.empty():
         try:

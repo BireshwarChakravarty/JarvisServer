@@ -157,7 +157,11 @@ def test_acknowledgement_is_a_prepared_phrase_and_the_echo_is_dropped():
         def play_tone(self, kind):
             played.append(f"tone:{kind}")
 
-    j = SimpleNamespace(cfg=SimpleNamespace(get=lambda k, d=None: "sir"), ACKS=Jarvis.ACKS, speaker=Speaker())
+    from jarvis.voice.audio import VAD
+
+    vad = VAD()
+    vad._vad = None
+    j = SimpleNamespace(cfg=SimpleNamespace(get=lambda k, d=None: "sir"), ACKS=Jarvis.ACKS, speaker=Speaker(), vad=vad)
     j.ack_phrases = lambda: Jarvis.ack_phrases(j)
 
     async def go():
