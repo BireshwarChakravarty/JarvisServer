@@ -312,3 +312,18 @@ def test_endless_noise_on_the_phone_still_ends(energy_vad):
 
     j, sent = asyncio.run(run())
     assert j.requests == [] and any(m.get("phase") == "off" for m in sent)
+
+
+def test_a_long_mac_name_still_gets_a_certificate(tmp_path):
+    """A certificate's CN holds 64 characters at most: a long Mac name used to break voice on the phone."""
+    from jarvis.remote.tls import Certificates
+
+    if Certificates is None or not __import__("shutil").which("openssl"):
+        pytest.skip("openssl not available")
+    name = "iad20-fj919-52bb14e6-14ec-4561-ace2-74c2d2039a4d-F28D2B69C969.local"      # 70 characters
+    c = Certificates(tmp_path / "tls", name.removesuffix(".local").replace("-", " "))
+    pem, key = c.ensure_server([name], ["192.168.64.3"])
+    import subprocess
+
+    text = subprocess.run(["openssl", "x509", "-in", str(pem), "-noout", "-text"], capture_output=True, text=True).stdout
+    assert f"DNS:{name}" in text and "IP Address:192.168.64.3" in text

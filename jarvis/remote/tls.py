@@ -95,7 +95,10 @@ class Certificates:
         san = ",".join([f"DNS:{n}" for n in names] + [f"IP:{i}" for i in ips])
         with tempfile.TemporaryDirectory() as tmp:
             t = Path(tmp)
-            (t / "req.cnf").write_text(f"[req]\ndistinguished_name=dn\nprompt=no\n[dn]\nCN={names[0]}\nO=JARVIS\n")
+            # a certificate's CN holds at most 64 characters; a long Mac name would break it (the names
+            # that matter are in subjectAltName, which has no such limit)
+            cn = next((n for n in names if len(n) <= 64 and n != "localhost"), "JARVIS companion")
+            (t / "req.cnf").write_text(f"[req]\ndistinguished_name=dn\nprompt=no\n[dn]\nCN={cn}\nO=JARVIS\n")
             (t / "ext.cnf").write_text(
                 "basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\n"
                 f"extendedKeyUsage=serverAuth\nsubjectAltName={san}\n"
