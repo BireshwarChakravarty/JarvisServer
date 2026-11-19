@@ -39,8 +39,9 @@ def _find_device(fragment: str | None, kind: str) -> int | None:
 class Microphone:
     """Continuous capture; fans frames out to any number of asyncio subscribers."""
 
-    def __init__(self, device: str | None = None) -> None:
+    def __init__(self, device: str | None = None, voiceio=None) -> None:
         self.device = device
+        self.voiceio = voiceio      # jarvis.voice.apple_io.VoiceIO: echo-cancelled frames, when it's running
         self._stream = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._queues: list[asyncio.Queue] = []
@@ -57,9 +58,23 @@ class Microphone:
             self._queues.remove(q)
 
     def start(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._loop = loop
+        if self.voiceio is not None and self.voiceio.running:
+            self.voiceio.add_listener(self._deliver)
+            log.info("microphone started (echo-cancelled, voice processing)")
+            return
+        self.start_plain()
+
+    @property
+    def echo_cancelled(self) -> bool:
+        return self.voiceio is not None and self.voiceio.running and self._stream is None
+
+    def start_plain(self) -> None:
+        """The microphone straight from the device (no echo cancellation)."""
         import sounddevice as sd
 
-        self._loop = loop
+        if self._stream is not None:
+            return
         self._stream = sd.InputStream(
             samplerate=SAMPLE_RATE, channels=1, dtype="int16", blocksize=FRAME,
             device=_find_device(self.device, "input"), callback=self._callback,
@@ -74,9 +89,11 @@ class Microphone:
             self._stream = None
 
     def _callback(self, indata, frames, time_info, status) -> None:  # audio thread
+        self._deliver(indata[:, 0].copy())
+
+    def _deliver(self, frame: np.ndarray) -> None:  # audio thread: one 80 ms int16 frame
         if self.muted:
             return
-        frame = indata[:, 0].copy()
         now = time.monotonic()
         if now - self._last_level > 0.05:
             self._last_level = now
@@ -202,13 +219,14 @@ class WakeWord:
             self.available = False
         return self.available
 
-    def process(self, frame: np.ndarray) -> bool:
+    def process(self, frame: np.ndarray, threshold: float | None = None) -> bool:
+        """`threshold`: stricter while he talks without echo cancellation (his voice is in the mic)."""
         if self._model is None:
             return False
         scores = self._model.predict(frame)
         score = max(scores.values()) if scores else 0.0
         now = time.monotonic()
-        if score >= self.threshold and now >= self._cooldown_until:
+        if score >= (threshold if threshold is not None else self.threshold) and now >= self._cooldown_until:
             self._cooldown_until = now + 1.5
             self._model.reset()
             if self.announce:

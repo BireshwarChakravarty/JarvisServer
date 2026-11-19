@@ -295,6 +295,10 @@ class Speaker:
         return not self._idle.is_set()
 
     current_text = ""
+    quiet_since = 0.0           # when he last fell silent (monotonic): his echo can only follow closely
+    # jarvis.voice.apple_io.VoiceIO: when running, his voice and chimes play through the same engine
+    # as the microphone, so macOS can cancel them out of what the mic hears.
+    voiceio = None
     # Where his voice goes. None: this Mac's speakers. Otherwise a callable(audio, sample_rate, text)
     # that sends it somewhere else (the iPhone you spoke from) and returns False if it couldn't.
     route = None
@@ -376,6 +380,7 @@ class Speaker:
                     break
         with self._pending_lock:
             self._pending = 0
+            self.quiet_since = time.monotonic()
             self._idle.set()
         bus.emit("level", source="tts", value=0.0)
 
@@ -388,7 +393,7 @@ class Speaker:
 
     def play_tone(self, kind: str = "wake") -> None:
         """Short UI chimes, synthesised on the fly."""
-        if self._sd is None:
+        if self._sd is None and not (self.voiceio is not None and self.voiceio.running):
             return
         sr = 24000
         specs = {
@@ -403,10 +408,22 @@ class Speaker:
             env = np.minimum(1, np.minimum(t / 0.01, (dur - t) / 0.03))
             parts.append(0.18 * np.sin(2 * np.pi * freq * t) * env)
         tone = np.concatenate(parts).astype(np.float32)
+        vio = self.voiceio
+        if vio is not None and vio.running:
+            # through the echo canceller, so the mic doesn't take the chime for you speaking
+            threading.Thread(target=self._tone_via, args=(vio, tone, sr), daemon=True, name="tone").start()
+            return
         try:
             self._sd.play(tone, sr, device=self._device_index())
         except Exception:
             pass
+
+    @staticmethod
+    def _tone_via(vio, tone, sr) -> None:
+        try:
+            vio.play(tone, sr, should_stop=lambda: False)
+        except Exception as exc:
+            log.debug("chime via voice processing failed: %s", exc)
 
     # ── workers ──────────────────────────────────────────────────────────
     def _done_one(self, gen: int | None = None) -> None:
@@ -415,6 +432,7 @@ class Speaker:
                 return      # stop() already wrote this one off; counting it again would end what's queued now
             self._pending = max(0, self._pending - 1)
             if self._pending == 0:
+                self.quiet_since = time.monotonic()
                 self._idle.set()
                 bus.emit("level", source="tts", value=0.0)
 
@@ -519,6 +537,15 @@ class Speaker:
 
     def _play(self, audio: np.ndarray, sr: int, gen: int, pause: float = 0.08) -> None:
         block = int(sr * 0.04)
+        vio = self.voiceio
+        if vio is not None and vio.running:
+            try:
+                vio.play(shape_audio(audio, sr, pause), sr,
+                         should_stop=lambda: self._stop_play.is_set() or gen != self._gen,
+                         on_level=lambda v: bus.emit("level", source="tts", value=min(1.0, v * 6)))
+                return
+            except Exception as exc:
+                log.warning("voice-processing playback failed (%s); playing directly", exc)
         if self._sd is None:
             # headless: emulate playback time so the state machine behaves the same
             for i in range(0, len(audio), block):
@@ -537,3 +564,13 @@ class Speaker:
                 rms = float(np.sqrt(np.mean(chunk ** 2))) if len(chunk) else 0.0
                 bus.emit("level", source="tts", value=min(1.0, rms * 6))
                 stream.write(chunk.reshape(-1, 1))
+            else:
+                # written isn't heard: the device (Bluetooth especially) is still playing the last of it.
+                # Count that as speaking, or the mic takes his last words for you.
+                try:
+                    lat = float(stream.latency)
+                except Exception:
+                    lat = 0.0
+                end = time.monotonic() + min(0.6, max(0.0, lat))
+                while time.monotonic() < end and not self._stop_play.is_set() and gen == self._gen:
+                    time.sleep(0.02)

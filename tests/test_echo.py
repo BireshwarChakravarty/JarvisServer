@@ -90,3 +90,9 @@ def test_settle_reports_quiet_when_only_his_tail_was_there():
         kept = []
         return await settle(q, quiet_vad(), quiet=0.24, max_wait=2, keep=kept, tail=0.4), kept
     assert asyncio.run(go()) == (True, [])
+
+
+def test_his_voice_on_both_sides_of_yours():
+    """A long echo: your quick 'yes' lands in the middle of his fading voice."""
+    assert strip_echo("send it to Pepper? yes send it to Pepper?", SAID) == "yes"
+    assert strip_echo("to Pepper? Yes, and copy Happy", SAID) == "Yes, and copy Happy"

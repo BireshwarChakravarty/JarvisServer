@@ -505,6 +505,36 @@ def run() -> int:
         ok, text, nwav, nprof = asyncio.run(go())
         return f"wss with JARVIS's own certificate · 4 acks · phone audio heard as {text!r} · {nwav} B reply · profile {nprof} B"
 
+    @check("ears: echo cancellation buffers (Apple voice processing)", timeout=60)
+    def _():
+        import numpy as np
+        import AVFoundation as AV
+
+        from jarvis.voice.apple_io import PLAY_RATE, StreamResampler, channel, make_buffer
+
+        fmt = AV.AVAudioFormat.alloc().initStandardFormatWithSampleRate_channels_(PLAY_RATE, 1)
+        x = (0.3 * np.sin(np.arange(2400) / 10)).astype(np.float32)
+        buf = make_buffer(fmt, x)
+        back = np.array(channel(buf, int(buf.frameLength())), copy=True)
+        if buf.frameLength() != 2400 or not np.allclose(back, x):
+            raise RuntimeError(f"PCM buffer round trip failed ({buf.frameLength()} frames)")
+        out = StreamResampler(48000).process(np.zeros(4800, np.float32))
+        return f"PCM buffer write/read ok · resampler 48k→16k gives {len(out)} samples per 0.1 s"
+
+    @check("ears: echo cancellation engine starts (needs a microphone; none on CI)", required=False, timeout=60)
+    def _():
+        from jarvis.voice.apple_io import VoiceIO
+
+        vio = VoiceIO()
+        try:
+            if not vio.start():
+                raise RuntimeError(vio.error or "didn't start")
+            import time as _t
+            _t.sleep(1.5)
+            return f"voice processing on at {vio.in_rate:.0f} Hz · frames flowing: {vio.frames_flowing(2.0)}"
+        finally:
+            vio.stop()
+
     @check("email: reads Mailspring's local mail and ranks what needs you", timeout=60)
     def _():
         import sqlite3

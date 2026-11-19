@@ -42,10 +42,13 @@ voice:
   output_device: null
   follow_up_seconds: 7     # keep listening this long after JARVIS speaks (no wake word needed)
   barge_in: true           # say "Jarvis" / raise your palm while he talks to interrupt
+  echo_cancellation: true  # Apple voice processing (as FaceTime uses): the mic never hears his own voice
   push_to_talk_key: "alt_r"  # hold to talk (needs Accessibility permission); null to disable
   max_utterance_seconds: 30
   smart_turn: true         # judge when you've finished speaking from your voice, not a fixed silence
-  turn_patience: 2.0       # mid-thought pauses: wait up to this long before answering
+  turn_patience: 2.5       # mid-thought pauses: wait up to this long before answering
+  end_silence: 1.0         # a pause this long ends your turn when Smart Turn can't tell
+  turn_threshold: 0.8      # Smart Turn must be this sure you've finished to answer sooner
   spoken_acks: true        # answer "Hey Jarvis" with a word ("Yes?") instead of a chime
   stt:
     backend: auto          # auto | faster-whisper | mlx

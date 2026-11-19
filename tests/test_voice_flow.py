@@ -109,7 +109,7 @@ def test_listen_trigger_survives_its_own_chime(cfg):
         client = FakeClient([message([text_block("Up nine points, sir.")])])
         app.brain._client = client
         q = asyncio.Queue()
-        for f in frames("speech", 3) + frames("silence", 12) + frames("speech", 12) + frames("silence", 14):
+        for f in frames("speech", 3) + frames("silence", 16) + frames("speech", 12) + frames("silence", 16):
             q.put_nowait(f)
         await asyncio.wait_for(app._converse(q, None), 15)
         return client

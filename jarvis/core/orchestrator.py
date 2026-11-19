@@ -64,6 +64,13 @@ def _log_failure(fut) -> None:
         log.error("background task failed", exc_info=exc)
 
 
+def _began(audio) -> float:
+    """When an utterance began (monotonic), from its length, once it has just been recorded."""
+    from jarvis.voice.audio import SAMPLE_RATE
+
+    return time.monotonic() - (len(audio) / SAMPLE_RATE if audio is not None else 0.0)
+
+
 class Jarvis:
     def __init__(self, cfg, headless: bool = False) -> None:
         self.cfg = cfg
@@ -95,6 +102,7 @@ class Jarvis:
         self.gestures = None
         self.mcp = None
         self.ptt = None
+        self.voiceio = None
         # state
         self.standby = False          # mic muted by voice command
         self.capabilities: dict[str, Any] = {}
@@ -173,7 +181,9 @@ class Jarvis:
                                models_dir=cfg.models_dir)
         backend, wake_ok, stt_name = await asyncio.gather(
             tts_task, asyncio.to_thread(self.wake.load), asyncio.to_thread(self._load_stt))
+        self.voiceio = await asyncio.to_thread(self._start_echo_cancellation)
         self.speaker = Speaker(backend, cfg.get("voice.output_device"))
+        self.speaker.voiceio = self.voiceio
         self.speaker.start()
         if self.guide is not None:
             self.guide.speaker = self.speaker
@@ -191,7 +201,7 @@ class Jarvis:
             turn_ok = await asyncio.to_thread(self.turn.load)
             self.boot("Turn detection: Smart Turn" if turn_ok else "Turn detection: silence timeout", True)
         try:
-            self.mic = Microphone(cfg.get("voice.input_device"))
+            self.mic = Microphone(cfg.get("voice.input_device"), voiceio=self.voiceio)
             self.mic.start(self.loop)
             self.capabilities["microphone"] = True
             self.boot("Microphone array online")
@@ -207,6 +217,58 @@ class Jarvis:
                 self.boot("Push-to-talk: hold right ⌥")
             elif self.ptt.start():
                 self.boot(f"Push-to-talk: hold {key}")
+
+    def _start_echo_cancellation(self):
+        """Apple's voice processing (as FaceTime uses) so the mic doesn't hear him. None if unavailable."""
+        from jarvis.mac.system import IS_MAC
+
+        cfg = self.cfg
+        if not IS_MAC or not cfg.get("voice.echo_cancellation", True):
+            self.capabilities["echo_cancellation"] = False
+            return None
+        if cfg.get("voice.input_device") or cfg.get("voice.output_device"):
+            # voice processing drives the system default devices; respect a device you picked
+            self.capabilities["echo_cancellation"] = False
+            self.boot("Echo cancellation: off (a specific microphone or speaker is selected)", None)
+            return None
+        from jarvis.voice.apple_io import VoiceIO
+
+        vio = VoiceIO()
+        ok = vio.start()
+        self.capabilities["echo_cancellation"] = ok
+        self.boot("Echo cancellation: on (he won't hear himself)" if ok else
+                  f"Echo cancellation unavailable: {vio.error[:80]}", ok or None)
+        return vio if ok else None
+
+    async def _watch_echo_cancellation(self) -> None:
+        """If voice processing stops delivering audio (a device came or went), restart it; if that
+        fails, carry on with the plain microphone and speakers rather than going deaf."""
+        while True:
+            await asyncio.sleep(2.0)
+            vio, mic = getattr(self, "voiceio", None), self.mic
+            if vio is None or mic is None or mic._stream is not None:
+                return
+            if vio.frames_flowing(3.0):
+                continue
+            log.warning("echo-cancelled audio stopped arriving; restarting it")
+            await asyncio.to_thread(vio.stop)
+            ok = await asyncio.to_thread(vio.start)
+            if ok:
+                await asyncio.sleep(1.5)
+                if vio.frames_flowing(3.0):
+                    continue
+                await asyncio.to_thread(vio.stop)
+            log.warning("echo cancellation lost (%s): using the plain microphone and speakers", vio.error)
+            if self.speaker:
+                self.speaker.voiceio = None
+            self.voiceio = None
+            try:
+                await asyncio.to_thread(mic.start_plain)
+            except Exception as exc:
+                log.error("microphone unavailable: %s", exc)
+            bus.emit("announce", text="Echo cancellation paused after an audio device change.", priority="normal")
+            self.capabilities["echo_cancellation"] = False
+            return
 
     def _make_guide(self):
         from jarvis.core.guide import Guide
@@ -311,6 +373,8 @@ class Jarvis:
         ]
         if self.mic is not None:
             tasks.append(asyncio.create_task(sup("voice", self._voice_loop), name="voice"))
+        if getattr(self, "voiceio", None) is not None:
+            tasks.append(asyncio.create_task(sup("echo", self._watch_echo_cancellation), name="echo"))
         from jarvis.mac.session import SessionWatcher
 
         watcher = SessionWatcher(on_unlock=self.on_unlock, on_wake=self.on_wake)
@@ -326,7 +390,7 @@ class Jarvis:
             await self.shutdown()
 
     async def shutdown(self) -> None:
-        for comp in (self.mic, self.camera):
+        for comp in (self.mic, self.camera, getattr(self, "voiceio", None)):
             try:
                 if comp:
                     comp.stop()
@@ -478,35 +542,35 @@ class Jarvis:
                     # "Hey Jarvis, what's the time" runs straight on; "Hey Jarvis." … gets a "Sir?"
                     ack_if_pause = False
                     preroll, live = self._take_preroll()
-                    head = await record_utterance(q, self.vad, start_timeout=0.9, end_silence=0.75,
-                                                  max_seconds=float(self.cfg.get("voice.max_utterance_seconds", 30)),
-                                                  preroll=preroll, in_speech=live, turn=self.turn,
-                                                  turn_patience=float(self.cfg.get("voice.turn_patience", 2.0)))
+                    # a breath after "Hey Jarvis" is normal: only a real pause earns the "Sir?"
+                    head = await record_utterance(q, self.vad, start_timeout=1.4, preroll=preroll, in_speech=live,
+                                                  **self._endpointing())
                     if head is None:
                         await self._acknowledge(q)
                     else:
                         bus.emit("state", state="transcribing")
                         text = await asyncio.to_thread(self.stt.transcribe, head) if self.stt else ""
-                        _, pending_text = strip_wake_phrase(self._without_echo(text))
+                        _, pending_text = strip_wake_phrase(self._without_echo(text, _began(head)))
                         if not pending_text:
                             await self._acknowledge(q)
                         continue
                 preroll, live = self._take_preroll()
+                ep = self._endpointing()
+                if stop_evt:
+                    ep["end_silence"] = 30.0       # push-to-talk: you decide when you've finished
                 audio = await record_utterance(
                     q, self.vad,
                     start_timeout=max(0.5, window - time.monotonic()),
-                    end_silence=0.75 if not stop_evt else 30.0,
-                    max_seconds=float(self.cfg.get("voice.max_utterance_seconds", 30)),
                     stop_event=stop_evt,
                     preroll=preroll, in_speech=live,
-                    turn=self.turn, turn_patience=float(self.cfg.get("voice.turn_patience", 2.0)),
+                    **ep,
                 )
                 if audio is None:
                     bus.emit("state", state="idle")
                     return
                 bus.emit("state", state="transcribing")
                 text = await asyncio.to_thread(self.stt.transcribe, audio) if self.stt else ""
-                _, text = strip_wake_phrase(self._without_echo(text))
+                _, text = strip_wake_phrase(self._without_echo(text, _began(audio)))
             if not text:
                 if time.monotonic() < window - 0.5:
                     continue                # a cough, a click or his own echo, not your words: keep listening
@@ -539,15 +603,39 @@ class Jarvis:
         end of it, keep that for the next listen instead of throwing your first words away."""
         from jarvis.voice.audio import settle
 
+        if not self.echo_cancelled:
+            # nothing removes his voice from the mic: allow for a longer tail (speaker latency, room)
+            kw["tail"] = kw.get("tail", 0.4) + 0.3
         kept: list = []
         if not await settle(q, self.vad, keep=kept, **kw) and kept:
             self._wake_preroll, self._preroll_live = kept, True
 
-    def _without_echo(self, text: str) -> str:
-        """What you said, minus any of his own voice that reached the mic."""
+    def _endpointing(self) -> dict:
+        """When have you finished? Generous by default: being cut off mid-sentence is far worse than
+        waiting half a second longer. Smart Turn ends early only when it's sure you're done."""
+        c = self.cfg.get
+        return {"end_silence": float(c("voice.end_silence", 1.0)),
+                "max_seconds": float(c("voice.max_utterance_seconds", 30)),
+                "turn": self.turn,
+                "turn_quick": float(c("voice.turn_quick", 0.35)),
+                "turn_threshold": float(c("voice.turn_threshold", 0.8)),
+                "turn_patience": float(c("voice.turn_patience", 2.5))}
+
+    @property
+    def echo_cancelled(self) -> bool:
+        return bool(self.mic is not None and getattr(self.mic, "echo_cancelled", False))
+
+    def _without_echo(self, text: str, began: float | None = None) -> str:
+        """What you said, minus any of his own voice that reached the mic. Only audio that began while
+        he spoke or within moments of him stopping can hold his voice: later, you may repeat his words."""
         from jarvis.voice.echo import strip_echo
 
-        said = self.speaker.heard_recently() if self.speaker and hasattr(self.speaker, "heard_recently") else []
+        if self.speaker is None or not hasattr(self.speaker, "heard_recently"):
+            return text
+        quiet = float(getattr(self.speaker, "quiet_since", 0.0) or 0.0)
+        if began is not None and quiet and began - quiet > 1.5 and not self.speaker.speaking:
+            return text
+        said = self.speaker.heard_recently()
         cleaned = strip_echo(text, said)
         if cleaned != text:
             log.info("ignored my own voice in the mic: %r → %r", text[:80], cleaned[:80])
@@ -596,7 +684,10 @@ class Jarvis:
             guiding = self.guide is not None and getattr(self.guide, "_cancel", None) is not None
             if not (self.speaker.speaking or guiding):
                 continue                # thinking: a false "Hey Jarvis" here would throw your request away
-            if barge and self.wake.process(frame):
+            # without echo cancellation his own voice is in the mic: interrupt only on a sure "Hey Jarvis"
+            strict = None if (self.echo_cancelled or not self.speaker.speaking) else \
+                max(0.8, float(getattr(self.wake, "threshold", 0.5)) + 0.3)
+            if barge and self.wake.process(frame, threshold=strict):
                 if self.speaker.speaking and self.speaker.saying("jarvis"):
                     # his own voice saying "Jarvis": not you. The HUD flashed "listening" on it.
                     bus.emit("state", state="speaking")

@@ -60,7 +60,7 @@ class FakeWake:
     def __init__(self):
         self.run, self.fired = 0, 0
 
-    def process(self, frame):
+    def process(self, frame, threshold=None):
         if int(np.abs(frame).max()) == WAKE_AMP:
             self.run += 1
             if self.run == 6:                 # ~0.5 s into the wake phrase
@@ -106,7 +106,11 @@ class FakeTurn:
 
     def probability(self, audio):
         text = FakeSTT(self.stt.words).transcribe(audio)
-        return 0.1 if text.endswith("…") else 0.95
+        if text.endswith("…"):
+            return 0.1                       # clearly mid-thought
+        if text.endswith("—"):
+            return 0.6                       # can't tell: the model isn't sure you've finished
+        return 0.95
 
 
 class FakeSpeaker:
@@ -119,6 +123,10 @@ class FakeSpeaker:
     @property
     def speaking(self):
         return time.monotonic() < self._until
+
+    @property
+    def quiet_since(self):
+        return self._until
 
     def enqueue(self, text):
         start = max(time.monotonic(), self._until)
@@ -332,7 +340,7 @@ class LateWake(FakeWake):
         super().__init__()
         self.after, self.latency = None, latency_frames
 
-    def process(self, frame):
+    def process(self, frame, threshold=None):
         if int(np.abs(frame).max()) == WAKE_AMP:
             self.run += 1
             self.after = 0
@@ -402,7 +410,7 @@ def test_when_the_phone_answered_first_the_mac_stays_quiet_and_its_hud_goes_back
         app._voice_claim = ("phone:ipad", time.monotonic() + 100)
         fire = app.wake.process
 
-        def process(frame):            # like the real detector, which tells the HUD it heard you
+        def process(frame, threshold=None):   # like the real detector, which tells the HUD it heard you
             hit = fire(frame)
             if hit:
                 bus.emit("wake", score=0.9)
@@ -425,3 +433,47 @@ def test_a_mic_tap_during_a_conversation_doesnt_start_a_second_one_afterwards(cf
                            ("silence", 8.0, "")], extra=tap)
     assert asked == ["what's the news"], (asked, app.stt.heard)
     assert app.speaker.tones.count("wake") <= 1, app.speaker.tones          # no surprise second listen
+
+
+
+def test_a_natural_pause_mid_sentence_doesnt_cut_you_off(cfg):
+    """A 0.85 s breath where Smart Turn can't tell: he waits, and hears the whole sentence."""
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 0.9, "I need you to book a table —"),
+                           ("silence", 0.85, ""), ("say", 0.9, "for four at eight"), ("silence", 4.5, "")])
+    assert asked == ["I need you to book a table — for four at eight"], (asked, app.stt.heard)
+
+
+class MishearingSTT(FakeSTT):
+    """Whisper on room echo: his words, not quite right."""
+
+    def transcribe(self, audio):
+        text = super().transcribe(audio)
+        last = self.speaker.said[-1] if self.speaker and self.speaker.said else ""
+        tail = " ".join(last.split()[-4:])
+        if tail and tail in text:
+            text = text.replace(tail, tail.replace("o", "oh").replace("a", "uh", 1))
+            self.heard[-1] = text
+        return text
+
+
+def test_a_long_misheard_echo_is_never_answered(cfg, monkeypatch):
+    """Bluetooth speakers in an echoey room: his voice lingers 0.9 s and Whisper mishears it."""
+    monkeypatch.setattr(__import__(__name__), "ECHO_TAIL", 0.9)
+    long_reply = "The quarterly numbers look strong across every division this year, sir."
+
+    def mishear(app):
+        st = MishearingSTT(app.stt.words)
+        st.speaker = app.speaker
+        app.stt = st
+        app.turn = FakeTurn(st)
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 0.9, "how are the numbers"),
+                           ("silence", 9.0, "")], replies={"how are the numbers": long_reply}, setup=mishear)
+    assert asked == ["how are the numbers"], (asked, app.stt.heard)
+
+
+def test_repeating_his_words_later_is_you_not_his_echo(cfg):
+    """He asks 'Shall I send it to Pepper?'; you answer 'send it to Pepper' a couple of seconds later."""
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 0.9, "draft the memo"),
+                           ("silence", 4.0, ""), ("say", 1.0, "send it to Pepper"), ("silence", 4.5, "")],
+                     replies={"draft the memo": "Done. Shall I send it to Pepper?"})
+    assert asked == ["draft the memo", "send it to Pepper"], (asked, app.stt.heard)
