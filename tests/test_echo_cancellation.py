@@ -179,3 +179,9 @@ def test_only_audio_heard_right_after_him_is_filtered(cfg):
     assert j._without_echo("send it to Pepper", began=now - 4.5) == ""                     # just after him
     j.speaker.speaking = True
     assert j._without_echo("send it to Pepper", began=now - 1.0) == ""                     # while he talks
+
+
+def test_speech_upsampled_for_the_player_keeps_its_pitch_and_timing():
+    out = to_play_rate(tone(440, 22050, 1.0), 22050)
+    assert abs(len(out) - 24000) <= 1 and abs(dominant(out[2000:-2000], 24000) - 440) < 3
+    assert np.argmax(np.abs(out) > 0.1) < 50                    # no added delay at the start

@@ -33,6 +33,13 @@ CHUNK_S = 0.1                        # his speech is scheduled in 100 ms buffers
 
 
 # ── pure numpy helpers (unit-tested on any platform) ─────────────────────
+def lowpass(n: int, cutoff: float, fs: float) -> np.ndarray:
+    """A windowed-sinc low-pass FIR (Blackman window, unity gain at DC)."""
+    m = np.arange(n) - (n - 1) / 2
+    h = np.sinc(2 * cutoff / fs * m) * np.blackman(n)
+    return (h / h.sum()).astype(np.float64)
+
+
 class StreamResampler:
     """Streaming resampler for the microphone: anti-alias low-pass (state kept across blocks), then
     linear interpolation at a continuous phase, so block edges never click or drift."""
@@ -42,11 +49,8 @@ class StreamResampler:
         self.ratio = self.sr_in / self.sr_out
         self.passthrough = abs(self.ratio - 1.0) < 1e-6
         if not self.passthrough:
-            from scipy.signal import firwin
-
-            cutoff = 0.45 * min(self.sr_in, self.sr_out)
-            self.taps = firwin(95, cutoff, fs=self.sr_in).astype(np.float64)
-            self.zi = np.zeros(len(self.taps) - 1)
+            self.taps = lowpass(95, 0.45 * min(self.sr_in, self.sr_out), self.sr_in)
+            self.hist = np.zeros(len(self.taps) - 1)
         self.pos = 0.0                # where the next output sample falls, in input samples of this block
         self.prev = 0.0               # the previous block's last filtered sample
 
@@ -54,9 +58,9 @@ class StreamResampler:
         x = np.asarray(x, dtype=np.float64).reshape(-1)
         if self.passthrough or not len(x):
             return x.astype(np.float32)
-        from scipy.signal import lfilter
-
-        y, self.zi = lfilter(self.taps, 1.0, x, zi=self.zi)
+        buf = np.concatenate([self.hist, x])
+        y = np.convolve(buf, self.taps, mode="valid")        # FIR with the previous block's tail
+        self.hist = buf[-(len(self.taps) - 1):]
         n = len(y)
         ext = np.concatenate([[self.prev], y])               # ext[k + 1] == y[k]
         self.prev = float(y[-1])
@@ -89,12 +93,12 @@ def to_play_rate(audio: np.ndarray, sr: int, target: int = PLAY_RATE) -> np.ndar
     audio = np.asarray(audio, dtype=np.float32).reshape(-1)
     if int(sr) == int(target) or not len(audio):
         return audio
-    from math import gcd
-
-    from scipy.signal import resample_poly
-
-    g = gcd(int(sr), int(target))
-    return resample_poly(audio, target // g, int(sr) // g).astype(np.float32)
+    r = StreamResampler(sr, target)
+    pad = np.zeros(len(r.taps) // 2 if not r.passthrough else 0, np.float32)
+    out = r.process(np.concatenate([audio, pad]))           # the filter's delay, flushed with silence
+    delay = int(round((len(r.taps) - 1) / 2 / r.ratio)) if not r.passthrough else 0
+    want = int(round(len(audio) * target / sr))
+    return out[delay:delay + want].astype(np.float32)
 
 
 # ── PyObjC buffer access ─────────────────────────────────────────────────
