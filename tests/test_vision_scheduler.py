@@ -71,3 +71,29 @@ def test_timer_fires_announcement(jarvis_home):
     assert said and "tea timer is done" in said[0][0] and said[0][1] == "high"
     assert s.list() == []
     assert _describe_duration(90) == "1 minute 30 second" and _describe_duration(3600) == "1 hour"
+
+
+def test_meeting_alerts_only_for_meetings_about_to_start(monkeypatch, jarvis_home):
+    import asyncio
+    import datetime as dt
+
+    import jarvis.mac.pim as pim
+    import jarvis.mac.system as system
+
+    now = dt.datetime.now().astimezone()
+    events = [{"title": "Board meeting", "start": (now - dt.timedelta(minutes=30)).isoformat(), "all_day": False},
+              {"title": "1:1 with Pepper", "start": (now + dt.timedelta(minutes=6)).isoformat(), "all_day": False},
+              {"title": "Odd", "start": "Thursday, 20 November 2026 at 10:00:00", "all_day": False}]
+    monkeypatch.setattr(system, "IS_MAC", True)
+    monkeypatch.setattr(pim, "events_between", lambda a, b: events)
+    said = []
+
+    async def announce(text, priority="normal"):
+        said.append(text)
+
+    async def go():
+        s = Scheduler(None, announce)
+        await s._check_calendar()
+        await s._check_calendar()
+    asyncio.run(go())
+    assert len(said) == 1 and "1:1 with Pepper" in said[0] and "6 minutes" in said[0]

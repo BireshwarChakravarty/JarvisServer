@@ -157,3 +157,25 @@ def test_showing_the_window_never_blocks_the_caller(cfg):
     assert time.monotonic() - t0 < 0.2
     release.set()
     assert shown.wait(5)
+
+
+def test_a_broken_config_file_doesnt_stop_jarvis_starting(tmp_path, monkeypatch):
+    from jarvis.config import load_config
+
+    monkeypatch.setenv("JARVIS_HOME", str(tmp_path))
+    (tmp_path / "config.yaml").write_text("owner: {name: Tony\n  title: [oops")
+    cfg = load_config()
+    assert cfg.get("voice.wake_word") == "hey_jarvis"                      # defaults
+    assert (tmp_path / "config.yaml.broken").exists()
+    (tmp_path / "config.yaml").write_text("just a sentence")
+    assert load_config().get("hud.port") == 7777
+
+
+def test_settings_are_saved_all_or_nothing(tmp_path, monkeypatch):
+    from jarvis.app.setup_api import _write_user_config
+    from jarvis.config import load_config
+
+    monkeypatch.setenv("JARVIS_HOME", str(tmp_path))
+    cfg = load_config()
+    _write_user_config(cfg, {"owner": {"name": "Tony"}})
+    assert "Tony" in (tmp_path / "config.yaml").read_text() and not (tmp_path / "config.yaml.tmp").exists()

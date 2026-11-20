@@ -55,3 +55,11 @@ def test_new_step_types(tmp_path):
     asyncio.run(run())
     assert timers == [(1500.0, "Focus sprint"), (300.0, "")] and hands == [True]
     assert [c[0] for c in calls] == ["quit_application", "quit_application", "hide_other_apps", "system_action"]
+
+
+def test_a_protocols_file_that_isnt_a_mapping_doesnt_break_startup(tmp_path):
+    from jarvis.core.protocols import Protocols
+
+    p = tmp_path / "protocols.yaml"
+    p.write_text("- just\n- a list\n")
+    assert Protocols(p).find("work mode")                  # built-ins still there

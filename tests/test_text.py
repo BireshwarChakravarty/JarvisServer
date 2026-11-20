@@ -38,3 +38,11 @@ def test_wake_phrase_stripping():
     assert strip_wake_phrase("what's the weather jarvis") == (True, "what's the weather")
     assert strip_wake_phrase("open safari") == (False, "open safari")
     assert clean_transcript(" Thank you. ") == ""
+
+
+def test_an_en_dash_is_a_pause_in_prose_and_to_in_a_range():
+    from jarvis.voice.text import clean_for_speech
+
+    assert clean_for_speech("It's raining – take an umbrella.") == "It's raining, take an umbrella."
+    assert clean_for_speech("Open 9–5 on weekdays.") == "Open 9 to 5 on weekdays."
+    assert clean_for_speech("From 2 – 3 pm.") == "From 2 to 3 pm."

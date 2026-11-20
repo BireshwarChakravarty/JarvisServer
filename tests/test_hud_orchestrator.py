@@ -86,3 +86,30 @@ def test_greeting_falls_back_offline(cfg):
 
     replies = asyncio.run(run())
     assert any(r.startswith(("Good", "Burning", "Still up", "The rest")) for r in replies)
+
+
+def test_a_failing_hud_command_keeps_the_link(cfg):
+    from types import SimpleNamespace
+
+    from jarvis.hud.server import create_app
+
+    got = []
+
+    async def hud_command(msg):
+        if msg.get("type") == "boom":
+            raise RuntimeError("kaboom")
+        got.append(msg["type"])
+    j = SimpleNamespace(hud_command=hud_command, capabilities={}, protocols=SimpleNamespace(list=lambda: []),
+                        _refresh_panels=lambda: asyncio.sleep(0), cfg=cfg, camera=None)
+    client = TestClient(create_app(j))
+    with client.websocket_connect("/ws") as ws:
+        ws.receive_json()
+        ws.send_text('{"type": "boom"}')
+        ws.send_text('["not", "a", "command"]')
+        ws.send_text('{"type": "listen"}')
+        for _ in range(50):
+            if got:
+                break
+            import time
+            time.sleep(0.02)
+    assert got == ["listen"]

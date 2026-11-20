@@ -60,12 +60,34 @@ END;
 """
 
 
+def _like(text: str) -> str:
+    """A LIKE pattern matching `text` literally ('%' and '_' in what you said aren't wildcards)."""
+    return "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
 class Memory:
     def __init__(self, path: Path | str) -> None:
         self.path = str(path)
         self._lock = threading.RLock()
+        try:
+            self._open()
+        except sqlite3.DatabaseError as exc:
+            # a damaged memory file must not stop JARVIS starting: keep it aside and begin a fresh one
+            import logging
+
+            bad = Path(self.path).with_suffix(f".damaged-{int(time.time())}.db")
+            logging.getLogger("jarvis.memory").error("memory database damaged (%s); moved to %s", exc, bad)
+            try:
+                self.db.close()
+            except Exception:
+                pass
+            Path(self.path).replace(bad)
+            self._open()
+
+    def _open(self) -> None:
         self.db = sqlite3.connect(self.path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
+        self.db.execute("PRAGMA quick_check").fetchone()
         self.db.executescript(SCHEMA)
         try:
             self.db.executescript(FTS)
@@ -97,7 +119,9 @@ class Memory:
             if fact_id is not None:
                 cur = self.db.execute("DELETE FROM facts WHERE id=?", (fact_id,))
             elif matching:
-                cur = self.db.execute("DELETE FROM facts WHERE text LIKE ?", (f"%{matching}%",))
+                if len(matching.strip()) < 3:
+                    return 0                     # "forget a" mustn't wipe half your memory
+                cur = self.db.execute("DELETE FROM facts WHERE text LIKE ? ESCAPE '\\'", (_like(matching.strip()),))
             else:
                 return 0
             self.db.commit()
@@ -121,8 +145,9 @@ class Memory:
                         rows = []
             if not rows:
                 rows = self.db.execute(
-                    "SELECT id, text, category, updated FROM facts WHERE text LIKE ? ORDER BY updated DESC LIMIT ?",
-                    (f"%{query}%", limit),
+                    "SELECT id, text, category, updated FROM facts WHERE text LIKE ? ESCAPE '\\' "
+                    "ORDER BY updated DESC LIMIT ?",
+                    (_like(query), limit),
                 ).fetchall()
             return [dict(r) for r in rows]
 

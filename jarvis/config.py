@@ -142,9 +142,22 @@ def load_config(path: str | Path | None = None, overrides: dict | None = None) -
     user_path = Path(path).expanduser() if path else home / "config.yaml"
     source = None
     if user_path.exists():
-        with open(user_path, "r", encoding="utf-8") as fh:
-            data = deep_merge(data, yaml.safe_load(fh) or {})
-        source = user_path
+        try:
+            with open(user_path, "r", encoding="utf-8") as fh:
+                mine = yaml.safe_load(fh) or {}
+            if not isinstance(mine, dict):
+                raise yaml.YAMLError("the file isn't a set of settings")
+            data = deep_merge(data, mine)
+            source = user_path
+        except (yaml.YAMLError, UnicodeDecodeError) as exc:
+            # a typo in config.yaml must not stop JARVIS starting: keep a copy, carry on with defaults
+            import logging
+            import shutil
+
+            bad = user_path.with_name("config.yaml.broken")
+            shutil.copy2(user_path, bad)
+            logging.getLogger("jarvis.config").error("couldn't read %s (%s); using defaults. A copy is in %s",
+                                                     user_path, exc, bad)
 
     # A couple of handy env overrides
     # The app bundle on macOS uses the bundle-friendly engines (see packaging/)

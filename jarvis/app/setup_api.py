@@ -33,7 +33,8 @@ def _read_user_config(cfg) -> dict:
     p = cfg.user_config_path
     if p.exists():
         try:
-            return yaml.safe_load(p.read_text()) or {}
+            got = yaml.safe_load(p.read_text()) or {}
+            return got if isinstance(got, dict) else {}
         except Exception:
             return {}
     return {}
@@ -43,7 +44,10 @@ def _write_user_config(cfg, patch: dict) -> dict:
     from jarvis.config import deep_merge
 
     data = deep_merge(_read_user_config(cfg), patch)
-    cfg.user_config_path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+    path = cfg.user_config_path
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+    tmp.replace(path)                     # all or nothing: a crash mid-write never leaves half a file
     # keep the live config in step
     for k, v in patch.items():
         if isinstance(v, dict) and isinstance(cfg.data.get(k), dict):

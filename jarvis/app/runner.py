@@ -65,10 +65,26 @@ def run_app() -> None:
     host, port = "127.0.0.1", int(cfg.get("hud.port", 7777))
 
     if _port_open(host, port):  # already running: bring that instance forward
-        try:
-            import httpx
+        import httpx
 
-            httpx.post(f"http://{host}:{port}/api/app/show", timeout=3)
+        try:
+            me = httpx.get(f"http://{host}:{port}/api/status", timeout=3).json()
+            ours = isinstance(me, dict) and "capabilities" in me and "running" in me
+        except Exception:
+            ours = False
+        if ours:
+            try:
+                httpx.post(f"http://{host}:{port}/api/app/show", timeout=3)
+            except Exception:
+                pass
+            return
+        # something else holds JARVIS's port: say so instead of vanishing without a word
+        log.error("port %s is in use by another program; JARVIS can't start", port)
+        try:
+            from jarvis.mac.system import notify
+
+            notify("JARVIS can't start", f"Another app is using port {port}. Quit it, or set hud.port in "
+                                         "JARVIS's config.yaml to a different number.")
         except Exception:
             pass
         return

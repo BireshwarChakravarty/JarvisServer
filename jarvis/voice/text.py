@@ -20,7 +20,9 @@ def clean_for_speech(text: str) -> str:
     text = _MD_LINK.sub(r"\1", text)
     text = _URL.sub("the link", text)
     text = _MD_SYMBOLS.sub("", text)
-    text = text.replace("&", " and ").replace(" -- ", ", ").replace("—", ", ").replace("–", " to ")
+    text = text.replace("&", " and ").replace(" -- ", ", ").replace("—", ", ")
+    text = re.sub(r"\s+–\s+(?!\d)", ", ", text)        # "raining – take a coat": a pause, not "to"
+    text = text.replace("–", " to ")                    # "2–3pm", "Mon–Fri": a range
     text = re.sub(r"(?<=\d)\s*°C", " degrees", text)
     text = re.sub(r"(?<=\d)\s*°F", " degrees Fahrenheit", text)
     text = re.sub(r"(?<=\d)\s*°", " degrees", text)

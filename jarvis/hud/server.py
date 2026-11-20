@@ -137,11 +137,16 @@ def create_app(jarvis=None, supervisor=None) -> FastAPI:
                     msg = json.loads(raw)
                 except json.JSONDecodeError:
                     continue
+                if not isinstance(msg, dict):
+                    continue
                 if msg.get("type") == "settings" and supervisor is not None:
                     supervisor.show_window("/setup")
                     continue
                 if J() is not None:
-                    await J().hud_command(msg)
+                    try:
+                        await J().hud_command(msg)
+                    except Exception:            # one bad command must never drop the HUD's link
+                        log.exception("HUD command %s failed", msg.get("type"))
         except WebSocketDisconnect:
             pass
         except Exception as exc:  # pragma: no cover

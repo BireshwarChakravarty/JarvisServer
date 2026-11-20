@@ -165,6 +165,9 @@ class VoiceProfile:
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps({"prints": [p.round(5).tolist() for p in self.prints], "enrolled": self.enrolled,
                                    "updated": self.updated}))
+        import os
+
+        os.chmod(tmp, 0o600)              # your voiceprint: readable only by you
         tmp.replace(self.path)
 
     def clear(self) -> None:

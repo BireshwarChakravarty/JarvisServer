@@ -69,10 +69,14 @@ class MCPServer:
         return out
 
     async def handle(self, msg: dict) -> dict | None:
+        if not isinstance(msg, dict):
+            return _rpc_error(None, -32600, "Invalid request")
         method, id_ = msg.get("method"), msg.get("id")
         if id_ is None:  # notification
             return None
         params = msg.get("params") or {}
+        if not isinstance(params, dict):
+            return _rpc_error(id_, -32602, "Invalid params")
         if method == "initialize":
             want = params.get("protocolVersion")
             version = want if want in SUPPORTED_VERSIONS else SUPPORTED_VERSIONS[0]
@@ -121,7 +125,8 @@ class MCPServer:
             reply = await self.handle(body)
             if reply is None:
                 return Response(status_code=202)
-            headers = {"Mcp-Session-Id": self.secret[:12]} if body.get("method") == "initialize" else {}
+            init = isinstance(body, dict) and body.get("method") == "initialize"
+            headers = {"Mcp-Session-Id": self.secret[:12]} if init else {}
             return JSONResponse(reply, headers=headers)
 
         @app.get("/mcp/{secret}")

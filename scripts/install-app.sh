@@ -30,6 +30,12 @@ fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+# download first: if it fails, nothing on this Mac has been touched yet
+echo "▸ Downloading JARVIS…"
+curl -fL --progress-bar "$URL" -o "$TMP/JARVIS.zip"
+ditto -x -k "$TMP/JARVIS.zip" "$TMP/x"
+[[ -d "$TMP/x/JARVIS.app" ]] || { echo "The download didn't contain JARVIS.app; nothing was changed." >&2; exit 1; }
+
 if [[ $FRESH == 1 ]]; then
   echo "▸ Fresh install: removing JARVIS and everything it stored on this Mac…"
   # turn the login item off while the app can still do it
@@ -46,18 +52,34 @@ if [[ $FRESH == 1 ]]; then
     rm -f "$HOME/Library/Preferences/$id.plist"
     tccutil reset All "$id" >/dev/null 2>&1 || true                    # every permission, asked afresh
   done
+  for id in com.jarvisassistant.jarvis com.jarvis.assistant JARVIS; do
+    rm -rf "$HOME/Library/Logs/$id"                                    # logs, if any were written there
+  done
   launchctl bootout "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.jarvis.assistant.plist" >/dev/null 2>&1 || true
   rm -f "$HOME/Library/LaunchAgents/com.jarvis.assistant.plist"
-  security delete-generic-password -s "JARVIS Anthropic API Key" -a jarvis >/dev/null 2>&1 || true
-  echo "  ✓ removed (Claude Code and your Claude sign-in are separate and were left alone)"
+  osascript -e 'tell application "System Events" to delete (every login item whose name is "JARVIS")' \
+    >/dev/null 2>&1 || true                                            # a login item left from an older build
+  while security delete-generic-password -s "JARVIS Anthropic API Key" >/dev/null 2>&1; do :; done
+  # JARVIS's conversations as Claude Code recorded them (its project folder for JARVIS's workspace).
+  # Your Claude sign-in and every other project of yours are left exactly as they are.
+  find "$HOME/.claude/projects" -maxdepth 1 -type d -name "*JARVIS-brain-workspace*" -exec rm -rf {} + 2>/dev/null || true
+  # speech models fetched through the Hugging Face cache (Apple Silicon voice and transcription)
+  for repo in Kokoro-82M-bf16 whisper-large-v3-turbo whisper-large-v3-mlx whisper-medium.en-mlx \
+              whisper-small.en-mlx whisper-base.en-mlx whisper-tiny.en-mlx; do
+    rm -rf "$HOME/.cache/huggingface/hub/models--mlx-community--$repo"
+  done
+  rm -rf "${TMPDIR:-/tmp}"/jarvis-* 2>/dev/null || true
+  lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+  [[ -x "$lsregister" ]] && "$lsregister" -u "$APP" >/dev/null 2>&1 || true
+  echo "  ✓ removed: the app, settings, memory, voiceprint, face data, models, logs, paired devices,"
+  echo "    signing identity, permissions, saved key and JARVIS's Claude Code history."
+  echo "    (Claude Code itself and your Claude sign-in are separate and were left alone. On a paired"
+  echo "    iPhone or iPad, remove the JARVIS profile in Settings › General › VPN & Device Management.)"
 fi
 
-echo "▸ Downloading JARVIS…"
-curl -fL --progress-bar "$URL" -o "$TMP/JARVIS.zip"
 echo "▸ Installing to /Applications…"
 osascript -e 'tell application "JARVIS" to quit' >/dev/null 2>&1 || true
 pkill -f "JARVIS.app/Contents/MacOS" >/dev/null 2>&1 || true
-ditto -x -k "$TMP/JARVIS.zip" "$TMP/x"
 rm -rf "$APP"
 ditto "$TMP/x/JARVIS.app" "$APP"
 xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true

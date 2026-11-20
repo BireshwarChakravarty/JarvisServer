@@ -174,6 +174,9 @@ class Protocols:
         except Exception as exc:
             log.error("couldn't parse %s: %s", self.path, exc)
             mine = {}
+        if not isinstance(mine, dict):          # a file that's a list or a bare word: keep the built-ins
+            log.error("%s should be a list of named protocols; ignoring it", self.path)
+            mine = {}
         merged = {**builtin, **{k: v for k, v in mine.items() if isinstance(v, dict)}}
         self.data = {k: v for k, v in merged.items() if not v.get("disabled")}
 

@@ -85,11 +85,23 @@ class FaceEngine:
     def _load_known(self) -> None:
         path = self._db_path()
         if path.exists():
-            data = json.loads(path.read_text())
-            self.known = {k: np.asarray(v, dtype=np.float32) for k, v in data.items()}
+            try:
+                data = json.loads(path.read_text())
+                self.known = {k: np.asarray(v, dtype=np.float32) for k, v in data.items()}
+            except (ValueError, TypeError, AttributeError) as exc:
+                # damaged: recognition still runs (and you can enrol again) instead of switching off
+                log.error("face data unreadable (%s); starting without enrolled faces", exc)
+                self.known = {}
 
     def _save_known(self) -> None:
-        self._db_path().write_text(json.dumps({k: v.tolist() for k, v in self.known.items()}))
+        """Atomically, and readable only by you: these are your face's numbers."""
+        import os
+
+        path = self._db_path()
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps({k: v.tolist() for k, v in self.known.items()}))
+        os.chmod(tmp, 0o600)
+        tmp.replace(path)
 
     # ── core ─────────────────────────────────────────────────────────────
     def _small(self, frame: np.ndarray) -> tuple[np.ndarray, float]:

@@ -133,11 +133,11 @@ class Scheduler:
         """Every minute: upcoming meetings, battery health."""
         await asyncio.sleep(20)
         while True:
-            try:
-                await self._check_calendar()
-                await self._check_battery()
-            except Exception as exc:
-                log.debug("watch tick failed: %s", exc)
+            for check in (self._check_calendar, self._check_battery):     # one failing never stops the other
+                try:
+                    await check()
+                except Exception as exc:
+                    log.debug("watch %s failed: %s", check.__name__, exc)
             await asyncio.sleep(60)
 
     async def _check_calendar(self) -> None:
@@ -154,7 +154,15 @@ class Scheduler:
             key = f"{e['title']}@{e['start']}"
             if key in self._announced_events:
                 continue
-            start = dt.datetime.fromisoformat(e["start"])
+            try:
+                start = dt.datetime.fromisoformat(e["start"])
+            except (TypeError, ValueError):
+                continue                    # a date we can't read (Calendar's text format): skip, don't fail
+            if start.tzinfo is None:
+                start = start.astimezone()
+            if (start - now).total_seconds() < -90:
+                self._announced_events.add(key)
+                continue                    # already under way (the search returns overlapping events)
             minutes = max(0, round((start - now).total_seconds() / 60))
             if minutes <= 10:
                 self._announced_events.add(key)
