@@ -161,6 +161,10 @@ class VoiceIO:
             ok = res[0] if isinstance(res, tuple) else bool(res)
             if not ok:
                 raise RuntimeError(f"voice processing refused: {res[1] if isinstance(res, tuple) else res}")
+            try:   # no automatic gain: it lifts quiet room sound (a TV, the next room) up to your level
+                inp.setVoiceProcessingAGCEnabled_(False)
+            except Exception:
+                pass
             try:   # don't turn your music right down while he listens (the default ducks it hard)
                 inp.setVoiceProcessingOtherAudioDuckingConfiguration_((False, 10))
             except Exception:

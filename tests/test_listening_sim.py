@@ -37,6 +37,10 @@ class Script:
                 self.frames += [("silence", None)] * n
             elif kind == "wake":
                 self.frames += [("wake", None)] * n
+            elif kind == "bg":                       # someone else / a TV, across the room: much quieter
+                amp = 900 + 11 * i
+                self.words[amp] = words
+                self.frames += [("say", amp)] * n
             else:
                 amp = 6000 + 150 * i
                 self.words[amp] = words
@@ -477,3 +481,24 @@ def test_repeating_his_words_later_is_you_not_his_echo(cfg):
                            ("silence", 4.0, ""), ("say", 1.0, "send it to Pepper"), ("silence", 4.5, "")],
                      replies={"draft the memo": "Done. Shall I send it to Pepper?"})
     assert asked == ["draft the memo", "send it to Pepper"], (asked, app.stt.heard)
+
+
+
+def test_a_tv_still_talking_after_you_finish_is_not_part_of_your_request(cfg):
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.0, "what's the weather"),
+                           ("bg", 3.0, "and now the sports news"), ("silence", 3.0, "")])
+    assert asked == ["what's the weather"], (asked, app.stt.heard)
+    assert not any("sports" in h for h in app.stt.heard), app.stt.heard   # never even transcribed
+
+
+def test_background_speech_after_his_answer_isnt_taken_for_you(cfg):
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.0, "dim the lights"),
+                           ("silence", 2.2, ""), ("bg", 1.5, "pass the salt please"), ("silence", 4.0, "")])
+    assert asked == ["dim the lights"], (asked, app.stt.heard)
+
+
+def test_after_a_plain_answer_he_stops_listening_sooner(cfg):
+    """A statement gets a short follow-up window; you can still answer a question at leisure."""
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.0, "dim the lights"),
+                           ("silence", 7.5, ""), ("say", 1.0, "and lock the door"), ("silence", 3.0, "")])
+    assert asked == ["dim the lights"], (asked, app.stt.heard)

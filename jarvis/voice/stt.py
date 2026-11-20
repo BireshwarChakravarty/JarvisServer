@@ -109,7 +109,9 @@ class Transcriber:
                 audio, path_or_hf_repo=impl, language=self.language,
                 initial_prompt=self.prompt, condition_on_previous_text=False, fp16=True,
             )
-            text = result.get("text", "")
+            segs = result.get("segments")
+            text = " ".join(str(sg.get("text", "")) for sg in segs if _real(sg.get("no_speech_prob"), sg.get(
+                "avg_logprob"))) if segs else result.get("text", "")
         else:
             segments, _ = impl.transcribe(
                 audio, language=self.language, beam_size=1,
@@ -117,10 +119,20 @@ class Transcriber:
                 vad_filter=len(audio) > 16000 * 20, without_timestamps=True,
                 initial_prompt=self.prompt, condition_on_previous_text=False,
             )
-            text = " ".join(s.text for s in segments)
+            text = " ".join(s.text for s in segments
+                            if _real(getattr(s, "no_speech_prob", None), getattr(s, "avg_logprob", None)))
         text = clean_transcript(text)
         log.info("STT %.0f ms: %r", (time.perf_counter() - t0) * 1000, text)
         return text
+
+
+def _real(no_speech_prob, avg_logprob) -> bool:
+    """Whisper's own test for 'there was no speech here, the words are invented' (as in its
+    reference decoder): likely silence and low confidence. Noise, a fan, a door, a distant TV."""
+    try:
+        return not (float(no_speech_prob) > 0.6 and float(avg_logprob) < -1.0)
+    except (TypeError, ValueError):
+        return True
 
 
 def clean_transcript(text: str) -> str:

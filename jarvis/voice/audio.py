@@ -289,6 +289,8 @@ async def record_utterance(
     turn_threshold: float = 0.7,
     turn_unsure: float = 0.4,
     in_speech: bool = False,
+    rel_floor: float = 0.2,
+    min_level: float = 0.0,
 ) -> Optional[np.ndarray]:
     """Collect frames until the speaker stops. Returns float32 audio or None if nobody spoke.
 
@@ -299,6 +301,14 @@ async def record_utterance(
 
     `in_speech`: the preroll ends with you mid-sentence (frames a settle() kept), so the utterance
     has already begun and only its end is still to come.
+
+    `rel_floor`: once you've spoken for half a second, sound much quieter than your own voice
+    (below this fraction of its level, about -14 dB) counts as silence: a TV across the room or
+    people talking next door must not keep the recording going after you've finished. The audio
+    returned stops shortly after your last word, so nothing said after you is transcribed.
+
+    `min_level`: sound quieter than this (frame RMS) is never you. Follow-ups pass a fraction of
+    how loud you were when you asked, so a TV can't even start a recording.
     """
     frames: list[np.ndarray] = list(preroll or [])
     ring: collections.deque = collections.deque(maxlen=6)  # ~0.5 s pre-roll
@@ -309,6 +319,8 @@ async def record_utterance(
     verdict = None            # True finished · False mid-thought · None unknown
     t0 = time.monotonic()
     frame_s = FRAME / SAMPLE_RATE
+    levels: list[float] = []  # how loud you are (speech frames of this utterance)
+    last_voice = len(frames)  # index just after your last word
     while True:
         if stop_event is not None and stop_event.is_set():
             break
@@ -319,24 +331,34 @@ async def record_utterance(
                 return None
             continue
         speech = vad.is_speech(frame)
+        if speech and min_level and frame_rms(frame) < min_level:
+            speech = False
         if not started:
             ring.append(frame)
             if speech:
                 started = True
                 frames.extend(ring)
+                levels.append(frame_rms(frame))
+                last_voice = len(frames)
                 if announce:
                     bus.emit("state", state="listening", hearing=True)
             elif time.monotonic() - t0 > start_timeout:
                 return None
             continue
         frames.append(frame)
+        if speech and rel_floor and len(levels) >= 6:
+            ref = float(np.percentile(levels, 80))
+            if frame_rms(frame) < ref * rel_floor:
+                speech = False        # far quieter than you: the room, not you
         if speech:
+            levels.append(frame_rms(frame))
+            last_voice = len(frames)
             silence, asked, verdict = 0.0, False, None
         else:
             silence += frame_s
         if use_turn and not asked and silence >= turn_quick:
             asked = True
-            so_far = np.concatenate(frames).astype(np.float32) / 32768.0
+            so_far = _yours(frames, last_voice)
             p = await asyncio.to_thread(turn.probability, so_far)
             if p is not None:
                 verdict = True if p >= turn_threshold else (False if p < turn_unsure else None)
@@ -348,8 +370,40 @@ async def record_utterance(
             break
     if not started or not frames:
         return None
-    audio = np.concatenate(frames).astype(np.float32) / 32768.0
+    if stop_event is None:
+        audio = _yours(frames[:last_voice + 4], last_voice)   # your last word, then a clean breath
+    else:
+        audio = np.concatenate(frames).astype(np.float32) / 32768.0
     return audio if len(audio) > SAMPLE_RATE * 0.3 else None
+
+
+def _yours(frames: list[np.ndarray], last_voice: int) -> np.ndarray:
+    """The utterance as float audio, with whatever the room did after your last word replaced by
+    silence of the same length (Whisper and Smart Turn expect a pause there, not a TV)."""
+    head = frames[:last_voice]
+    pad = sum(len(f) for f in frames[last_voice:])
+    parts = [np.concatenate(head).astype(np.float32) / 32768.0] if head else []
+    if pad:
+        parts.append(np.zeros(pad, np.float32))
+    return np.concatenate(parts) if parts else np.zeros(0, np.float32)
+
+
+def frame_rms(frame: np.ndarray) -> float:
+    f = frame.astype(np.float32)
+    if frame.dtype == np.int16:
+        f /= 32768.0
+    return float(np.sqrt(np.mean(f * f))) if len(f) else 0.0
+
+
+def level(audio: np.ndarray | None) -> float:
+    """How loud the voice in an utterance is: the 80th percentile of its 80 ms frames' RMS."""
+    if audio is None or not len(audio):
+        return 0.0
+    n = len(audio) // FRAME
+    if n == 0:
+        return frame_rms(np.asarray(audio, np.float32))
+    a = np.asarray(audio[:n * FRAME], np.float32).reshape(n, FRAME)
+    return float(np.percentile(np.sqrt(np.mean(a * a, axis=1)), 80))
 
 
 # ═══════════════════════════════ push to talk ════════════════════════════════

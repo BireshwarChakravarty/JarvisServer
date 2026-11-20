@@ -523,8 +523,11 @@ class Jarvis:
         from jarvis.voice.audio import record_utterance
         from jarvis.voice.stt import strip_wake_phrase
 
+        from jarvis.voice.audio import level
+
         follow_up = False
         pending_text = first_text
+        your_level = 0.0                           # how loud you were when you asked: follow-ups must match it
         ack_if_pause, self._ack_if_pause = getattr(self, "_ack_if_pause", False), False
         first_window = time.monotonic() + 6.0      # how long the first listen waits for you in all
         window = first_window                      # the current listen's deadline (first, then each follow-up)
@@ -551,6 +554,8 @@ class Jarvis:
                         bus.emit("state", state="transcribing")
                         text = await asyncio.to_thread(self.stt.transcribe, head) if self.stt else ""
                         _, pending_text = strip_wake_phrase(self._without_echo(text, _began(head)))
+                        if pending_text:
+                            your_level = level(head)
                         if not pending_text:
                             await self._acknowledge(q)
                         continue
@@ -558,6 +563,9 @@ class Jarvis:
                 ep = self._endpointing()
                 if stop_evt:
                     ep["end_silence"] = 30.0       # push-to-talk: you decide when you've finished
+                if follow_up and your_level:
+                    # no wake word now: only sound about as loud as you were counts as you
+                    ep["min_level"] = your_level * float(self.cfg.get("voice.follow_up_level", 0.3))
                 audio = await record_utterance(
                     q, self.vad,
                     start_timeout=max(0.5, window - time.monotonic()),
@@ -568,9 +576,19 @@ class Jarvis:
                 if audio is None:
                     bus.emit("state", state="idle")
                     return
+                lvl = level(audio)
+                if follow_up and your_level and lvl < your_level * float(self.cfg.get("voice.follow_up_level", 0.3)):
+                    # no wake word, and much quieter than you were: a TV or someone across the room
+                    log.info("ignored background speech in the follow-up (%.3f vs your %.3f)", lvl, your_level)
+                    if time.monotonic() < window - 0.5:
+                        continue
+                    bus.emit("state", state="idle")
+                    return
                 bus.emit("state", state="transcribing")
                 text = await asyncio.to_thread(self.stt.transcribe, audio) if self.stt else ""
                 _, text = strip_wake_phrase(self._without_echo(text, _began(audio)))
+                if text and not follow_up:
+                    your_level = lvl
             if not text:
                 if time.monotonic() < window - 0.5:
                     continue                # a cough, a click or his own echo, not your words: keep listening
@@ -589,7 +607,20 @@ class Jarvis:
                 window = time.monotonic() + 6.0
                 continue  # user interrupted with the wake word: listen right away
             await self._settle_keep(q)  # his voice lingers in the room for a moment: let it fade first
-            window = time.monotonic() + float(self.cfg.get("voice.follow_up_seconds", 7))
+            window = time.monotonic() + self._follow_up_for(turn)
+
+    def _follow_up_for(self, turn: asyncio.Task) -> float:
+        """How long to keep listening without the wake word: the full window when he asked you
+        something, a short one after a plain answer, so the room isn't taken for you."""
+        reply = ""
+        try:
+            if turn.done() and not turn.cancelled() and turn.exception() is None:
+                reply = str(turn.result() or "")
+        except Exception:
+            reply = ""
+        if reply.rstrip().rstrip("\"')").endswith("?"):
+            return float(self.cfg.get("voice.follow_up_seconds", 7))
+        return float(self.cfg.get("voice.follow_up_after_answer", 4))
 
     def _take_preroll(self):
         """Audio heard before this listen began (once; then it's spent): what was said around the

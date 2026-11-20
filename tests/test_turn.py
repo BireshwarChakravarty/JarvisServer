@@ -65,11 +65,17 @@ class Turn:
 def run(pattern, turn_model=None, **kw):
     async def go():
         q = asyncio.Queue()
-        for f in frames(pattern):
+        fs = frames(pattern)
+        for f in fs:
             q.put_nowait(f)
         audio = await record_utterance(q, EnergyVAD(), start_timeout=5, end_silence=0.8, turn=turn_model, **kw)
         return audio, q.qsize()
     return asyncio.run(go())
+
+
+def listened(pattern, left):
+    """Seconds of audio the recorder consumed before it decided you'd finished."""
+    return sum(secs for secs, _ in pattern) - left * FRAME / SAMPLE_RATE
 
 
 def test_finished_thought_ends_quickly():
@@ -89,22 +95,23 @@ def test_mid_thought_pause_is_waited_out_and_the_rest_is_kept():
 
 def test_mid_thought_gives_up_after_the_patience_window():
     t = Turn([0.1])
-    audio, left = run([(1.0, True), (4.0, False)], t, turn_patience=1.5)
-    secs = len(audio) / SAMPLE_RATE
-    assert 1.0 + 1.4 <= secs <= 1.0 + 2.0 and left > 0
+    pattern = [(1.0, True), (4.0, False)]
+    audio, left = run(pattern, t, turn_patience=1.5)
+    assert 1.0 + 1.4 <= listened(pattern, left) <= 1.0 + 2.0 and left > 0
+    assert len(audio) / SAMPLE_RATE < 1.0 + 0.6                 # what it hands over stops after your words
 
 
 def test_an_unsure_verdict_waits_the_normal_pause():
     t = Turn([0.55])                       # neither clearly finished nor clearly mid-thought
-    audio, _ = run([(1.0, True), (3.0, False)], t)
-    secs = len(audio) / SAMPLE_RATE
-    assert 1.0 + 0.7 <= secs <= 1.0 + 1.3
+    pattern = [(1.0, True), (3.0, False)]
+    audio, left = run(pattern, t)
+    assert 1.0 + 0.7 <= listened(pattern, left) <= 1.0 + 1.3
 
 
 def test_without_a_model_the_silence_timeout_applies():
-    audio, _ = run([(1.0, True), (3.0, False)], None)
-    secs = len(audio) / SAMPLE_RATE
-    assert 1.0 + 0.7 <= secs <= 1.0 + 1.3
+    pattern = [(1.0, True), (3.0, False)]
+    audio, left = run(pattern, None)
+    assert 1.0 + 0.7 <= listened(pattern, left) <= 1.0 + 1.3
 
 
 def test_push_to_talk_ignores_the_model():
