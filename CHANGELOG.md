@@ -3,6 +3,15 @@
 All builds are published to the `jarvis-latest` release after passing unit tests, the in-app self-test
 on Apple Silicon, a real launch, packaging, and a clean install on a fresh Mac.
 
+## WhatsApp
+- "Any WhatsApp messages?", "What did Pepper say?", "Tell Happy I'll be ten minutes late." JARVIS reads the
+  WhatsApp app for Mac's local chat database (a private snapshot, read-only; columns checked first, so a
+  WhatsApp update that changes them is reported rather than misread) and sends through the WhatsApp app
+  (`whatsapp://send`, Return), only after you confirm, then checks the database that it went.
+- People first, then groups; status updates and hidden chats left out; group senders named. The morning
+  greeting can lead with who's waiting on you.
+- Needs Full Disk Access (new row in Settings › Permissions). No unofficial client or linked device.
+
 ## Email from Mailspring
 - Email now comes from **[Mailspring](https://www.getmailspring.com)** instead of Thunderbird. He reads
   Mailspring's local database (`~/Library/Application Support/Mailspring/edgehill.db`) read-only, laid out as

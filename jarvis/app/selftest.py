@@ -561,6 +561,30 @@ def run() -> int:
                 f"left out) · read() ok · this Mac: {'mail found' if real else 'no Mailspring mail yet'} · "
                 f"Mailspring {'installed' if ms.installed() else 'not installed'}")
 
+    @check("WhatsApp: reads the Mac app's chats (sample) and reports access on this Mac", timeout=60)
+    def _():
+        import os
+        import tempfile
+        from pathlib import Path as P
+
+        from jarvis.mac import whatsapp as wa
+        with tempfile.TemporaryDirectory() as tmp:
+            db = wa.make_sample(P(tmp) / "wa")
+            old = os.environ.get("JARVIS_WHATSAPP_DIR")
+            os.environ["JARVIS_WHATSAPP_DIR"] = str(db.parent)
+            try:
+                got = wa.unread()
+                chat = wa.recent("Pepper")
+            finally:
+                if old is None:
+                    os.environ.pop("JARVIS_WHATSAPP_DIR", None)
+                else:
+                    os.environ["JARVIS_WHATSAPP_DIR"] = old
+            if [c["chat"] for c in got][:1] != ["Pepper Potts"] or not chat or len(chat["messages"]) < 3:
+                raise RuntimeError(f"got {got} / {chat}")
+        return (f"sample: {len(got)} unread chats, people first · this Mac: chats {wa.can_read()} · "
+                f"WhatsApp {'installed' if wa.installed() else 'not installed'}")
+
     @check("setup + HUD server")
     def _():
         from fastapi.testclient import TestClient

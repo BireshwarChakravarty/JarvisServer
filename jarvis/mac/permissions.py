@@ -22,6 +22,7 @@ SETTINGS_PANES = {
     "automation": "Privacy_Automation",
     "accessibility": "Privacy_Accessibility",
     "screen": "Privacy_ScreenCapture",
+    "full_disk": "Privacy_AllFiles",
 }
 
 CATALOG = [
@@ -33,6 +34,8 @@ CATALOG = [
     {"key": "automation", "title": "App control", "why": "Control Music, Messages and Finder, and read your email", "required": False},
     {"key": "screen", "title": "Screen recording", "why": "“What's on my screen?”", "required": False},
     {"key": "accessibility", "title": "Accessibility", "why": "Hold ⌥ to talk, type text for you", "required": False},
+    {"key": "full_disk", "title": "Full Disk Access", "why": "Read your WhatsApp chats (only if you use WhatsApp)",
+     "required": False},
 ]
 
 IS_MAC = sys.platform == "darwin"
@@ -158,6 +161,23 @@ def _automation_probe(prompt: bool) -> str:
     return status
 
 
+def _full_disk() -> str:
+    """Full Disk Access has no API: try reading a file only it unlocks (the system's privacy database)."""
+    from pathlib import Path
+
+    for p in (Path("~/Library/Application Support/com.apple.TCC/TCC.db").expanduser(),
+              Path("/Library/Application Support/com.apple.TCC/TCC.db")):
+        try:
+            with open(p, "rb") as fh:
+                fh.read(16)
+            return "granted"
+        except PermissionError:
+            return "denied"
+        except OSError:
+            continue
+    return "unknown"
+
+
 # ── public API ────────────────────────────────────────────────────────────
 def status(key: str) -> str:
     if not IS_MAC:
@@ -172,6 +192,7 @@ def status(key: str) -> str:
             "accessibility": _accessibility,
             "screen": _screen,
             "automation": lambda: _automation_probe(False),
+            "full_disk": _full_disk,
         }[key]()
     except Exception as exc:
         log.warning("permission status %s failed: %s", key, exc)
@@ -207,6 +228,8 @@ def request(key: str) -> str:
         elif key == "automation":
             if _automation_probe(True) == "denied":
                 open_settings("automation")
+        elif key == "full_disk":
+            open_settings("full_disk")      # macOS has no prompt for this one: you switch it on in Settings
     except Exception as exc:
         log.warning("permission request %s failed: %s", key, exc)
     return status(key)

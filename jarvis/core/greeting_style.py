@@ -22,6 +22,8 @@ def trim(data: dict) -> dict:
         d.pop("battery", None)
     if not d.get("unread_mail"):
         d.pop("unread_mail", None)
+    if not d.get("whatsapp_waiting"):
+        d.pop("whatsapp_waiting", None)
     return d
 
 
@@ -62,6 +64,8 @@ ANGLES = {
     "headline": "Lead with one headline worth their attention.",
     "minimal": "Be brief: a crisp hello and one useful offer. No briefing unless something is urgent.",
     "mail": "Lead with the email that most needs them (who and what, in a few words), then offer to read it.",
+    "whatsapp": "Lead with who's waiting on them on WhatsApp (names and what they asked, briefly), then offer to "
+                "read or reply.",
 }
 
 
@@ -87,6 +91,8 @@ def pick_angle(data: dict, delta: list[str], away_for: float | None, recent: lis
         weights["headline"] = 1.2
     if data.get("email_needing_attention"):
         weights["mail"] = 2.5
+    if data.get("whatsapp_waiting"):
+        weights["whatsapp"] = 2.2
     if now.weekday() in (0, 4, 5, 6) or now.hour >= 22 or now.hour < 5:
         weights["day"] = 1.6
     for r in recent[-2:]:                      # not the same angle as the last two greetings

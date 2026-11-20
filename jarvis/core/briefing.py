@@ -74,6 +74,19 @@ def _mail_attention() -> list[dict] | None:
     return [{"from": m["from"], "subject": m["subject"]} for m in top] or None
 
 
+def _whatsapp_waiting() -> list[dict] | None:
+    """People (not groups) with unread WhatsApp messages, from the app's local copy."""
+    from jarvis.mac import whatsapp
+
+    try:
+        got = whatsapp.unread(6)
+    except whatsapp.WhatsAppError:
+        return None
+    people = [{"from": c["chat"], "said": (c["messages"][-1]["text"] if c["messages"] else "")[:120]}
+              for c in got if not c["group"] and not c.get("archived")]
+    return people[:3] or None
+
+
 def _news(cfg) -> list[str]:
     from jarvis.integrations.news import headlines
 
@@ -89,6 +102,7 @@ async def gather(cfg, memory=None, kind: str = "login") -> dict:
     ]
     if kind == "login" and cfg.get("greeting.email", True):
         jobs.append(_safe("email_needing_attention", _mail_attention, timeout=20))
+        jobs.append(_safe("whatsapp_waiting", _whatsapp_waiting, timeout=20))
     if pod in ("morning", "afternoon", "evening"):
         jobs += [_safe("calendar_today", _events_today, timeout=10), _safe("reminders_due", _reminders_due, timeout=10)]
     if pod in ("evening", "late_night"):

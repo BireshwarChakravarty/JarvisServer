@@ -494,6 +494,47 @@ def open_email(ctx, id: str):
     return mailspring.open_message(id)
 
 
+# ═══════════════════════════════ WhatsApp ════════════════════════════════════
+@tool("Check WhatsApp: chats with unread messages (people first, then groups), with what was said. Summarise "
+      "who's waiting on the user and what they want, briefly; mention groups only if something needs them. "
+      "Never read phone numbers aloud.",
+      {"chats": _p("How many chats at most (default 6)", I)}, category="communication")
+def check_whatsapp(ctx, chats: int = 6):
+    from jarvis.mac import whatsapp
+
+    try:
+        got = whatsapp.unread(max(1, min(int(chats or 6), 15)))
+    except whatsapp.WhatsAppError as exc:
+        return str(exc)
+    return got or "No unread WhatsApp messages."
+
+
+@tool("Read the latest messages in one WhatsApp chat (a person or a group, by name), both sides, e.g. "
+      "'what did Pepper say?' or 'catch me up on the family group'.",
+      {"chat": _p("Person or group name"), "limit": _p("How many messages (default 12)", I)}, ["chat"],
+      category="communication")
+def read_whatsapp(ctx, chat: str, limit: int = 12):
+    from jarvis.mac import whatsapp
+
+    try:
+        got = whatsapp.recent(chat, max(1, min(int(limit or 12), 40)))
+    except whatsapp.WhatsAppError as exc:
+        return str(exc)
+    return got or f"I couldn't find a WhatsApp chat with {chat}."
+
+
+@tool("Send a WhatsApp message to one person through the WhatsApp app (by name from their chats or contacts, "
+      "or a number with country code). Groups aren't supported. Read the message back before sending.",
+      {"recipient": _p("Person's name or phone number with country code"), "text": _p("Message text")},
+      ["recipient", "text"], confirm=True,
+      confirm_message=lambda a: f"send {a.get('recipient')} this on WhatsApp: {a.get('text')}",
+      category="communication")
+def send_whatsapp(ctx, recipient: str, text: str):
+    from jarvis.mac import whatsapp
+
+    return whatsapp.send(recipient, text)
+
+
 # ═══════════════════════════════ on-screen guidance ══════════════════════════
 @tool("Find buttons, menus, fields, tabs or text on screen in the frontmost app (then anywhere on screen), "
       "to point at them. Returns the best matches with an id, label, kind and where they are (menu bar, "
