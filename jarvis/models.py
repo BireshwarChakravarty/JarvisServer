@@ -57,10 +57,14 @@ def groups(stt_model: str = "small.en") -> list[Group]:
             Asset("kokoro-v1.0.onnx", [f"{KOKORO}/kokoro-v1.0.onnx"], 325_532_387),
             Asset("voices-v1.0.bin", [f"{KOKORO}/voices-v1.0.bin"], 28_214_398),
         ]),
-        Group("ears", "Speech recognition", "Understands what you say (Whisper) and when you've finished (Smart Turn)",
+        Group("ears", "Speech recognition",
+              "Understands what you say (Whisper), when you've finished (Smart Turn) and that it's you (Voice ID)",
               whisper_assets(stt_model) + [
                   Asset("turn/smart-turn-v3.2-cpu.onnx",
-                        [f"{HF}/pipecat-ai/smart-turn-v3/resolve/main/smart-turn-v3.2-cpu.onnx"], 8_679_182)]),
+                        [f"{HF}/pipecat-ai/smart-turn-v3/resolve/main/smart-turn-v3.2-cpu.onnx"], 8_679_182),
+                  Asset("speaker/campplus_en_voxceleb.onnx",       # Voice ID (3D-Speaker CAM++, Apache-2.0)
+                        [f"{HF}/csukuangfj/speaker-embedding-models/resolve/main/"
+                         "3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx"], 29_596_979)]),
         Group("eyes", "Vision", "Recognises your face and gestures", [
             Asset("face_detection_yunet_2023mar.onnx", [
                 f"{HF}/opencv/face_detection_yunet/resolve/main/face_detection_yunet_2023mar.onnx",

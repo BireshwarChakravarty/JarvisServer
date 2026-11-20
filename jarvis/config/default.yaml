@@ -45,6 +45,8 @@ voice:
   follow_up_level: 0.3     # a follow-up must be at least this loud relative to you (else it's background)
   barge_in: true           # say "Jarvis" / raise your palm while he talks to interrupt
   echo_cancellation: true  # Apple voice processing (as FaceTime uses): the mic never hears his own voice
+  voice_id: true           # once you've said "learn my voice", he answers only you
+  voice_id_threshold: 0.45 # how sure he must be it's you (higher: stricter)
   push_to_talk_key: "alt_r"  # hold to talk (needs Accessibility permission); null to disable
   max_utterance_seconds: 30
   smart_turn: true         # judge when you've finished speaking from your voice, not a fixed silence

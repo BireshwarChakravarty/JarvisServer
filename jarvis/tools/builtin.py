@@ -607,6 +607,25 @@ async def air_mouse(ctx, on: bool):
     return orch.set_air_mouse(bool(on))
 
 
+@tool("Voice ID (like Siri's voice setup): 'learn' asks the user to say five phrases and learns their voice, so "
+      "JARVIS then answers only them (not guests or the TV); 'forget' deletes it; 'status' says whether it's set "
+      "up. Use when they say 'learn my voice', 'only listen to me', 'forget my voice'.",
+      {"action": _p("learn, forget or status", enum=["learn", "forget", "status"])}, ["action"], category="self")
+async def voice_id(ctx, action: str):
+    orch = ctx.orchestrator
+    if orch is None or getattr(orch, "voice_id", None) is None:
+        return "Voice ID isn't running."
+    if action == "learn":
+        return await orch.learn_voice()
+    if action == "forget":
+        return orch.forget_voice()
+    v = orch.voice_id
+    if not v.model.available:
+        return "Voice ID's model is still downloading."
+    return ("I know your voice and answer only you." if v.profile.ready else
+            "I haven't learned your voice yet. Say “learn my voice” to set it up.")
+
+
 @tool("Update JARVIS to the latest version: downloads the newest verified build, installs it (keeping "
       "every permission) and restarts. JARVIS goes quiet for a minute or two.", category="self", confirm=True,
       confirm_message="update myself and restart")

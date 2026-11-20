@@ -97,6 +97,7 @@ def install(actions: dict) -> None:
             ("Unmute Microphone", "unmute", ""),
             ("Hand Control On / Off", "hands", ""),
             ("Pair iPhone or iPad…", "pair", ""),
+            ("Learn My Voice…", "learn_voice", ""),
             (None, None, None),
             ("Settings…", "settings", ","),
             ("Update JARVIS…", "update", ""),

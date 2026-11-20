@@ -3,6 +3,17 @@
 All builds are published to the `jarvis-latest` release after passing unit tests, the in-app self-test
 on Apple Silicon, a real launch, packaging, and a clean install on a fresh Mac.
 
+## Voice ID: he learns your voice and answers only you
+- "Learn my voice" (or menu bar › Learn My Voice…): five spoken phrases become your voiceprint (CAM++
+  speaker model from 3D-Speaker, Apache-2.0; Kaldi filterbank front end in numpy, matched to
+  kaldi-native-fbank). A phrase that doesn't match the others is asked again.
+- Every request is checked as it's transcribed (in parallel, no added delay). After "Hey Jarvis" a clearly
+  different voice is ignored; in follow-ups (no wake word) a doubtful one is too. Too short to judge
+  ("yes") always passes. Confidently-you requests are added to the profile now and then, so it keeps up
+  with your voice. "Forget my voice" deletes it. The phone isn't checked (it's your paired device).
+- Measured on LibriSpeech test-clean, 40 speakers: at the default 0.45, 1.5% of your requests missed and
+  0.16% of other people accepted.
+
 ## WhatsApp
 - "Any WhatsApp messages?", "What did Pepper say?", "Tell Happy I'll be ten minutes late." JARVIS reads the
   WhatsApp app for Mac's local chat database (a private snapshot, read-only; columns checked first, so a

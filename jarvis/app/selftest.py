@@ -505,6 +505,31 @@ def run() -> int:
         ok, text, nwav, nprof = asyncio.run(go())
         return f"wss with JARVIS's own certificate · 4 acks · phone audio heard as {text!r} · {nwav} B reply · profile {nprof} B"
 
+    @check("ears: Voice ID knows one voice from others (Kokoro voices as stand-ins)", required=False, timeout=240)
+    def _():
+        import tempfile
+        from pathlib import Path as P
+
+        from jarvis.voice.speaker import VoiceID
+        from jarvis.voice.tts import KokoroONNX
+
+        lines = ["Hey Jarvis, what's the weather like today?", "Hey Jarvis, what's on my calendar this afternoon?",
+                 "Hey Jarvis, play some music in the living room.", "Hey Jarvis, remind me to call my mother.",
+                 "Hey Jarvis, how long will it take me to get to work?"]
+
+        def say(voice, text):
+            k = KokoroONNX(voice, 1.0, state["cfg"].models_dir)
+            return resample(k.synth(text), k.sample_rate)
+        with tempfile.TemporaryDirectory() as tmp:
+            vid = VoiceID(state["cfg"].models_dir, P(tmp) / "vp.json")
+            if not vid.load():
+                raise RuntimeError("Voice ID model didn't load")
+            vid.profile.enrol([vid.model.embed(say("bm_george", t)) for t in lines[:3]])
+            res = {v: vid.check(say(v, lines[4]), learn=False) for v in ("bm_george", "bf_emma", "am_adam")}
+        if res["bm_george"][0] != "you" or res["bf_emma"][0] == "you" or res["am_adam"][0] == "you":
+            raise RuntimeError(f"verdicts {res}")
+        return " · ".join(f"{v}: {k} {s:.2f}" for v, (k, s) in res.items())
+
     @check("ears: echo cancellation buffers (Apple voice processing)", timeout=60)
     def _():
         import numpy as np

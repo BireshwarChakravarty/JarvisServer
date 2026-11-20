@@ -145,6 +145,11 @@ def match(text: str, now: dt.datetime | None = None, rng: random.Random | None =
     if re.fullmatch(r"(turn |switch )?(off )?(the )?air ?mouse off|(turn|switch) off (the )?air ?mouse|"
                     r"stop (the )?air ?mouse", t):
         return Quick("air_mouse", {"on": False}, "", note="stopped the air mouse")
+    if re.fullmatch(r"(learn|train on|recogni[sz]e|remember) my voice|(only )?listen (only )?to me( only)?|"
+                    r"set up voice (id|recognition)", t):
+        return Quick("voice_id", {"action": "learn"}, "", note="started learning the user's voice")
+    if re.fullmatch(r"forget my voice|stop recogni[sz]ing my voice|turn off voice (id|recognition)", t):
+        return Quick("voice_id", {"action": "forget"}, "", note="forgot the user's voice")
     if re.fullmatch(r"lock( the| my)?( mac| screen| computer)?( now)?", t):
         return Quick("system_action", {"action": "lock_screen"}, _pick(["Locking it now.", "Locking."], rng),
                      note="locked the Mac")

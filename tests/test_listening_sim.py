@@ -52,9 +52,19 @@ class FakeMic:
 
     def __init__(self):
         self.q = asyncio.Queue(maxsize=400)
+        self.extra = []                          # other listeners (voice setup, confirmations)
 
     def subscribe(self, maxsize=400):
-        return self.q
+        if not hasattr(self, "_first"):
+            self._first = True
+            return self.q
+        q = asyncio.Queue(maxsize=maxsize)
+        self.extra.append(q)
+        return q
+
+    def unsubscribe(self, q):
+        if q in self.extra:
+            self.extra.remove(q)
 
 
 class FakeWake:
@@ -178,9 +188,10 @@ async def run_script(app, script, echo=True, extra=None):
             f = tone(ECHO_AMP)                 # his voice, plus the room's tail after he stops
         else:
             f = np.zeros(FRAME, np.int16)
-        if mic.q.full():
-            mic.q.get_nowait()
-        mic.q.put_nowait(f)
+        for qq in [mic.q] + list(getattr(mic, "extra", [])):
+            if qq.full():
+                qq.get_nowait()
+            qq.put_nowait(f)
         await asyncio.sleep(FRAME_S)
 
 
@@ -502,3 +513,75 @@ def test_after_a_plain_answer_he_stops_listening_sooner(cfg):
     app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.0, "dim the lights"),
                            ("silence", 7.5, ""), ("say", 1.0, "and lock the door"), ("silence", 3.0, "")])
     assert asked == ["dim the lights"], (asked, app.stt.heard)
+
+
+
+# ── Voice ID: only you ───────────────────────────────────────────────────
+class FakeVoiceID:
+    """Judges by what was said: a 'guest:' line is someone else's voice."""
+    active = True
+
+    def __init__(self, stt):
+        self.stt = stt
+
+    def check(self, audio):
+        text = FakeSTT(self.stt.words).transcribe(audio)
+        return ("not_you", 0.08) if "guest:" in text else ("you", 0.81)
+
+
+def voice_id(app):
+    app.voice_id = FakeVoiceID(app.stt)
+
+
+def test_someone_elses_hey_jarvis_gets_no_answer(cfg):
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.2, "guest: unlock the front door"),
+                           ("silence", 4.0, "")], setup=voice_id)
+    assert asked == [] and app.speaker.said == [], (asked, app.speaker.said)
+
+
+def test_a_guest_in_your_follow_up_is_ignored_and_you_still_get_through(cfg):
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.0, "what's on tonight"),
+                           ("silence", 2.2, ""), ("say", 1.0, "guest: order a pizza"), ("silence", 0.6, ""),
+                           ("say", 1.0, "and tomorrow"), ("silence", 4.0, "")], setup=voice_id)
+    assert asked == ["what's on tonight", "and tomorrow"], (asked, app.stt.heard)
+
+
+def test_learn_my_voice_by_talking_to_him(cfg, tmp_path):
+    """'Learn my voice': five prompts, you say each phrase, five voiceprints are saved."""
+    import numpy as np
+
+    from jarvis.voice.speaker import VoiceID
+
+    YOU = 7311
+    answered = set()
+    state = {}
+
+    def setup(app):
+        vid = VoiceID(tmp_path, tmp_path / "vp.json")
+        me = np.ones(512, np.float32) / np.sqrt(512)
+
+        class Model:
+            available = True
+
+            def embed(self, audio):
+                return me if audio is not None and len(audio) > 16000 else None
+        vid.model = Model()
+        app.voice_id = vid
+        app.stt.words[YOU] = "the phrase"
+
+    async def respond_to_prompts(app, now):
+        sp = app.speaker
+        last = sp.said[-1] if sp.said else ""
+        n = len(sp.said)
+        if (last.startswith("Please say") or last.startswith("Now:")) and not sp.speaking and n not in answered:
+            answered.add(n)
+            state["until"] = now + 0.6 + 1.6           # a short pause, then 1.6 s of you
+            state["from"] = now + 0.6
+        if state.get("from", 1e18) <= now < state.get("until", 0):
+            return tone(YOU)
+        return None
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.0, "learn my voice"),
+                           ("silence", 30.0, "")], extra=respond_to_prompts, setup=setup)
+    assert len(answered) == 5, app.speaker.said
+    assert app.voice_id.profile.ready and app.voice_id.profile.enrolled == 5
+    assert any("I know your voice now" in s for s in app.speaker.said), app.speaker.said

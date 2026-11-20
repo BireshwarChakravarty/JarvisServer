@@ -20,6 +20,8 @@ import os
 import re
 import time
 from pathlib import Path
+
+import numpy as np
 from typing import Any
 
 from jarvis.aio import spawn
@@ -103,6 +105,7 @@ class Jarvis:
         self.mcp = None
         self.ptt = None
         self.voiceio = None
+        self.voice_id = None
         # state
         self.standby = False          # mic muted by voice command
         self.capabilities: dict[str, Any] = {}
@@ -200,6 +203,15 @@ class Jarvis:
             self.turn = TurnDetector(cfg.models_dir)
             turn_ok = await asyncio.to_thread(self.turn.load)
             self.boot("Turn detection: Smart Turn" if turn_ok else "Turn detection: silence timeout", True)
+        if cfg.get("voice.voice_id", True):
+            from jarvis.voice.speaker import VoiceID
+
+            self.voice_id = VoiceID(cfg.models_dir, cfg.home / "voiceprint.json",
+                                    threshold=float(cfg.get("voice.voice_id_threshold", 0.45)))
+            if await asyncio.to_thread(self.voice_id.load):
+                self.boot("Voice ID: answers only you" if self.voice_id.profile.ready else
+                          "Voice ID: say “learn my voice” so he answers only you", self.voice_id.profile.ready or None)
+            self.capabilities["voice_id"] = self.voice_id.active
         try:
             self.mic = Microphone(cfg.get("voice.input_device"), voiceio=self.voiceio)
             self.mic.start(self.loop)
@@ -552,7 +564,10 @@ class Jarvis:
                         await self._acknowledge(q)
                     else:
                         bus.emit("state", state="transcribing")
-                        text = await asyncio.to_thread(self.stt.transcribe, head) if self.stt else ""
+                        text, verdict = await self._hear(head)
+                        if self._not_you(verdict, follow_up=False):
+                            bus.emit("state", state="idle")
+                            return              # someone else said "Hey Jarvis": stay quiet
                         _, pending_text = strip_wake_phrase(self._without_echo(text, _began(head)))
                         if pending_text:
                             your_level = level(head)
@@ -585,7 +600,12 @@ class Jarvis:
                     bus.emit("state", state="idle")
                     return
                 bus.emit("state", state="transcribing")
-                text = await asyncio.to_thread(self.stt.transcribe, audio) if self.stt else ""
+                text, verdict = await self._hear(audio)
+                if self._not_you(verdict, follow_up):
+                    if follow_up and time.monotonic() < window - 0.5:
+                        continue            # someone else in the room: keep listening for you
+                    bus.emit("state", state="idle")
+                    return
                 _, text = strip_wake_phrase(self._without_echo(text, _began(audio)))
                 if text and not follow_up:
                     your_level = lvl
@@ -608,6 +628,81 @@ class Jarvis:
                 continue  # user interrupted with the wake word: listen right away
             await self._settle_keep(q)  # his voice lingers in the room for a moment: let it fade first
             window = time.monotonic() + self._follow_up_for(turn)
+
+    async def _hear(self, audio) -> tuple[str, tuple[str, float]]:
+        """Transcribe, and (at the same time) check it's your voice."""
+        vid = self.voice_id
+        jobs = [asyncio.to_thread(self.stt.transcribe, audio) if self.stt else asyncio.sleep(0, "")]
+        if vid is not None and vid.active:
+            jobs.append(asyncio.to_thread(vid.check, audio))
+        got = await asyncio.gather(*jobs, return_exceptions=True)
+        text = got[0] if isinstance(got[0], str) else ""
+        verdict = got[1] if len(got) > 1 and isinstance(got[1], tuple) else ("off", 0.0)
+        return text, verdict
+
+    def _not_you(self, verdict: tuple[str, float], follow_up: bool) -> bool:
+        """Someone else's voice. After "Hey Jarvis" only a clear 'not you' is refused; in a follow-up
+        (no wake word) a doubtful voice is refused too. Too short to judge ("yes") always passes."""
+        kind, score = verdict
+        refuse = kind == "not_you" or (follow_up and kind == "unsure")
+        if refuse:
+            log.info("voice ID: not you (%s, %.2f): ignored", kind, score)
+            bus.emit("voice_id", verdict=kind, score=round(score, 2))
+        return refuse
+
+    async def learn_voice(self) -> str:
+        """Siri-style voice setup: five phrases, each a voiceprint; one that doesn't match the others
+        (someone else spoke, a door slammed) is asked again."""
+        from jarvis.voice.audio import record_utterance, settle
+
+        vid = self.voice_id
+        if vid is None or not vid.model.available:
+            return "Voice ID isn't ready yet: its model is still downloading. Try again in a minute."
+        if self.mic is None or self.mic.muted or self.speaker is None:
+            return "I need the microphone on to learn your voice."
+        t = self.cfg.get("owner.title", "sir")
+        phrases = ["Hey Jarvis, what's the weather like today?", "Hey Jarvis, what's on my calendar this afternoon?",
+                   "Hey Jarvis, play some music in the living room.", "Hey Jarvis, remind me to call my mother tomorrow.",
+                   "Hey Jarvis, how long will it take me to get to work?"]
+        prints: list = []
+        bus.emit("voice_id", phase="learning", step=0, total=len(phrases))
+        self.speaker.enqueue(f"Of course, {t}. I'll ask you to say five short phrases, in your normal voice.")
+        q = self.mic.subscribe()
+        try:
+            i, tries = 0, 0
+            while i < len(phrases):
+                self.speaker.enqueue(("Please say: " if i == 0 else "Now: ") + phrases[i])
+                await self.speaker.wait_done(timeout=20)
+                await settle(q, self.vad, quiet=0.2, max_wait=0.8)
+                bus.emit("voice_id", phase="listening", step=i + 1, total=len(phrases), phrase=phrases[i])
+                bus.emit("state", state="listening")
+                audio = await record_utterance(q, self.vad, start_timeout=8, end_silence=1.0, max_seconds=10)
+                v = await asyncio.to_thread(vid.model.embed, audio) if audio is not None else None
+                odd = v is not None and len(prints) >= 2 and float(np.mean([p @ v for p in prints])) < 0.35
+                if v is None or odd:
+                    tries += 1
+                    if tries > 3:
+                        return "I couldn't hear you clearly enough. Let's try again somewhere quieter."
+                    self.speaker.enqueue("Sorry, once more please." if v is None else
+                                         "That didn't sound like the same voice. Once more, please.")
+                    continue
+                prints.append(v)
+                i += 1
+        finally:
+            self.mic.unsubscribe(q)
+        vid.profile.enrol(prints)
+        self.capabilities["voice_id"] = vid.active
+        bus.emit("voice_id", phase="done", total=len(prints))
+        return (f"Thank you, {t}. I know your voice now, and I'll answer only you. "
+                "I'll keep learning it as we talk. Say “forget my voice” to undo this.")
+
+    def forget_voice(self) -> str:
+        if self.voice_id is None:
+            return "Voice ID is off."
+        self.voice_id.profile.clear()
+        self.capabilities["voice_id"] = False
+        bus.emit("voice_id", phase="forgotten")
+        return "Done. I've forgotten your voice, and I'll answer anyone again."
 
     def _follow_up_for(self, turn: asyncio.Task) -> float:
         """How long to keep listening without the wake word: the full window when he asked you
@@ -805,7 +900,7 @@ class Jarvis:
                     log.info("quick %s failed (%s): handing to the brain", q.tool, str(res.content)[:120])
                     return None
                 if not q.reply:
-                    q.reply = str(res.content)[:200]
+                    q.reply = str(res.content)[:400]
                 if q.tool == "system_action":
                     q.reply = ""
         except Exception as exc:
@@ -1316,6 +1411,10 @@ class Jarvis:
         elif kind == "air_mouse":
             reply = self.set_air_mouse(bool(msg.get("on")))
             bus.emit("announce", text=reply, priority="normal")
+        elif kind == "learn_voice":
+            self.queue_request("learn my voice", source="hud")
+        elif kind == "forget_voice":
+            await self.say(self.forget_voice())
         elif kind == "hand_control":
             on = msg.get("on")
             if on is None and self.gestures is not None:

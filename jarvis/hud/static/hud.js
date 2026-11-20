@@ -449,6 +449,13 @@
         if (!e.replay && e.reason === "idle") island("Hand control off: no hands for a while");
         if (!e.on) moveHand({ visible: false });
         break;
+      case "voice_id":
+        if (e.replay) break;
+        if (e.phase === "listening") island(`🎙 Voice ID · ${e.step} of ${e.total}: “${e.phrase}”`, "warn");
+        else if (e.phase === "done") island("🎙 Voice learned · I'll answer only you");
+        else if (e.phase === "forgotten") island("Voice ID off · I'll answer anyone");
+        else if (e.verdict) activityRow("sys", `Ignored a voice that isn't yours (${Math.round(e.score * 100)}%)`);
+        break;
       case "airmouse": document.body.classList.toggle("airmouse", !!e.active); if (!e.replay) island(e.active ? "☝️ Air mouse on · pinch to click · ✋ to stop" : "Air mouse off"); break;
       case "attention": document.body.classList.toggle("unattended", !e.looking); break;
       case "confirm": $("confirm-text").textContent = e.action; $("confirm").hidden = false; break;
