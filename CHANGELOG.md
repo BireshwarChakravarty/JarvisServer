@@ -3,6 +3,22 @@
 All builds are published to the `jarvis-latest` release after passing unit tests, the in-app self-test
 on Apple Silicon, a real launch, packaging, and a clean install on a fresh Mac.
 
+## Do it for me, and fixes to voice setup, WhatsApp sending and permissions
+- **Do it for me**: JARVIS clicks, types, presses keys and scrolls in any app himself (the other half of the
+  on-screen guidance: that showed you where to click; now he can do it). One step at a time, checking the
+  screen after each; brings the right app forward; shows the ring before each click; Send / Delete / Buy /
+  Pay / Sign out and Return-in-a-form are confirmed out loud first. Self-test types into TextEdit end to end.
+- **"Learn my voice" didn't wait for you**: the mic's backlog of his own instructions was taken for your
+  phrase (and could become your voiceprint). Now that backlog is thrown away, a tone says "your turn", and
+  he waits up to 10 seconds for each phrase.
+- **WhatsApp took several tries**: Return was pressed a fixed 1.2 s after WhatsApp came forward, often
+  before it had opened the chat and placed the message. Now he waits until the message is in WhatsApp's
+  message box (read through Accessibility), presses Return, confirms it went (the history, or the box
+  emptying) and presses once more only if the text is still sitting there. Never more than twice.
+- **Permissions**: Full Disk Access has its own icon and is marked optional; Settings-only permissions say
+  exactly what to do there (Full Disk Access: press + and add JARVIS), offer Relaunch and Open Settings,
+  and explain the stale-entry trap (an older copy's entry shows ON but doesn't count: remove it, add again).
+
 ## Voice ID: he learns your voice and answers only you
 - "Learn my voice" (or menu bar › Learn My Voice…): five spoken phrases become your voiceprint (CAM++
   speaker model from 3D-Speaker, Apache-2.0; Kaldi filterbank front end in numpy, matched to

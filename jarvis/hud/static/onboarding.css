@@ -208,3 +208,6 @@ body.settings .ob-steps i { cursor: pointer; }
 @keyframes vbars { to { transform: scaleY(0.45); } }
 .tg a { color: var(--ice); text-underline-offset: 2px; }
 .perm .st.relaunch { color: var(--gold); border-color: rgb(255 196 108 / 0.5); }
+/* the second button on a Settings-only permission ("Open Settings" next to "Relaunch to apply") */
+.perm.two { grid-template-columns: 36px 1fr auto auto; }
+.perm .st.ghost { color: var(--dim, #9fb3c8); }

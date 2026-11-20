@@ -374,18 +374,71 @@ def send(recipient: str, text: str, path: Path | None = None, wait: float = 8.0)
         time.sleep(0.1)
     else:
         return "I've opened the chat in WhatsApp with your message typed in. Press Return to send it."
-    time.sleep(4.0 if cold else 1.2)                     # the chat opens and the message is placed
-    _press_return()
     who = chat["chat"] if chat else recipient
+    # Wait until the message is really in WhatsApp's message box (a fixed pause pressed Return too early
+    # whenever WhatsApp was slow to open the chat: nothing was sent and you had to ask again).
+    seen = False
+    ready_by = time.time() + (12.0 if cold else 6.0)
+    while time.time() < ready_by:
+        box = _composer_text()
+        if box is None:
+            break                                        # can't read the box (no Accessibility): fall back to time
+        if _same(box, text):
+            seen = True
+            break
+        time.sleep(0.25)
+    if not seen:
+        time.sleep(4.0 if cold else 2.0)
+    time.sleep(0.3)                                      # let the field settle before Return
+    for attempt in (1, 2):
+        _press_return()
+        until = time.time() + (4.0 if attempt == 1 else wait)
+        emptied = False
+        while time.time() < until:
+            time.sleep(0.6)
+            if chat is not None and _sent(chat["pk"], text, since, path):
+                return f"Sent to {who} on WhatsApp."
+            box = _composer_text()
+            if box is not None and not box.strip():
+                emptied = True                           # the box cleared: it went (the history may lag)
+                if chat is None:
+                    break
+        if emptied:
+            return f"Sent to {who} on WhatsApp."
+        box = _composer_text()
+        if not (box is not None and _same(box, text)):
+            break                                        # only press again when our text is still waiting there
     if chat is None:
         return f"Sent to {who} on WhatsApp (I couldn't double-check it: no access to the chat history)."
-    end = time.time() + wait
-    while time.time() < end:
-        time.sleep(1.0)
-        if _sent(chat["pk"], text, since, path):
-            return f"Sent to {who} on WhatsApp."
     return (f"I've typed it into your chat with {who}, but I can't see it sent yet. "
             "Have a look at WhatsApp and press Return if it's still waiting.")
+
+
+def _same(box: str, text: str) -> bool:
+    norm = lambda t: re.sub(r"\s+", " ", t or "").strip()           # noqa: E731
+    return bool(norm(text)) and norm(text) in norm(box)
+
+
+def _composer_text() -> str | None:
+    """What's in WhatsApp's focused text box (Accessibility), or None if that can't be read."""
+    try:
+        import ApplicationServices as AX
+        from AppKit import NSRunningApplication
+
+        apps = NSRunningApplication.runningApplicationsWithBundleIdentifier_(BUNDLE_ID)
+        if not apps:
+            return None
+        app = AX.AXUIElementCreateApplication(apps[0].processIdentifier())
+        err, el = AX.AXUIElementCopyAttributeValue(app, "AXFocusedUIElement", None)
+        if err or el is None:
+            return None
+        err, role = AX.AXUIElementCopyAttributeValue(el, "AXRole", None)
+        if err or str(role) not in ("AXTextArea", "AXTextField"):
+            return None
+        err, val = AX.AXUIElementCopyAttributeValue(el, "AXValue", None)
+        return None if err else str(val or "")
+    except Exception:
+        return None
 
 
 # ── a sample database, for the self-test and the tests ──────────────────

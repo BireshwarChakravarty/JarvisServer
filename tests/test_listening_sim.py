@@ -562,9 +562,17 @@ def test_learn_my_voice_by_talking_to_him(cfg, tmp_path):
 
         class Model:
             available = True
+            heard = []
 
             def embed(self, audio):
-                return me if audio is not None and len(audio) > 16000 else None
+                if audio is None:
+                    return None
+                n = len(audio) // FRAME
+                frames = np.asarray(audio[:n * FRAME]).reshape(n, FRAME)
+                peaks = {int(round(float(np.abs(f).max()) * 32768)) for f in frames if np.abs(f).max() > 0.01}
+                self.heard.append(peaks)
+                mine = any(abs(p - YOU) <= 40 for p in peaks)
+                return me if mine and len(audio) > 16000 else None    # his voice or the room isn't you
         vid.model = Model()
         app.voice_id = vid
         app.stt.words[YOU] = "the phrase"
@@ -575,13 +583,15 @@ def test_learn_my_voice_by_talking_to_him(cfg, tmp_path):
         n = len(sp.said)
         if (last.startswith("Please say") or last.startswith("Now:")) and not sp.speaking and n not in answered:
             answered.add(n)
-            state["until"] = now + 0.6 + 1.6           # a short pause, then 1.6 s of you
-            state["from"] = now + 0.6
+            state["until"] = now + 1.2 + 1.6           # after the tone, then 1.6 s of you
+            state["from"] = now + 1.2
         if state.get("from", 1e18) <= now < state.get("until", 0):
             return tone(YOU)
         return None
-    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.0, "learn my voice"),
-                           ("silence", 30.0, "")], extra=respond_to_prompts, setup=setup)
-    assert len(answered) == 5, app.speaker.said
+    app, asked = asyncio.run(asyncio.wait_for(simulate(
+        cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.0, "learn my voice"), ("silence", 50.0, "")],
+        extra=respond_to_prompts, setup=setup), 90))
+    assert len(answered) == 5, (app.speaker.said, app.voice_id.model.heard)
     assert app.voice_id.profile.ready and app.voice_id.profile.enrolled == 5
+    assert not any("once more" in s.lower() for s in app.speaker.said), app.speaker.said   # it waited for you
     assert any("I know your voice now" in s for s in app.speaker.said), app.speaker.said

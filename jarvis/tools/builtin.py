@@ -572,6 +572,64 @@ async def point_at(ctx, target: str, say: str, task: str = "", step: int = 1, to
                          style=style)
 
 
+# ═══════════════════════════════ doing it for them ═══════════════════════════
+def _confirmer(ctx):
+    return ctx.confirm if (getattr(ctx, "confirm", None) is not None and ctx.require_confirmation) else None
+
+
+@tool("Click something on screen yourself (do it for them, rather than showing them how). Use an id from "
+      "find_on_screen (best) or a short description. Brings the right app to the front, shows the ring on the "
+      "item for a moment, then clicks. Clicks on Send / Delete / Buy / Pay and similar are confirmed with the "
+      "user first, automatically. One click per call: look again with find_on_screen before the next step.",
+      {"target": _p("An id from find_on_screen, or a short description of the item"),
+       "double": _p("Double-click (to open a file or select a word)", B)},
+      ["target"], category="guide")
+async def click_on_screen(ctx, target: str, double: bool = False):
+    g = getattr(ctx.orchestrator, "guide", None)
+    if g is None:
+        return "Acting on screen isn't available."
+    return await g.act(target, "click", double=bool(double), confirm=_confirmer(ctx))
+
+
+@tool("Click into a text field on screen and type into it yourself (a search box, a form field, a document). "
+      "Set submit to press Return afterwards (the user is asked first, since that may send or submit something).",
+      {"target": _p("An id from find_on_screen, or a short description of the field"),
+       "text": _p("What to type"), "submit": _p("Press Return after typing", B)},
+      ["target", "text"], category="guide")
+async def type_on_screen(ctx, target: str, text: str, submit: bool = False):
+    g = getattr(ctx.orchestrator, "guide", None)
+    if g is None:
+        return "Acting on screen isn't available."
+    return await g.act(target, "type", text=text, submit=bool(submit), confirm=_confirmer(ctx))
+
+
+@tool("Press a key or shortcut in the app in front, e.g. 'cmd+n', 'cmd+shift+t', 'return', 'escape', 'tab', "
+      "'down'. For keyboard-driven steps (new tab, save, close a dialog, move through a list).",
+      {"keys": _p("The key or shortcut, e.g. cmd+t")}, ["keys"], category="guide")
+async def press_keys(ctx, keys: str):
+    from jarvis.mac import control
+
+    try:
+        control.parse_keys(keys)
+    except ValueError as exc:
+        return f"I don't know that key: {exc}."
+    confirm = _confirmer(ctx)
+    if control.risky_keys(keys) and confirm is not None and not await confirm(f"press {keys}"):
+        return "The user said no. Don't retry."
+    await asyncio.to_thread(control.press, keys)
+    return f"Pressed {keys}."
+
+
+@tool("Scroll the window under the pointer (up, down, left or right) to reveal more before looking again.",
+      {"direction": _p("up, down, left or right", enum=["up", "down", "left", "right"]),
+       "amount": _p("How far, 1-50 lines (default 5)", I)}, ["direction"], category="guide")
+async def scroll_screen(ctx, direction: str, amount: int = 5):
+    from jarvis.mac import control
+
+    await asyncio.to_thread(control.scroll, direction, amount)
+    return f"Scrolled {direction}."
+
+
 @tool("Check or forget a remembered walkthrough. 'check' says whether you've shown them this before and how "
       "often they've done it (so you can offer to let them try alone). 'forget' makes the next one full again.",
       {"action": _p("check or forget", enum=["check", "forget"]),

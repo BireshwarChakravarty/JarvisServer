@@ -290,7 +290,15 @@
   };
 
   /* ───────────── senses ───────────── */
-  const ICON = { microphone: "🎙", camera: "📷", calendar: "📅", reminders: "☑︎", contacts: "👤", automation: "⚙︎", screen: "🖥", accessibility: "⌥" };
+  const ICON = { microphone: "🎙", camera: "📷", calendar: "📅", reminders: "☑︎", contacts: "👤", automation: "⚙︎", screen: "🖥",
+                 accessibility: "⌥", full_disk: "💬" };
+  // switched on only in System Settings (no dialog): what to do there, and the stale-entry trap
+  const SETTINGS_ONLY = {
+    accessibility: "In Accessibility, switch JARVIS on.",
+    screen: "In Screen & System Audio Recording, switch JARVIS on.",
+    full_disk: "In Full Disk Access, press + and choose JARVIS from Applications, then switch it on.",
+  };
+  const STALE = " Already on there? An older copy's entry doesn't count: select JARVIS, press −, add it again, then relaunch.";
   const LABEL = { granted: "✓ Allowed", denied: "Open Settings", not_determined: "Allow", unknown: "Allow", restricted: "Restricted", unavailable: "N/A" };
   function renderPerms(list) {
     const box = $("perms"); box.innerHTML = "";
@@ -300,7 +308,7 @@
       row.innerHTML = `<div class="ic"></div><div><b></b><span></span></div><button class="st"></button>`;
       row.querySelector(".ic").textContent = ICON[p.key] || "•";
       row.querySelector("b").textContent = p.title;
-      if (!p.required && ["screen", "accessibility"].includes(p.key)) {
+      if (!p.required && ["screen", "accessibility", "full_disk"].includes(p.key)) {
         const o = document.createElement("em"); o.className = "opt"; o.textContent = "optional"; row.querySelector("b").appendChild(o);
       }
       row.querySelector("span").textContent = p.why;
@@ -312,7 +320,12 @@
       if (p.status !== "granted" && RELAUNCH_KEYS.includes(p.key) && asked.has(p.key)) {
         btn.textContent = "Relaunch to apply"; btn.classList.add("relaunch");
         btn.onclick = relaunch;
-        row.querySelector("span").textContent = "Switched JARVIS on in System Settings? Relaunch so macOS hands it over.";
+        row.querySelector("span").textContent = (SETTINGS_ONLY[p.key] || "") + " Then relaunch so macOS hands it over." + STALE;
+        const again = document.createElement("button"); again.className = "st ghost"; again.textContent = "Open Settings";
+        again.onclick = () => api(`/api/setup/permissions/${p.key}/settings`, {}).catch(() => {});
+        row.appendChild(again); row.classList.add("two");
+      } else if (p.status !== "granted" && SETTINGS_ONLY[p.key]) {
+        row.querySelector("span").textContent = `${p.why}. ${SETTINGS_ONLY[p.key]}`;
       }
       box.appendChild(row);
     });
@@ -324,7 +337,7 @@
       hint.textContent = "These stay granted across updates.";
     }
   }
-  const RELAUNCH_KEYS = ["screen", "accessibility"];
+  const RELAUNCH_KEYS = ["screen", "accessibility", "full_disk"];
   const store = { get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } },
                   set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} },
                   del: (k) => { try { localStorage.removeItem(k); } catch (e) {} } };
@@ -356,7 +369,7 @@
     }
     busy($("allow-all"), false);
     const mic = S.permissions.find((x) => x.key === "microphone");
-    $("perm-hint").textContent = "Screen recording and Accessibility are optional. Turn them on later from Settings if you'd like.";
+    $("perm-hint").textContent = "Screen recording, Accessibility and Full Disk Access are optional. Turn them on later from Settings if you'd like.";
     if (mic && mic.status === "granted") caption("Thank you. I can hear you now.");
   };
   let warnedMic = false;

@@ -653,7 +653,7 @@ class Jarvis:
     async def learn_voice(self) -> str:
         """Siri-style voice setup: five phrases, each a voiceprint; one that doesn't match the others
         (someone else spoke, a door slammed) is asked again."""
-        from jarvis.voice.audio import record_utterance, settle
+        from jarvis.voice.audio import drain, record_utterance, settle
 
         vid = self.voice_id
         if vid is None or not vid.model.available:
@@ -671,19 +671,27 @@ class Jarvis:
         try:
             i, tries = 0, 0
             while i < len(phrases):
-                self.speaker.enqueue(("Please say: " if i == 0 else "Now: ") + phrases[i])
+                self.speaker.enqueue(("Please say: " if i == 0 else "Now: ") + phrases[i] + " After the tone.")
                 await self.speaker.wait_done(timeout=20)
-                await settle(q, self.vad, quiet=0.2, max_wait=0.8)
+                # everything the mic heard while he spoke is his voice, not yours: throw it away, or the
+                # listen below "hears" that backlog at once and never waits for you
+                await asyncio.sleep(0.15)
+                drain(q)
+                self.speaker.play_tone("wake")             # your turn
+                await asyncio.sleep(0.25)
+                drain(q)
+                await settle(q, self.vad, quiet=0.2, max_wait=0.6, tail=0.3)
                 bus.emit("voice_id", phase="listening", step=i + 1, total=len(phrases), phrase=phrases[i])
                 bus.emit("state", state="listening")
-                audio = await record_utterance(q, self.vad, start_timeout=8, end_silence=1.0, max_seconds=10)
+                audio = await record_utterance(q, self.vad, start_timeout=10, end_silence=1.0, max_seconds=10,
+                                               rel_floor=0.0)
                 v = await asyncio.to_thread(vid.model.embed, audio) if audio is not None else None
                 odd = v is not None and len(prints) >= 2 and float(np.mean([p @ v for p in prints])) < 0.35
                 if v is None or odd:
                     tries += 1
                     if tries > 3:
                         return "I couldn't hear you clearly enough. Let's try again somewhere quieter."
-                    self.speaker.enqueue("Sorry, once more please." if v is None else
+                    self.speaker.enqueue("I didn't quite catch that. Once more, please." if v is None else
                                          "That didn't sound like the same voice. Once more, please.")
                     continue
                 prints.append(v)

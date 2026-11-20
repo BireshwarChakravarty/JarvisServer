@@ -248,7 +248,7 @@ def ax_elements(pid: int | None = None, app_name: str = "", max_nodes: int = 250
                                                                    _attr(_attr(el, "AXParent"), "AXRole") == "AXToolbar"
                                                                    else area)
                 out.append(Element(f"ax:{len(out)}", role, label, *fr, source="ax", app=app_name,
-                                   area=sub_area, enabled=enabled is not False))
+                                   area=sub_area, enabled=enabled is not False, extra={"pid": pid}))
         if depth < 40:
             kids = _attr(el, "AXVisibleChildren") or _attr(el, "AXChildren") or []
             # a closed menu's items have no place on screen: skip them unless the menu is open
@@ -307,7 +307,7 @@ def recognise_text(image_path: str | Path) -> list[tuple[str, tuple[float, float
     return out
 
 
-def text_elements(app_name: str = "") -> list[Element]:
+def text_elements(app_name: str = "", pid: int | None = None) -> list[Element]:
     """Words on every display, located by Vision. Needs Screen Recording."""
     if not IS_MAC:
         return []
@@ -324,7 +324,7 @@ def text_elements(app_name: str = "") -> list[Element]:
                     continue
                 x, y, w, h = vision_box_to_global(box, fr)
                 out.append(Element(f"text:{len(out)}", "AXStaticText", text[:120], x, y, w, h, source="text",
-                                   app=app_name, area="screen"))
+                                   app=app_name, area="screen", extra={"pid": pid}))
         return out
 
 
@@ -339,7 +339,7 @@ def find(query: str, limit: int = 5, use_text: bool = True) -> list[dict]:
     hits = rank(els, query, limit)
     if use_text and (not hits or hits[0][1] < 5):
         try:
-            hits = rank(els + text_elements(app), query, limit)
+            hits = rank(els + text_elements(app, pid), query, limit)
         except Exception as exc:
             log.info("text recognition unavailable: %s", exc)
     _LAST.clear()

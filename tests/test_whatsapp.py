@@ -93,54 +93,92 @@ def test_no_access_says_how_to_allow_it(db, monkeypatch):
 
 # ── sending ──────────────────────────────────────────────────────────────
 class FakeMac:
-    """WhatsApp coming to the front, Return being pressed, the message landing in its database."""
+    """WhatsApp on a virtual clock: the chat opens, the message box fills after `fill_after` seconds,
+    Return sends only if the box holds the text, and the message lands in the database."""
 
-    def __init__(self, db, lands=True):
-        self.db, self.lands, self.opened, self.returns = db, lands, [], 0
+    def __init__(self, db, fill_after=0.5, lands=True, ignore_first_return=False, ax=True):
+        self.db, self.fill_after, self.lands, self.ignore_first = db, fill_after, lands, ignore_first_return
+        self.ax, self.opened, self.returns, self.now, self.box, self.sent_text = ax, [], 0, 1000.0, "", None
+
+    def time(self):
+        return self.now
+
+    def sleep(self, s):
+        self.now += s
+        if self.opened and self.box == "" and self.sent_text is None and self.now - self.t_open >= self.fill_after:
+            self.box = self.pending
 
     def run(self, cmd, **k):
+        import urllib.parse
         self.opened.append(cmd[-1])
+        self.t_open = self.now
+        self.pending = urllib.parse.unquote(cmd[-1].split("&text=")[1])
 
         class R:
             returncode, stderr = 0, ""
         return R()
 
+    def composer(self):
+        return self.box if self.ax else None
+
     def press(self):
         self.returns += 1
+        if not self.box or (self.ignore_first and self.returns == 1):
+            return                                   # too early, or the app ignored it
+        self.sent_text, self.box = self.box, ""
         if self.lands:
             con = sqlite3.connect(str(self.db))
-            t = (dt.datetime.now(dt.timezone.utc) - wa.EPOCH).total_seconds()
+            t = (dt.datetime.fromtimestamp(self.now, dt.timezone.utc) - wa.EPOCH).total_seconds()
             con.execute("INSERT INTO ZWAMESSAGE (ZISFROMME, ZCHATSESSION, ZMESSAGEDATE, ZTEXT) VALUES (1, 1, ?, ?)",
-                        (t, "On my way, ten minutes"))
+                        (t, self.sent_text))
             con.commit()
             con.close()
 
 
-def fake(monkeypatch, db, lands=True):
-    mac = FakeMac(db, lands)
+def fake(monkeypatch, db, **kw):
+    mac = FakeMac(db, **kw)
     monkeypatch.setattr(wa, "installed", lambda: True)
     monkeypatch.setattr(wa.subprocess, "run", mac.run)
     monkeypatch.setattr(wa, "_frontmost_bundle", lambda: wa.BUNDLE_ID)
     monkeypatch.setattr(wa, "_running", lambda: True)
     monkeypatch.setattr(wa, "_press_return", mac.press)
-    monkeypatch.setattr(wa.time, "sleep", lambda s: None)
+    monkeypatch.setattr(wa, "_composer_text", mac.composer, raising=False)
+    monkeypatch.setattr(wa.time, "sleep", mac.sleep)
+    monkeypatch.setattr(wa.time, "time", mac.time)
     return mac
 
 
-def test_send_opens_the_chat_presses_return_and_checks_it_went(db, monkeypatch):
-    mac = fake(monkeypatch, db)
-    out = wa.send("Pepper", "On my way, ten minutes", wait=2)
-    assert out == "Sent to Pepper Potts on WhatsApp."
-    assert mac.opened == ["whatsapp://send?phone=447700900123&text=On%20my%20way%2C%20ten%20minutes"]
-    assert mac.returns == 1
-
-
-def test_send_says_so_when_it_cant_see_it_went(db, monkeypatch):
-    fake(monkeypatch, db, lands=False)
-    clock = iter(range(0, 1000))
-    monkeypatch.setattr(wa.time, "time", lambda: float(next(clock)))
+def test_send_waits_for_the_message_box_then_one_return(db, monkeypatch):
+    mac = fake(monkeypatch, db, fill_after=3.5)                 # WhatsApp slow to open the chat
     out = wa.send("Pepper", "On my way, ten minutes", wait=3)
-    assert "can't see it sent" in out and "press Return" in out
+    assert out == "Sent to Pepper Potts on WhatsApp.", out
+    assert mac.opened == ["whatsapp://send?phone=447700900123&text=On%20my%20way%2C%20ten%20minutes"]
+    assert mac.returns == 1                                      # first try, every time
+
+
+def test_a_return_that_didnt_take_is_pressed_once_more(db, monkeypatch):
+    mac = fake(monkeypatch, db, ignore_first_return=True)
+    assert wa.send("Pepper", "On my way", wait=3) == "Sent to Pepper Potts on WhatsApp."
+    assert mac.returns == 2
+
+
+def test_never_more_than_two_returns_and_says_so(db, monkeypatch):
+    mac = fake(monkeypatch, db, lands=False)
+    mac.press = lambda: setattr(mac, "returns", mac.returns + 1)        # Return does nothing at all
+    monkeypatch.setattr(wa, "_press_return", mac.press)
+    out = wa.send("Pepper", "On my way", wait=3)
+    assert "can't see it sent" in out and "press Return" in out and mac.returns == 2
+
+
+def test_an_emptied_box_counts_as_sent_when_the_history_lags(db, monkeypatch):
+    mac = fake(monkeypatch, db, lands=False)
+    assert wa.send("Pepper", "On my way", wait=3) == "Sent to Pepper Potts on WhatsApp." and mac.returns == 1
+
+
+def test_without_accessibility_it_waits_longer_and_still_checks(db, monkeypatch):
+    mac = fake(monkeypatch, db, ax=False, fill_after=1.5)
+    assert wa.send("Pepper", "On my way", wait=3) == "Sent to Pepper Potts on WhatsApp."
+    assert mac.returns == 1
 
 
 def test_groups_and_unknown_people_are_explained(db, monkeypatch):
@@ -152,9 +190,9 @@ def test_groups_and_unknown_people_are_explained(db, monkeypatch):
 
 def test_a_number_with_country_code_works_without_a_chat(db, monkeypatch):
     mac = fake(monkeypatch, db, lands=False)
-    out = wa.send("+44 7700 900999", "Hello")
+    out = wa.send("+44 7700 900999", "Hello", wait=3)
     assert mac.opened[0].startswith("whatsapp://send?phone=447700900999&text=Hello")
-    assert "Hello" not in out or "Sent" in out or "can't see" in out
+    assert out.startswith("Sent to +44 7700 900999")
 
 
 def test_sending_needs_your_yes():

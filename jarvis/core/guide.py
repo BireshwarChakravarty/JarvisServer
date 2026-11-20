@@ -45,8 +45,10 @@ def style_for(completed: int) -> str:
 
 class Guide:
     def __init__(self, memory, speaker=None, find: Callable | None = None, resolve: Callable | None = None,
-                 overlay=None, mouse: Callable | None = None, frontmost: Callable | None = None) -> None:
+                 overlay=None, mouse: Callable | None = None, frontmost: Callable | None = None,
+                 hands=None) -> None:
         self.memory = memory
+        self.hands = hands                  # jarvis.mac.control (click / type / press), injected in tests
         self.speaker = speaker
         self._find, self._resolve = find, resolve
         self.overlay = overlay
@@ -134,6 +136,59 @@ class Guide:
         if step >= total and result == "clicked" and style_for(completed) == "solo":
             out["note"] = "They've done this several times now: next time, offer to let them try it alone."
         return out
+
+    # ── doing it for you ─────────────────────────────────────────────────
+    def _hands(self):
+        if self.hands is None:
+            from jarvis.mac import control
+
+            self.hands = control
+        return self.hands
+
+    async def act(self, target: str, action: str = "click", text: str = "", double: bool = False,
+                  submit: bool = False, confirm: Callable | None = None) -> dict:
+        """Click an item (or click into a field and type), showing the ring on it first so you can
+        see what he's doing. One action per call; look again (find) before the next."""
+        if self._resolve is None:
+            return {"status": "unavailable", "why": "Acting on screen needs the Mac app."}
+        el = await asyncio.to_thread(self._resolve, target)
+        if el is None:
+            return {"status": "not_found", "target": target,
+                    "advice": "Not visible right now. Open the right window or menu first (find_on_screen shows what "
+                              "is there), or use a direct tool such as open_application."}
+        hands = self._hands()
+        if confirm is not None:
+            risky = (action == "click" and hands.is_risky(el.label)) or (action == "type" and submit)
+            if risky:
+                what = (f"click “{el.label}”" if action == "click" else
+                        f"type “{text[:80]}” into {el.label} and press Return") + (f" in {el.app}" if el.app else "")
+                if not await confirm(what):
+                    return {"status": "declined", "did": "nothing", "why": f"The user said no to: {what}. Don't retry."}
+        pid = (getattr(el, "extra", None) or {}).get("pid")
+        await asyncio.to_thread(hands.bring_to_front, pid, el.app)
+        rect = (el.x, el.y, el.w, el.h)
+        verb = {"click": "Clicking", "type": "Typing into"}.get(action, "Using")
+        if self.overlay is not None:
+            self.overlay.show(rect, caption=f"{verb} {el.label[:40]}", style="hint", kind=el.kind)
+        bus.emit("guide", state="acting", label=el.label, action=action)
+        await asyncio.sleep(0.45)                       # long enough to see where he's about to click
+        try:
+            cx, cy = el.x + el.w / 2, el.y + el.h / 2
+            await asyncio.to_thread(hands.click, cx, cy, double)
+            if action == "type":
+                await asyncio.sleep(0.15)
+                await asyncio.to_thread(hands.type_text, text)
+                if submit:
+                    await asyncio.sleep(0.1)
+                    await asyncio.to_thread(hands.press, "return")
+        finally:
+            if self.overlay is not None:
+                self.overlay.done(True) if hasattr(self.overlay, "done") else self.overlay.hide()
+        bus.emit("guide", state="acted", label=el.label, action=action)
+        did = {"click": f"clicked {el.label}", "type": f"typed into {el.label}" + (" and pressed Return" if submit else "")}
+        return {"status": "done", "did": did.get(action, action),
+                "target": {"label": el.label, "kind": el.kind, "where": el.area, "app": el.app},
+                "next": "Look again with find_on_screen (or look_at_screen) before the next step: things move."}
 
     async def _wait_click(self, rect, timeout: float, pad: float = 8.0) -> str:
         x, y, w, h = rect

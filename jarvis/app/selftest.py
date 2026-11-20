@@ -586,6 +586,50 @@ def run() -> int:
                 f"left out) · read() ok · this Mac: {'mail found' if real else 'no Mailspring mail yet'} · "
                 f"Mailspring {'installed' if ms.installed() else 'not installed'}")
 
+    @check("hands: JARVIS types into TextEdit by himself (find → click → type → read back)", required=False,
+           timeout=120)
+    def _():
+        import subprocess
+        import tempfile
+        import time as _t
+        from pathlib import Path as P
+
+        import ApplicationServices as AX
+        from AppKit import NSRunningApplication
+
+        from jarvis.mac import control, screen_elements as se
+
+        doc = P(tempfile.mkdtemp()) / "jarvis-hands.txt"
+        doc.write_text("")
+        subprocess.run(["open", "-a", "TextEdit", str(doc)], capture_output=True, timeout=20)
+        try:
+            pid, area = None, None
+            for _ in range(40):
+                apps = NSRunningApplication.runningApplicationsWithBundleIdentifier_("com.apple.TextEdit")
+                if apps:
+                    pid = int(apps[0].processIdentifier())
+                    area = next((e for e in se.ax_elements(pid, "TextEdit") if e.role == "AXTextArea"), None)
+                    if area is not None:
+                        break
+                _t.sleep(0.5)
+            if area is None:
+                raise RuntimeError("couldn't find TextEdit's text area through Accessibility")
+            control.bring_to_front(pid, "TextEdit")
+            control.click(area.x + area.w / 2, area.y + min(area.h / 2, 40))
+            _t.sleep(0.3)
+            control.type_text("JARVIS was here")
+            control.press("return")
+            _t.sleep(0.8)
+            app = AX.AXUIElementCreateApplication(pid)
+            err, el = AX.AXUIElementCopyAttributeValue(app, "AXFocusedUIElement", None)
+            err2, val = AX.AXUIElementCopyAttributeValue(el, "AXValue", None) if not err and el is not None else (1, None)
+            got = str(val or "")
+            if "JARVIS was here" not in got:
+                raise RuntimeError(f"typed, but the document reads {got[:60]!r}")
+            return f"found the text area at ({round(area.x)}, {round(area.y)}), clicked, typed and read back {got.strip()!r}"
+        finally:
+            subprocess.run(["pkill", "-x", "TextEdit"], capture_output=True)
+
     @check("WhatsApp: reads the Mac app's chats (sample) and reports access on this Mac", timeout=60)
     def _():
         import os
