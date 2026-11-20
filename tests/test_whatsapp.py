@@ -121,6 +121,7 @@ def fake(monkeypatch, db, lands=True):
     monkeypatch.setattr(wa, "installed", lambda: True)
     monkeypatch.setattr(wa.subprocess, "run", mac.run)
     monkeypatch.setattr(wa, "_frontmost_bundle", lambda: wa.BUNDLE_ID)
+    monkeypatch.setattr(wa, "_running", lambda: True)
     monkeypatch.setattr(wa, "_press_return", mac.press)
     monkeypatch.setattr(wa.time, "sleep", lambda s: None)
     return mac

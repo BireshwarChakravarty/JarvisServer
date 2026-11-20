@@ -295,6 +295,15 @@ def _frontmost_bundle() -> str:
         return ""
 
 
+def _running() -> bool:
+    try:
+        from AppKit import NSRunningApplication
+
+        return bool(NSRunningApplication.runningApplicationsWithBundleIdentifier_(BUNDLE_ID))
+    except Exception:
+        return True
+
+
 def _press_return() -> None:
     import Quartz
 
@@ -354,17 +363,18 @@ def send(recipient: str, text: str, path: Path | None = None, wait: float = 8.0)
         return (f"I couldn't find a WhatsApp chat or an international phone number for {recipient}. "
                 "Say their number with the country code, or message them once from your phone first.")
     since = time.time()
+    cold = not _running()                                # launching: the chat takes longer to appear
     url = f"whatsapp://send?phone={phone}&text={urllib.parse.quote(text)}"
     r = subprocess.run(["open", url], capture_output=True, text=True, timeout=15)
     if r.returncode != 0:
         return f"WhatsApp wouldn't open that chat ({(r.stderr or '').strip()[:120]})."
-    for _ in range(40):                                  # up to 4 s for WhatsApp to come to the front
+    for _ in range(150 if cold else 40):                 # up to 15 s (launching) or 4 s for WhatsApp to come forward
         if _frontmost_bundle() == BUNDLE_ID:
             break
         time.sleep(0.1)
     else:
         return "I've opened the chat in WhatsApp with your message typed in. Press Return to send it."
-    time.sleep(1.2)                                      # the chat opens and the message is placed
+    time.sleep(4.0 if cold else 1.2)                     # the chat opens and the message is placed
     _press_return()
     who = chat["chat"] if chat else recipient
     if chat is None:
