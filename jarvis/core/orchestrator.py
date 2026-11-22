@@ -1023,9 +1023,25 @@ class Jarvis:
             from jarvis.mac import system as mac
 
             if mac.IS_MAC:
-                front, batt = await asyncio.wait_for(asyncio.gather(
-                    asyncio.to_thread(mac.frontmost_app), asyncio.to_thread(mac.battery)), timeout=1.5)
-                ctx["frontmost app"] = front
+                # Never hold up an answer for this: the front app is instant, the battery is read at most
+                # once a minute, and whatever isn't back within half a second is simply left out.
+                cached = getattr(self, "_battery_cache", None)
+                fresh = cached is not None and time.monotonic() - cached[0] < 60
+                front = asyncio.ensure_future(asyncio.to_thread(mac.frontmost_app))
+                jobs = [front]
+                if not fresh and not getattr(self, "_battery_reading", False):
+                    self._battery_reading = True
+
+                    def read_battery():
+                        try:
+                            self._battery_cache = (time.monotonic(), mac.battery())
+                        finally:
+                            self._battery_reading = False
+                    jobs.append(asyncio.ensure_future(asyncio.to_thread(read_battery)))
+                await asyncio.wait(jobs, timeout=0.5)
+                if front.done() and not front.exception() and front.result():
+                    ctx["frontmost app"] = front.result()
+                batt = (getattr(self, "_battery_cache", None) or (0, {}))[1]
                 if batt.get("percent") is not None:
                     ctx["battery"] = f"{batt['percent']}% {batt.get('state', '')}".strip()
         except Exception:

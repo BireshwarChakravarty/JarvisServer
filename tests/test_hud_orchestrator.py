@@ -113,3 +113,40 @@ def test_a_failing_hud_command_keeps_the_link(cfg):
             import time
             time.sleep(0.02)
     assert got == ["listen"]
+
+
+def test_live_context_never_holds_up_an_answer(cfg, monkeypatch):
+    """The front app and battery go along with each request; a slow reading is left out, not waited for."""
+    import asyncio
+    import time
+
+    from jarvis.core.orchestrator import Jarvis
+    from jarvis.mac import system as mac
+
+    calls = {"battery": 0}
+
+    def slow_battery():
+        calls["battery"] += 1
+        time.sleep(2)
+        return {"percent": 80, "state": "charging"}
+
+    monkeypatch.setattr(mac, "IS_MAC", True)
+    monkeypatch.setattr(mac, "frontmost_app", lambda: "Safari")
+    monkeypatch.setattr(mac, "battery", slow_battery)
+    app = Jarvis(cfg, headless=True)
+
+    async def timed():
+        t0 = time.monotonic()
+        got = await app._live_context()
+        return got, time.monotonic() - t0
+    ctx, took = asyncio.run(timed())
+    assert took < 1.0                              # the answer goes ahead without the slow reading
+    assert ctx["frontmost app"] == "Safari" and "battery" not in ctx
+
+    monkeypatch.setattr(mac, "battery", lambda: calls.__setitem__("battery", calls["battery"] + 1) or {"percent": 55, "state": "discharging"})
+    app._battery_cache = None
+    ctx = asyncio.run(app._live_context())
+    assert ctx["frontmost app"] == "Safari" and ctx["battery"] == "55% discharging"
+    n = calls["battery"]
+    asyncio.run(app._live_context())
+    assert calls["battery"] == n                  # read at most once a minute
