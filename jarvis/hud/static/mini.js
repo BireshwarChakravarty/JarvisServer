@@ -75,6 +75,7 @@
   }
 
   function handle(e) {
+    if ((e.type === "hello" || e.type === "theme") && e.theme && window.JarvisTheme) JarvisTheme.apply(e.theme);
     switch (e.type) {
       case "state": setState(e.state); break;
       case "level": if (e.source === "tts" || state === "listening") reactor.setLevel(e.value, e.source); break;

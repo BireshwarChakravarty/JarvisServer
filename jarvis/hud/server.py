@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 
 from jarvis.aio import spawn
+from jarvis.core import themes
 from jarvis.events import bus
 
 log = logging.getLogger("jarvis.hud")
@@ -110,6 +111,7 @@ def create_app(jarvis=None, supervisor=None) -> FastAPI:
             "owner": cfg.get("owner.name", "") if cfg else "",
             "title": cfg.get("owner.title", "sir") if cfg else "sir",
             "city": cfg.get("location.city", "") if cfg else "",
+            "theme": themes.current(cfg),
             "state": bus.state.get("state"),
             "capabilities": getattr(j, "capabilities", {}),
             "history": [e for e in bus.history if e["type"] in (

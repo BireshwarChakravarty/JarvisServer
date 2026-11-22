@@ -401,7 +401,7 @@
     const scale = Math.max(c.width / e.w, c.height / e.h), ox = (c.width - e.w * scale) / 2, oy = (c.height - e.h * scale) / 2;
     e.faces.forEach((f) => {
       const [x, y, w, h] = f.box.map((v) => v * scale);
-      ctx.strokeStyle = "rgba(143,236,255,0.9)"; ctx.lineWidth = 2 * dpr;
+      ctx.strokeStyle = `rgba(${getComputedStyle(document.documentElement).getPropertyValue("--ice-rgb").trim().split(/\s+/).join(",") || "143,236,255"},0.9)`; ctx.lineWidth = 2 * dpr;
       ctx.beginPath(); ctx.ellipse(x + ox + w / 2, y + oy + h / 2, w * 0.62, h * 0.72, 0, 0, Math.PI * 2); ctx.stroke();
     });
   }
@@ -545,6 +545,20 @@
   }
   setInterval(pollModels, 3000);
 
+  /* ───────────── theme picker: switches live, everywhere ───────────── */
+  function markTheme(t) {
+    document.querySelectorAll(".theme-card").forEach((b) => {
+      const on = b.dataset.themeId === t;
+      b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on));
+    });
+  }
+  document.querySelectorAll(".theme-card").forEach((b) => (b.onclick = async () => {
+    const t = b.dataset.themeId;
+    if (window.JarvisTheme) JarvisTheme.apply(t);
+    markTheme(t);
+    try { await api("/api/setup/theme", { theme: t }); } catch (e) {}
+  }));
+
   /* ───────────── live events ───────────── */
   function connect() {
     if (DEMO) return;
@@ -558,6 +572,7 @@
         if (g) { g.done = e.done; g.total = e.total || g.total; if (e.ready) g.ready = true; g.error = e.error || null; renderDownloads(); }
       }
       if (e.type === "cli_log" && e.line) logLine(e.line);
+      if (e.type === "theme" && e.theme && window.JarvisTheme) { JarvisTheme.apply(e.theme); markTheme(e.theme); }
       if (e.type === "enroll" && e.target) $("enroll-ring").style.strokeDashoffset = String(289 - (289 * e.count) / e.target);
       if (e.type === "faces" && step === "face") drawFaces(e);
     };
@@ -583,6 +598,8 @@
     $("opt-sentry").checked = !!S.options.sentry_mode;
     $("opt-hand").checked = !!S.options.hand_control;
     $("hand-row").hidden = !settings;   // only meaningful while JARVIS is running
+    if (S.theme && window.JarvisTheme) JarvisTheme.apply(S.theme);
+    markTheme(S.theme || (window.JarvisTheme ? JarvisTheme.get() : "arc"));
     if (settings) { $("launch").textContent = "Save & restart"; $("hello").textContent = "Settings"; }
     models = S.models; renderDownloads();
     connect();

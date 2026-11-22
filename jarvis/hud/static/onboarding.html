@@ -7,9 +7,11 @@
 <title>Set up JARVIS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@200;300;400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@200;300;400;500;600&family=Geist+Mono:wght@400;500&family=Doto:wght@500;700;900&family=Chakra+Petch:wght@300;400;500;600&display=swap">
 <link rel="stylesheet" href="/static/hud.css">
 <link rel="stylesheet" href="/static/onboarding.css">
+<link rel="stylesheet" href="/static/theme.css">
+<script src="/static/theme.js"></script>
 </head>
 <body class="ob" data-state="idle">
 <div id="ambient" aria-hidden="true"></div>
@@ -142,11 +144,19 @@
 
     <!-- 6 · speech -->
     <section class="step" data-step="speech" hidden>
-      <p class="eyebrow">Step 6 · Voice</p>
-      <h1>Choose how I sound.</h1>
+      <p class="eyebrow">Step 6 · Voice &amp; look</p>
+      <h1>Choose how I sound, and how I look.</h1>
       <p class="lede">Tap a voice to hear it. Every one runs entirely on this Mac.</p>
       <div class="voices" id="voices" role="radiogroup" aria-label="Voice"></div>
       <p class="hint" id="voice-hint"></p>
+      <div class="field"><span>Theme <em>restyles everything, phone included. Or just ask: “switch to the dot matrix theme”</em></span>
+        <div class="themes" id="themes" role="radiogroup" aria-label="Theme">
+          <button class="theme-card" data-theme-id="arc" role="radio"><i class="swatch arc"></i><b>Arc Reactor</b><span>Ice-blue light on black</span></button>
+          <button class="theme-card" data-theme-id="dot" role="radio"><i class="swatch dot"></i><b>Dot Matrix</b><span>Black, white, red LEDs</span></button>
+          <button class="theme-card" data-theme-id="glass" role="radio"><i class="swatch glass"></i><b>Liquid Glass</b><span>Light, frosted, airy</span></button>
+          <button class="theme-card" data-theme-id="stark" role="radio"><i class="swatch stark"></i><b>Stark</b><span>Crimson and gold</span></button>
+        </div>
+      </div>
       <p class="err" id="speech-err"></p>
       <div class="actions"><button class="btn ghost" data-back>Back</button><button class="btn gold" id="speech-next">Continue</button></div>
     </section>

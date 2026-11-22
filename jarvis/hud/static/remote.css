@@ -11,7 +11,7 @@
 [hidden] { display: none !important; }
 
 html, body { margin: 0; background: var(--ink); color: var(--text); font-family: var(--sans); }
-body { min-height: 100dvh; background: radial-gradient(120% 70% at 50% 20%, rgb(18 60 90 / 0.35), transparent 70%), var(--ink); }
+body { min-height: 100dvh; background: radial-gradient(120% 70% at 50% 20%, rgb(var(--deep-rgb) / 0.35), transparent 70%), var(--ink); }
 button { font: inherit; color: inherit; }
 
 .center { min-height: 100dvh; display: grid; align-content: center; justify-items: center; text-align: center; padding: 24px; }
@@ -34,7 +34,7 @@ h1 { margin: 0 0 12px; font: 200 32px/1.1 var(--sans); letter-spacing: -0.02em; 
   letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); }
 .pip { width: 6px; height: 6px; border-radius: 50%; background: var(--ice); box-shadow: 0 0 10px var(--ice); }
 body[data-state="listening"] .pip { background: var(--gold); box-shadow: 0 0 10px var(--gold); }
-body[data-state="thinking"] .pip, body[data-state="working"] .pip { background: #a9b2ff; box-shadow: 0 0 10px #a9b2ff; }
+body[data-state="thinking"] .pip, body[data-state="working"] .pip { background: var(--violet); box-shadow: 0 0 10px var(--violet); }
 .you { margin: 0 0 6px; min-height: 1.3em; font-size: 15px; color: var(--gold); }
 .you:not(:empty)::before { content: "“"; } .you:not(:empty)::after { content: "”"; }
 .jarvis { margin: 0; min-height: 2.8em; width: min(34ch, 100%); font: 300 20px/1.4 var(--sans); }   /* a fixed width: subtitles are measured against it */
@@ -43,38 +43,38 @@ body[data-state="thinking"] .pip, body[data-state="working"] .pip { background: 
 
 .controls { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 18px 0 14px; }
 .ctl { display: grid; justify-items: center; gap: 6px; padding: 12px 4px 10px; border-radius: 16px; border: 1px solid var(--hair-2);
-  background: rgb(255 255 255 / 0.03); color: var(--ice); min-height: 64px; cursor: pointer; }
+  background: rgb(var(--fg-rgb) / 0.03); color: var(--ice); min-height: 64px; cursor: pointer; }
 .ctl svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .ctl svg .solid { fill: currentColor; stroke: none; }
 .ctl svg .cut { stroke: var(--ink); stroke-width: 4.5; }
 .ctl span { font-size: 11.5px; color: var(--muted); }
 .ctl:active { transform: scale(0.97); }
-.ctl[aria-pressed="true"] { border-color: rgb(255 196 108 / 0.5); background: rgb(255 196 108 / 0.08); color: var(--gold); }
-#c-mute[aria-pressed="true"] { border-color: rgb(255 122 122 / 0.5); background: rgb(255 122 122 / 0.08); color: var(--coral); }
+.ctl[aria-pressed="true"] { border-color: rgb(var(--gold-rgb) / 0.5); background: rgb(var(--gold-rgb) / 0.08); color: var(--gold); }
+#c-mute[aria-pressed="true"] { border-color: rgb(var(--coral-rgb) / 0.5); background: rgb(var(--coral-rgb) / 0.08); color: var(--coral); }
 
 .next { padding: 12px 14px; border-radius: 14px; border: 1px solid var(--hair-2); font-size: 14px; margin-bottom: 14px; }
 .next b { font-weight: 500; } .next span { color: var(--muted); }
 .label { margin: 0 0 10px; font: 500 10.5px/1 var(--sans); letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip { min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--hair-2); background: rgb(255 255 255 / 0.03);
+.chip { min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--hair-2); background: rgb(var(--fg-rgb) / 0.03);
   font-size: 14px; text-transform: capitalize; cursor: pointer; }
 .chip:active { border-color: var(--gold); color: var(--gold); }
 
 .ask { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 8px; padding: 10px 16px calc(10px + var(--safe-b));
-  background: linear-gradient(to bottom, rgb(3 5 8 / 0), rgb(3 5 8 / 0.92) 30%); max-width: 720px; margin: 0 auto; }
+  background: linear-gradient(to bottom, rgb(var(--ink-rgb) / 0), rgb(var(--ink-rgb) / 0.92) 30%); max-width: 720px; margin: 0 auto; }
 .ask input { flex: 1; min-width: 0; height: 50px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--hair-2);
-  background: rgb(14 20 28 / 0.95); color: var(--text); font: 400 16px var(--sans); outline: none; }
-.ask input:focus { border-color: rgb(143 236 255 / 0.45); }
+  background: rgb(var(--panel-rgb) / 0.95); color: var(--text); font: 400 16px var(--sans); outline: none; }
+.ask input:focus { border-color: rgb(var(--ice-rgb) / 0.45); }
 .ask button { position: relative; width: 50px; height: 50px; border-radius: 50%; border: 0; background: var(--ice); color: #032; cursor: pointer; flex: none; }
 .ask button svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 /* the talk button: ice at rest, gold while he listens, violet while he thinks or speaks */
 .mic .ring { position: absolute; inset: -5px; border-radius: 50%; border: 2px solid var(--gold); opacity: 0; pointer-events: none;
   transform: scale(calc(1 + var(--lvl, 0) * 0.35)); transition: transform 0.08s linear, opacity 0.2s; }
-body[data-voice="listening"] .mic, body[data-voice="hearing"] .mic { background: var(--gold); color: #1a1004; }
+body[data-voice="listening"] .mic, body[data-voice="hearing"] .mic { background: var(--gold); color: var(--on-gold); }
 body[data-voice="listening"] .mic .ring, body[data-voice="hearing"] .mic .ring { opacity: 0.85; }
-body[data-voice="transcribing"] .mic, body[data-voice="thinking"] .mic, body[data-voice="speaking"] .mic { background: #a9b2ff; color: #0b0d24; }
-body[data-voice="transcribing"] .mic .ring, body[data-voice="thinking"] .mic .ring { opacity: 0.6; border-color: #a9b2ff; animation: breathe 1.2s ease-in-out infinite; }
-body[data-voice="wake"] .mic { background: rgb(143 236 255 / 0.18); color: var(--ice); box-shadow: inset 0 0 0 1.5px var(--ice); }
+body[data-voice="transcribing"] .mic, body[data-voice="thinking"] .mic, body[data-voice="speaking"] .mic { background: var(--violet); color: var(--on-gold); }
+body[data-voice="transcribing"] .mic .ring, body[data-voice="thinking"] .mic .ring { opacity: 0.6; border-color: var(--violet); animation: breathe 1.2s ease-in-out infinite; }
+body[data-voice="wake"] .mic { background: rgb(var(--ice-rgb) / 0.18); color: var(--ice); box-shadow: inset 0 0 0 1.5px var(--ice); }
 @keyframes breathe { 50% { transform: scale(1.12); opacity: 0.2; } }
 
 .ctl.busy { opacity: 0.6; }
@@ -86,8 +86,8 @@ body[data-voice="wake"] .mic { background: rgb(143 236 255 / 0.18); color: var(-
 .top-r { display: inline-flex; align-items: center; gap: 10px; }
 .icon-btn { display: grid; place-items: center; width: 40px; height: 40px; margin-right: -8px; border: 0; border-radius: 12px; background: transparent; color: var(--ice); cursor: pointer; }
 .icon-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
-.banner { display: block; width: 100%; margin: 6px 0 0; padding: 12px 14px; border-radius: 14px; border: 1px solid rgb(255 196 108 / 0.4);
-  background: rgb(255 196 108 / 0.08); color: var(--text); font-size: 14px; text-align: left; cursor: pointer; }
+.banner { display: block; width: 100%; margin: 6px 0 0; padding: 12px 14px; border-radius: 14px; border: 1px solid rgb(var(--gold-rgb) / 0.4);
+  background: rgb(var(--gold-rgb) / 0.08); color: var(--text); font-size: 14px; text-align: left; cursor: pointer; }
 .banner b { color: var(--gold); font-weight: 500; }
 
 .sheet.tall { max-height: calc(100dvh - 24px - var(--safe-t) - var(--safe-b)); overflow-y: auto; }
@@ -104,7 +104,7 @@ body[data-voice="wake"] .mic { background: rgb(143 236 255 / 0.18); color: var(-
 .row b { display: block; font-weight: 500; font-size: 15.5px; }
 .row small { display: block; margin-top: 3px; font-size: 13px; line-height: 1.4; color: var(--muted); }
 .switch { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 51px; height: 31px; margin: 0; border-radius: 999px;
-  background: rgb(255 255 255 / 0.16); cursor: pointer; transition: background 0.2s; }
+  background: rgb(var(--fg-rgb) / 0.16); cursor: pointer; transition: background 0.2s; }
 .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff;
   box-shadow: 0 2px 6px rgb(0 0 0 / 0.35); transition: transform 0.2s var(--ease); }
 .switch:checked { background: var(--mint); }
@@ -112,19 +112,19 @@ body[data-voice="wake"] .mic { background: rgb(143 236 255 / 0.18); color: var(-
 .switch:focus-visible, .btn:focus-visible, .ctl:focus-visible, .ask button:focus-visible, .icon-btn:focus-visible, .chip:focus-visible { outline: 2px solid var(--ice); outline-offset: 2px; }
 
 /* a sheet dims and blurs everything behind it */
-body:has(.sheet:not([hidden]))::after { content: ""; position: fixed; inset: 0; z-index: 19; background: rgb(1 3 6 / 0.62);
+body:has(.sheet:not([hidden]))::after { content: ""; position: fixed; inset: 0; z-index: 19; background: rgb(var(--ink-rgb) / 0.62);
   -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); animation: fade 0.25s var(--ease) both; }
 @keyframes fade { from { opacity: 0; } }
 .sheet { position: fixed; left: 12px; right: 12px; bottom: calc(12px + var(--safe-b)); z-index: 20; padding: 18px; border-radius: 22px;
-  background: #0c121a; border: 1px solid rgb(255 196 108 / 0.35); box-shadow: 0 24px 60px rgb(0 0 0 / 0.6);
+  background: var(--ink-2); border: 1px solid rgb(var(--gold-rgb) / 0.35); box-shadow: 0 24px 60px rgb(0 0 0 / 0.6);
   max-width: 560px; margin: 0 auto; animation: up 0.3s var(--ease) both; }
 @keyframes up { from { transform: translateY(20px); opacity: 0; } }
 .sheet .q { margin: 0 0 16px; font-size: 18px; line-height: 1.4; }
 .yn { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .btn { min-height: 52px; border-radius: 16px; border: 1px solid var(--hair-2); background: transparent; font-size: 16px; font-weight: 500; cursor: pointer; }
-.btn.gold { background: var(--gold); color: #1a1004; border-color: transparent; }
+.btn.gold { background: var(--gold); color: var(--on-gold); border-color: transparent; }
 .toast { position: fixed; top: calc(12px + var(--safe-t)); left: 50%; transform: translateX(-50%); z-index: 30; padding: 10px 16px;
-  border-radius: 999px; background: rgb(14 20 28 / 0.95); border: 1px solid var(--hair-2); font-size: 13.5px; max-width: 90vw; }
+  border-radius: 999px; background: rgb(var(--panel-rgb) / 0.95); border: 1px solid var(--hair-2); font-size: 13.5px; max-width: 90vw; }
 
 /* iPad: a little more room */
 @media (min-width: 700px) {

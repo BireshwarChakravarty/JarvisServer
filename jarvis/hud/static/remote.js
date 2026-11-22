@@ -212,6 +212,7 @@
     $("state").textContent = label;
   }
   function handle(e) {
+    if ((e.type === "hello" || e.type === "theme") && e.theme && window.JarvisTheme) JarvisTheme.apply(e.theme);
     switch (e.type) {
       case "hello":
         setState(e.state || "idle");

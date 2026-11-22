@@ -283,7 +283,8 @@
     if (net.length < 2) return;
     const max = Math.max(60e3, ...net);
     const g = ctx.createLinearGradient(0, 0, c.width, 0);
-    g.addColorStop(0, "rgba(143,236,255,0.05)"); g.addColorStop(1, "rgba(143,236,255,0.9)");
+    const ice = getComputedStyle(document.documentElement).getPropertyValue("--ice-rgb").trim().split(/\s+/).join(",") || "143,236,255";
+    g.addColorStop(0, `rgba(${ice},0.05)`); g.addColorStop(1, `rgba(${ice},0.9)`);
     ctx.beginPath();
     net.forEach((v, i) => {
       const x = (i / (net.length - 1)) * c.width, y = c.height - (v / max) * (c.height - 2) - 1;
@@ -356,7 +357,8 @@
     e.faces.forEach((f) => {
       const [x, y, w, h] = f.box.map((v) => v * scale);
       const X = x + ox, Y = y + oy, k = Math.min(w, h) * 0.22, rad = 6 * dpr;
-      const col = f.name ? "143,236,255" : "255,107,107";
+      const css = getComputedStyle(document.documentElement), chan = (n, d) => css.getPropertyValue(n).trim().split(/\s+/).join(",") || d;
+      const col = f.name ? chan("--ice-rgb", "143,236,255") : chan("--coral-rgb", "255,107,107");
       ctx.strokeStyle = `rgba(${col},0.95)`; ctx.lineWidth = 1.6 * dpr; ctx.lineCap = "round";
       ctx.beginPath();
       ctx.moveTo(X, Y + k); ctx.arcTo(X, Y, X + k, Y, rad); ctx.lineTo(X + k, Y);
@@ -397,6 +399,7 @@
 
   /* ───────────── event dispatch ───────────── */
   function handle(e) {
+    if ((e.type === "hello" || e.type === "theme") && e.theme && window.JarvisTheme) JarvisTheme.apply(e.theme);
     switch (e.type) {
       case "hello":
         owner = e.owner || ""; tick();

@@ -24,6 +24,41 @@
     muted:      { a: [0.55, 0.62, 0.70], b: [0.12, 0.18, 0.28], swirl: 0.1,  glow: 0.35, ring: [120, 140, 160] },
   };
 
+  // Each theme (theme.css / theme.js) recolours the core and rings. mode: 0 light on dark,
+  // 1 dot matrix (the core drawn as a grid of LEDs, rings as dots), 2 glass marble on a light page.
+  const S = (a, b, swirl, glow, ring) => ({ a, b, swirl, glow, ring });
+  const W3 = [0.96, 0.96, 0.96], G3 = [0.46, 0.46, 0.46], R3 = [1.0, 0.17, 0.17], DR3 = [0.55, 0.04, 0.04];
+  const THEMES = {
+    arc: { mode: 0, states: STATES, you: [255, 196, 108], white: [255, 255, 255], label: [220, 240, 255], ink: [3, 5, 8] },
+    dot: { mode: 1, you: [255, 42, 42], white: [255, 255, 255], label: [240, 240, 240], ink: [0, 0, 0], states: {
+      idle: S(W3, G3, 0.25, 0.8, [236, 236, 236]),       listening: S(R3, DR3, 0.45, 1.0, [255, 42, 42]),
+      transcribing: S(W3, G3, 0.9, 0.9, [255, 255, 255]), thinking: S(W3, G3, 1.6, 0.95, [255, 255, 255]),
+      working: S(W3, G3, 2.0, 1.0, [255, 255, 255]),     speaking: S(W3, G3, 0.6, 1.05, [255, 255, 255]),
+      booting: S(W3, G3, 1.2, 0.6, [236, 236, 236]),     error: S(R3, DR3, 0.8, 0.9, [255, 42, 42]),
+      muted: S([0.4, 0.4, 0.4], [0.18, 0.18, 0.18], 0.1, 0.4, [110, 110, 110]) } },
+    glass: { mode: 2, you: [232, 98, 42], white: [12, 17, 32], label: [12, 17, 32], ink: [255, 255, 255], states: {
+      idle: S([0.58, 0.66, 1.0], [0.24, 0.33, 0.96], 0.25, 0.75, [61, 85, 245]),
+      listening: S([1.0, 0.70, 0.48], [0.91, 0.38, 0.16], 0.45, 1.0, [232, 98, 42]),
+      transcribing: S([0.72, 0.64, 1.0], [0.40, 0.30, 0.95], 0.9, 0.9, [110, 90, 240]),
+      thinking: S([0.78, 0.60, 1.0], [0.48, 0.34, 1.0], 1.6, 0.95, [123, 92, 255]),
+      working: S([0.84, 0.60, 1.0], [0.52, 0.30, 0.95], 2.0, 1.0, [140, 80, 240]),
+      speaking: S([0.50, 0.78, 1.0], [0.15, 0.45, 0.98], 0.6, 1.05, [40, 110, 245]),
+      booting: S([0.58, 0.66, 1.0], [0.24, 0.33, 0.96], 1.2, 0.6, [61, 85, 245]),
+      error: S([1.0, 0.55, 0.55], [0.90, 0.28, 0.30], 0.8, 0.9, [229, 72, 77]),
+      muted: S([0.74, 0.76, 0.82], [0.50, 0.53, 0.60], 0.1, 0.5, [120, 128, 145]) } },
+    stark: { mode: 0, you: [255, 74, 61], white: [255, 240, 225], label: [255, 225, 190], ink: [7, 2, 3], states: {
+      idle: S([1.0, 0.84, 0.55], [0.72, 0.05, 0.09], 0.25, 0.75, [255, 207, 122]),
+      listening: S([1.0, 0.90, 0.76], [0.95, 0.24, 0.12], 0.45, 1.0, [255, 74, 61]),
+      transcribing: S([1.0, 0.82, 0.62], [0.82, 0.20, 0.10], 0.9, 0.9, [255, 170, 100]),
+      thinking: S([1.0, 0.78, 0.50], [0.70, 0.12, 0.08], 1.6, 0.95, [255, 150, 80]),
+      working: S([1.0, 0.74, 0.46], [0.74, 0.14, 0.06], 2.0, 1.0, [255, 130, 70]),
+      speaking: S([1.0, 0.90, 0.66], [0.85, 0.08, 0.10], 0.6, 1.05, [255, 215, 140]),
+      booting: S([1.0, 0.84, 0.55], [0.72, 0.05, 0.09], 1.2, 0.6, [255, 207, 122]),
+      error: S([1.0, 0.62, 0.56], [0.90, 0.04, 0.10], 0.8, 0.9, [255, 90, 80]),
+      muted: S([0.56, 0.48, 0.46], [0.22, 0.10, 0.10], 0.1, 0.35, [150, 120, 115]) } },
+  };
+  const themeName = () => (THEMES[document.documentElement.dataset.theme] ? document.documentElement.dataset.theme : "arc");
+
   const UI_SCALE = 1.6;   // #core-ui extends 30% beyond the core on each side (see hud.css)
 
   const VERT = `
@@ -35,7 +70,7 @@
     precision highp float;
     varying vec2 v;
     uniform vec2  uRes;
-    uniform float uTime, uLevel, uSwirl, uGlow, uBirth, uRadius;
+    uniform float uTime, uLevel, uSwirl, uGlow, uBirth, uRadius, uMode, uPitch;
     uniform vec3  uA, uB;
 
     float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -50,7 +85,7 @@
       return s;
     }
 
-    void main() {
+    vec4 shade(vec2 v) {
       vec2 uv = v * vec2(uRes.x / uRes.y, 1.0) / uRadius;
       float t = uTime;
       float r0 = length(uv);
@@ -77,22 +112,42 @@
       if (r < 1.0) {
         float z = sqrt(1.0 - r * r);
         float fres = pow(1.0 - z, 3.0);
-        vec3 deep = uB * (0.12 + 0.35 * plasma);
+        vec3 deep = uMode > 1.5 ? mix(uB, vec3(1.0), 0.30) * (0.62 + 0.38 * plasma) : uB * (0.12 + 0.35 * plasma);
         vec3 light = mix(uB, uA, 0.6);
         float core = exp(-r * r * 11.0) * (0.55 + 0.45 * uLevel);
         float corona = exp(-r * r * 3.0) * 0.35;
         col = deep + light * fil * (0.55 + 0.6 * z) + uA * fres * 1.35 + mix(uA, vec3(1.0), 0.6) * (core + corona);
         alpha = smoothstep(1.0, 0.985, r);
+        if (uMode > 1.5) {            // glass marble: a crisp specular highlight and a bright rim
+          vec3 n = normalize(vec3(uv / max(R, 1e-4), z));
+          float spec = pow(max(dot(n, normalize(vec3(-0.45, 0.55, 0.70))), 0.0), 36.0);
+          col += vec3(1.0) * spec * 0.95 + vec3(1.0) * pow(1.0 - z, 6.0) * 0.5;
+        }
       }
       // halo and sound ripples outside the body
       float d = max(r - 1.0, 0.0);
-      float halo = exp(-d * 5.5) * 0.42 * uGlow;
+      float halo = exp(-d * (uMode > 1.5 ? 9.0 : 5.5)) * (uMode > 1.5 ? 0.30 : 0.42) * uGlow;
       float ripple = uLevel * 0.5 * exp(-d * 2.8) * pow(0.5 + 0.5 * sin(d * 28.0 - t * 7.0), 8.0);
-      vec3 glowc = mix(uB, uA, 0.45);
+      vec3 glowc = uMode > 1.5 ? mix(uA, vec3(1.0), 0.35) : mix(uB, uA, 0.45);
       col += glowc * (halo + ripple) * (1.0 - alpha);
       alpha = max(alpha, clamp(halo + ripple, 0.0, 1.0));
       col *= 0.15 + 0.9 * uGlow;
-      gl_FragColor = vec4(col, alpha);
+      return vec4(col, alpha);
+    }
+
+    void main() {
+      if (uMode < 0.5 || uMode > 1.5) { gl_FragColor = shade(v); return; }
+      // dot matrix: sample the core once per LED cell and light that LED in a few brightness steps
+      vec2 cell = floor(gl_FragCoord.xy / uPitch);
+      vec2 c = (cell + 0.5) * uPitch;
+      vec4 s = shade(c / uRes * 2.0 - 1.0);
+      float lum = clamp(max(s.r, max(s.g, s.b)), 0.0, 1.0) * s.a;
+      float lit = floor(lum * 5.0 + 0.35) / 5.0;
+      float d = length(gl_FragCoord.xy - c) / uPitch;
+      float led = smoothstep(0.40, 0.30, d);
+      float off = s.a > 0.5 ? 0.10 : 0.0;           // unlit LEDs faintly visible inside the body
+      float a = led * max(lit, off);
+      gl_FragColor = vec4(uA * a, a);
     }`;
 
   class Reactor {
@@ -103,7 +158,9 @@
       this.state = "booting";
       this.level = 0; this.target = 0; this.voiceSource = "tts";
       this.t = 0; this.spin = 0; this.sweep = 0; this.birth = 0; this.ringsOn = 0;
-      this.cur = this.clone(STATES.booting);
+      this.th = THEMES[themeName()];
+      this.cur = this.clone(this.th.states.booting);
+      window.addEventListener("jarvis-theme", () => { this.th = THEMES[themeName()]; });
       this.events = [];
       this.bars = new Float32Array(160);
       this.reduced = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -137,7 +194,7 @@
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         this.u = {};
-        ["uRes", "uTime", "uLevel", "uSwirl", "uGlow", "uBirth", "uRadius", "uA", "uB"].forEach((n) => (this.u[n] = gl.getUniformLocation(prog, n)));
+        ["uRes", "uTime", "uLevel", "uSwirl", "uGlow", "uBirth", "uRadius", "uMode", "uPitch", "uA", "uB"].forEach((n) => (this.u[n] = gl.getUniformLocation(prog, n)));
         this.gl = gl;
       } catch (e) { console.warn("WebGL core unavailable, using 2D fallback", e); this.gl = null; }
     }
@@ -152,6 +209,7 @@
     }
 
     setState(s) { if (STATES[s]) this.state = s; }
+    setTheme(name) { if (THEMES[name]) this.th = THEMES[name]; }
     setLevel(v, source) { this.target = Math.max(this.target, Math.min(1, v)); if (source) this.voiceSource = source; }
     setEvents(events) { this.events = events || []; }
     pulse() { this.target = Math.max(this.target, 0.8); }
@@ -171,7 +229,7 @@
       this.last = ts;
       const k = this.reduced ? 0.35 : 1;
       this.t += dt * k;
-      const want = STATES[this.state] || STATES.idle;
+      const want = this.th.states[this.state] || this.th.states.idle;
       const ease = 1 - Math.pow(0.02, dt);          // frame-rate independent smoothing
       for (let i = 0; i < 3; i++) {
         this.cur.a[i] += (want.a[i] - this.cur.a[i]) * ease;
@@ -211,6 +269,8 @@
         gl.uniform1f(u.uGlow, this.cur.glow);
         gl.uniform1f(u.uBirth, birth);
         gl.uniform1f(u.uRadius, this.radiusFrac * 2 / 0.62 * Math.min(1, this.gc.width / this.gc.height));
+        gl.uniform1f(u.uMode, this.th.mode);
+        gl.uniform1f(u.uPitch, Math.max(3, Math.round((this.compact ? 3.2 : 6.5) * this.dpr)));
         gl.uniform3fv(u.uA, this.cur.a);
         gl.uniform3fv(u.uB, this.cur.b);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -232,7 +292,7 @@
     drawRings(busy) {
       const ctx = this.ui, W = this.uc.width, H = this.uc.height, dpr = this.dpr;
       const cx = W / 2, cy = H / 2, base = (Math.min(W, H) / UI_SCALE) * this.radiusFrac;
-      const on = this.ringsOn, rc = this.cur.ring;
+      const on = this.ringsOn, rc = this.cur.ring, th = this.th, dots = th.mode === 1;
       ctx.clearRect(0, 0, W, H);
       if (on <= 0) return;
       ctx.save(); ctx.translate(cx, cy); ctx.lineCap = "round";
@@ -245,9 +305,11 @@
         const a0 = (i / 10) * TAU + 0.05, a1 = ((i + 1) / 10) * TAU - 0.05;
         ctx.strokeStyle = this.rgba(rc, (0.22 + 0.25 * this.cur.glow) * on);
         ctx.lineWidth = 2.2 * dpr;
+        if (dots) ctx.setLineDash([0, 6 * dpr]);
         ctx.beginPath(); ctx.arc(0, 0, rCoil, a0, a0 + (a1 - a0) * on); ctx.stroke();
       }
       ctx.restore();
+      ctx.setLineDash(dots ? [0, 6 * dpr] : []);
       if (busy) {  // indeterminate progress sweep
         const s = this.sweep;
         ctx.strokeStyle = this.rgba(rc, 0.9 * on); ctx.lineWidth = 2.2 * dpr;
@@ -256,7 +318,8 @@
 
       // ── voice ring: radial hairlines driven by live audio
       const rVoice = base * 1.30, n = this.bars.length;
-      const voiceCol = this.state === "listening" || this.voiceSource === "mic" && this.state !== "speaking" ? [255, 196, 108] : rc;
+      const voiceCol = this.state === "listening" || this.voiceSource === "mic" && this.state !== "speaking" ? th.you : rc;
+      ctx.setLineDash([]);
       for (let i = 0; i < n; i++) {
         const wob = 0.5 + 0.5 * Math.sin(i * 0.41 + this.t * 3.3) * Math.sin(i * 0.17 - this.t * 2.1);
         const sym = Math.abs(Math.sin((i / n) * Math.PI * 4 + this.t * 0.5));
@@ -266,6 +329,14 @@
       for (let i = 0; i < n; i++) {
         const a = (i / n) * TAU + top;
         const len = base * (0.012 + this.bars[i] * 0.16);
+        if (dots) {                  // LED bar: a column of dots
+          if (i % 2) continue;
+          ctx.fillStyle = this.rgba(voiceCol, (0.22 + this.bars[i] * 1.2) * on);
+          for (let rr = rVoice; rr <= rVoice + len + 0.1; rr += 4.5 * dpr) {
+            ctx.beginPath(); ctx.arc(Math.cos(a) * rr, Math.sin(a) * rr, 1.25 * dpr, 0, TAU); ctx.fill();
+          }
+          continue;
+        }
         ctx.strokeStyle = this.rgba(voiceCol, (0.16 + this.bars[i] * 1.2) * on);
         ctx.lineWidth = 1.4 * dpr;
         ctx.beginPath();
@@ -278,10 +349,10 @@
       if (this.dialOn > 0.01) {
         const rD = rVoice + base * 0.08, frac = Math.max(0, Math.min(1, this.dial / 100)), o = this.dialOn;
         ctx.lineWidth = 3 * dpr;
-        ctx.strokeStyle = this.rgba([255, 255, 255], 0.08 * o);
+        ctx.strokeStyle = this.rgba(th.white, 0.08 * o);
         ctx.beginPath(); ctx.arc(0, 0, rD, top, top + TAU); ctx.stroke();
-        ctx.strokeStyle = this.rgba([255, 196, 108], 0.95 * o);
-        ctx.shadowColor = "rgba(255,196,108,0.8)"; ctx.shadowBlur = 12 * dpr;
+        ctx.strokeStyle = this.rgba(th.you, 0.95 * o);
+        ctx.shadowColor = this.rgba(th.you, 0.8); ctx.shadowBlur = 12 * dpr;
         ctx.beginPath(); ctx.arc(0, 0, rD, top, top + TAU * frac); ctx.stroke();
         ctx.shadowBlur = 0;
         // readout sits below the ring, on dark glass, never over the bright core
@@ -289,10 +360,10 @@
         ctx.font = `500 ${12 * dpr}px "Geist Mono", ui-monospace, monospace`;
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
         const tw = ctx.measureText(label).width, ph = 22 * dpr;
-        ctx.fillStyle = `rgba(3,5,8,${0.72 * o})`;
+        ctx.fillStyle = this.rgba(th.ink, 0.72 * o);
         ctx.beginPath(); ctx.roundRect(-tw / 2 - 12 * dpr, ly - ph / 2, tw + 24 * dpr, ph, ph / 2); ctx.fill();
-        ctx.strokeStyle = this.rgba([255, 196, 108], 0.45 * o); ctx.lineWidth = 1 * dpr; ctx.stroke();
-        ctx.fillStyle = this.rgba([255, 214, 150], o);
+        ctx.strokeStyle = this.rgba(th.you, 0.45 * o); ctx.lineWidth = 1 * dpr; ctx.stroke();
+        ctx.fillStyle = this.rgba(th.you, o);
         ctx.fillText(label, 0, ly + 0.5 * dpr);
       }
 
@@ -302,8 +373,10 @@
       const now = new Date();
       const hoursNow = now.getHours() % 12 + now.getMinutes() / 60 + now.getSeconds() / 3600;
       const angOf = (h) => top + (h / 12) * TAU;
-      ctx.strokeStyle = this.rgba(rc, 0.10 * on); ctx.lineWidth = 1 * dpr;
+      ctx.strokeStyle = this.rgba(rc, (dots ? 0.25 : 0.10) * on); ctx.lineWidth = 1 * dpr;
+      if (dots) ctx.setLineDash([0, 5 * dpr]);
       ctx.beginPath(); ctx.arc(0, 0, rChrono, top, top + TAU * on); ctx.stroke();
+      ctx.setLineDash([]);
       for (let i = 0; i < 60; i++) {
         if (i / 60 > on) break;
         const a = top + (i / 60) * TAU, major = i % 5 === 0;
@@ -321,18 +394,20 @@
         if (f < nowMs || s > nowMs + 12 * 3600e3) continue;
         const hs = hoursNow + (Math.max(s, nowMs) - nowMs) / 3600e3, hf = hoursNow + (Math.min(f, nowMs + 12 * 3600e3) - nowMs) / 3600e3;
         const live = s <= nowMs;
-        const col = live ? [255, 196, 108] : rc;
+        const col = live ? th.you : rc;
+        if (dots) ctx.setLineDash([0, 6 * dpr]);
         ctx.strokeStyle = this.rgba(col, (live ? 0.95 : 0.6) * on);
         ctx.lineWidth = 3.2 * dpr;
         ctx.beginPath(); ctx.arc(0, 0, rChrono + 13 * dpr, angOf(hs), Math.max(angOf(hs) + 0.02, angOf(hf))); ctx.stroke();
+        ctx.setLineDash([]);
         if (!nextLabel || s < nextLabel.s) nextLabel = { s, a: angOf(hs), e, live };
       }
       // the "now" needle
       const an = angOf(hoursNow);
-      ctx.strokeStyle = this.rgba([255, 255, 255], 0.85 * on); ctx.lineWidth = 1.6 * dpr;
+      ctx.strokeStyle = this.rgba(dots ? th.you : th.white, 0.85 * on); ctx.lineWidth = 1.6 * dpr;
       ctx.beginPath(); ctx.moveTo(Math.cos(an) * (rChrono - 12 * dpr), Math.sin(an) * (rChrono - 12 * dpr));
       ctx.lineTo(Math.cos(an) * (rChrono + 20 * dpr), Math.sin(an) * (rChrono + 20 * dpr)); ctx.stroke();
-      ctx.fillStyle = this.rgba([255, 255, 255], on);
+      ctx.fillStyle = this.rgba(dots ? th.you : th.white, on);
       ctx.beginPath(); ctx.arc(Math.cos(an) * (rChrono + 20 * dpr), Math.sin(an) * (rChrono + 20 * dpr), 2.6 * dpr, 0, TAU); ctx.fill();
       // label the next meeting where it sits on the dial
       if (nextLabel && on > 0.95) {
@@ -341,7 +416,7 @@
         const when = new Date(nextLabel.s).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
         ctx.font = `500 ${11 * dpr}px "Geist Mono", ui-monospace, monospace`;
         ctx.textBaseline = "middle";
-        ctx.fillStyle = this.rgba(nextLabel.live ? [255, 196, 108] : [220, 240, 255], 0.85);
+        ctx.fillStyle = this.rgba(nextLabel.live ? th.you : th.label, 0.85);
         // Keep the label inside the centre column and the window: never over the side panels.
         const cr = this.uc.getBoundingClientRect(), k = cr.width / W;   // canvas px -> CSS px
         const host = this.uc.closest("#presence, .ob-presence") || this.uc.parentElement;

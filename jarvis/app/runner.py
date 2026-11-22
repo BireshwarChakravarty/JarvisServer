@@ -110,12 +110,13 @@ def run_app() -> None:
     import webview
 
     from jarvis.app import menubar
+    from jarvis.core import themes
 
     allow_app_termination()
 
     window = webview.create_window(
         "JARVIS", f"http://{host}:{port}/",
-        width=1480, height=920, min_size=(980, 640), background_color="#030508",
+        width=1480, height=920, min_size=(980, 640), background_color=themes.BACKGROUND[themes.current(sup.cfg)],
         text_select=False,
     )
     sup.window = window
@@ -173,6 +174,8 @@ def run_app() -> None:
         "settings": lambda: (sup.show_window("/setup"), show()),
         "quit": menubar.quit_app,
     }
+    for key in themes.THEMES:                      # Theme ▸ Arc Reactor / Dot Matrix / Liquid Glass / Stark
+        actions[f"theme:{key}"] = (lambda k=key: themes.apply(sup.cfg, k))
     def update_now():
         from jarvis.app.updater import start_update
         from jarvis.mac.system import notify

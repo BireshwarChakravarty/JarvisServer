@@ -11,17 +11,17 @@ body { font-family: var(--sans); color: var(--text); cursor: default; }
 .pill {
   position: absolute; inset: 4px; display: flex; align-items: center; gap: 8px; padding: 0 14px 0 4px;
   border-radius: 999px; overflow: hidden;
-  background: linear-gradient(180deg, rgb(14 22 32 / 0.92), rgb(5 8 13 / 0.94));
-  border: 1px solid rgb(143 236 255 / 0.18);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 0 0 0.5px rgb(0 0 0 / 0.6);
+  background: linear-gradient(180deg, rgb(var(--panel-rgb) / 0.92), rgb(var(--ink-rgb) / 0.94));
+  border: 1px solid rgb(var(--ice-rgb) / 0.18);
+  box-shadow: inset 0 1px 0 rgb(var(--fg-rgb) / 0.06), 0 0 0 0.5px rgb(0 0 0 / 0.6);
   transition: border-color 0.5s var(--ease), opacity 0.45s var(--ease), transform 0.45s var(--ease);
   animation: arrive 0.35s var(--ease);
 }
 /* quiet: fade out (the window itself is taken away a moment later) */
 body.quiet .pill { opacity: 0; transform: scale(0.96); }
 @keyframes arrive { from { opacity: 0; transform: scale(0.94); } }
-body[data-state="listening"] .pill { border-color: rgb(255 196 108 / 0.55); }
-body[data-state="speaking"] .pill { border-color: rgb(143 236 255 / 0.45); }
+body[data-state="listening"] .pill { border-color: rgb(var(--gold-rgb) / 0.55); }
+body[data-state="speaking"] .pill { border-color: rgb(var(--ice-rgb) / 0.45); }
 
 #core { position: relative; flex: none; width: 32px; height: 32px; }
 #core canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -32,8 +32,8 @@ body[data-state="speaking"] .pill { border-color: rgb(143 236 255 / 0.45); }
   letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
 .pip { width: 4px; height: 4px; border-radius: 50%; background: var(--ice); box-shadow: 0 0 8px var(--ice); }
 body[data-state="listening"] .pip { background: var(--gold); box-shadow: 0 0 8px var(--gold); }
-body[data-state="thinking"] .pip, body[data-state="working"] .pip { background: #a9b2ff; box-shadow: 0 0 8px #a9b2ff; }
-body[data-state="error"] .pip { background: #ff7a7a; box-shadow: 0 0 8px #ff7a7a; }
+body[data-state="thinking"] .pip, body[data-state="working"] .pip { background: var(--violet); box-shadow: 0 0 8px var(--violet); }
+body[data-state="error"] .pip { background: var(--coral); box-shadow: 0 0 8px var(--coral); }
 .line { margin: 0; font: 400 11.5px/1.25 var(--sans); color: var(--text);
   white-space: nowrap; overflow: hidden;
   transition: opacity 0.35s var(--ease); }

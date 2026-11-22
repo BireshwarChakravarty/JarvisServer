@@ -98,6 +98,7 @@ def install(actions: dict) -> None:
             ("Hand Control On / Off", "hands", ""),
             ("Pair iPhone or iPad…", "pair", ""),
             ("Learn My Voice…", "learn_voice", ""),
+            ("Theme", "themes", ""),
             (None, None, None),
             ("Settings…", "settings", ","),
             ("Update JARVIS…", "update", ""),
@@ -106,6 +107,19 @@ def install(actions: dict) -> None:
         ):
             if title is None:
                 menu.addItem_(AppKit.NSMenuItem.separatorItem())
+                continue
+            if key == "themes":                     # a submenu with the four looks
+                from jarvis.core import themes
+
+                mi = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, None, "")
+                sub = AppKit.NSMenu.alloc().initWithTitle_(title)
+                for tid, info in themes.THEMES.items():
+                    t = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(info["name"], "run:", "")
+                    t.setTarget_(_target)
+                    t.setRepresentedObject_(f"theme:{tid}")
+                    sub.addItem_(t)
+                mi.setSubmenu_(sub)
+                menu.addItem_(mi)
                 continue
             mi = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, "run:", shortcut)
             mi.setTarget_(_target)

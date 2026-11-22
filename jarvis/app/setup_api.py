@@ -17,6 +17,7 @@ from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
 
 from jarvis.aio import spawn
+from jarvis.core import themes
 from jarvis.events import bus
 
 log = logging.getLogger("jarvis.setup")
@@ -125,7 +126,17 @@ def make_router(sup) -> APIRouter:
                                      and sup.jarvis.gestures.enabled),
                 "voice": cfg.get("voice.tts.voice", "bm_george"),
             },
+            "theme": themes.current(cfg),
+            "themes": themes.listing(),
         }
+
+    @r.post("/api/setup/theme")
+    async def set_theme(body: dict = Body(...)):
+        key = themes.normalize(str(body.get("theme", "")))
+        if key is None:
+            return JSONResponse({"ok": False, "error": "unknown theme"}, status_code=400)
+        themes.apply(sup.cfg, key)
+        return {"ok": True, "theme": key}
 
     # ── profile ────────────────────────────────────────────────────────────
     @r.post("/api/setup/profile")

@@ -150,6 +150,18 @@ def match(text: str, now: dt.datetime | None = None, rng: random.Random | None =
         return Quick("voice_id", {"action": "learn"}, "", note="started learning the user's voice")
     if re.fullmatch(r"forget my voice|stop recogni[sz]ing my voice|turn off voice (id|recognition)", t):
         return Quick("voice_id", {"action": "forget"}, "", note="forgot the user's voice")
+    m = re.fullmatch(r"(?:(?:switch|change|set|go|turn)(?: it| yourself| the (?:theme|look|colou?rs?))?(?: over)? "
+                     r"(?:to|into) |use |try |make it |put on )?(?:the )?(.+?) (theme|look|skin|mode)(?: please)?", t)
+    # "dark mode", "focus mode", "party mode"… belong to the Mac and to protocols, not to JARVIS's look
+    if m and not (m.group(2) == "mode" and m.group(1) not in ("dot matrix", "liquid glass", "arc reactor", "stark",
+                                                               "glass", "dot")):
+        from jarvis.core import themes
+
+        key = themes.normalize(m.group(1))
+        if key:
+            name = themes.THEMES[key]["name"]
+            return Quick("set_theme", {"theme": key}, _pick([f"{name}.", f"{name} it is.", "Done."], rng),
+                         note=f"switched to the {name} theme")
     if re.fullmatch(r"lock( the| my)?( mac| screen| computer)?( now)?", t):
         return Quick("system_action", {"action": "lock_screen"}, _pick(["Locking it now.", "Locking."], rng),
                      note="locked the Mac")

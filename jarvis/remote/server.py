@@ -31,6 +31,7 @@ from fastapi import Body, FastAPI, WebSocket
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from jarvis.core import themes
 from jarvis.events import bus
 
 log = logging.getLogger("jarvis.remote")
@@ -39,7 +40,7 @@ PORT = 7778
 SECURE_PORT = 7779
 
 FORWARD = {"hello", "state", "speaking", "reply", "transcript", "confirm", "confirm_result", "agenda", "weather",
-           "protocols", "hand_control", "mic", "announce", "error", "interrupted", "level"}
+           "protocols", "hand_control", "mic", "announce", "error", "interrupted", "level", "theme"}
 REPLAY = {"agenda", "weather", "protocols", "hand_control", "mic", "state"}
 COMMANDS = {"text", "stop", "confirm", "protocol", "mute", "hand_control", "listen", "show", "lock", "voice", "ping"}
 
@@ -184,7 +185,7 @@ def create_remote_app(supervisor, store, certs=None) -> FastAPI:
         cfg = supervisor.cfg
         j = supervisor.jarvis
         link.put({"type": "hello", "owner": cfg.get("owner.name", ""), "title": cfg.get("owner.title", "sir"),
-                  "device": device, "state": bus.state.get("state", "idle"),
+                  "device": device, "state": bus.state.get("state", "idle"), "theme": themes.current(cfg),
                   "voice": {"secure": link.secure, "stt": bool(j is not None and getattr(j, "stt", None)),
                             "secure_port": secure_port()}})
         latest: dict[str, dict] = {}

@@ -684,6 +684,26 @@ async def voice_id(ctx, action: str):
             "I haven't learned your voice yet. Say “learn my voice” to set it up.")
 
 
+@tool("Change JARVIS's look. Four themes restyle everything at once (the HUD, the core, the mini panel, Settings "
+      "and the iPhone/iPad companion): 'arc' Arc Reactor (ice-blue on black, the original), 'dot' Dot Matrix "
+      "(black, white and red LED dots), 'glass' Liquid Glass (light, frosted), 'stark' Stark (crimson and gold). "
+      "'list' says what there is. Use for 'switch to the dot matrix theme', 'make it light', 'change your look'.",
+      {"theme": _p("arc, dot, glass, stark or list (a description like 'red and gold' works too)")}, ["theme"],
+      category="self")
+async def set_theme(ctx, theme: str):
+    from jarvis.core import themes
+
+    if (theme or "").strip().lower() in ("list", "options", "which", "what", ""):
+        now = themes.current(ctx.cfg)
+        return "Themes: " + "; ".join(f"{t['name']}{' (current)' if t['id'] == now else ''}: {t['blurb']}"
+                                      for t in themes.listing())
+    key = themes.normalize(theme)
+    if key is None:
+        return f"I don't have a theme called {theme!r}. There's Arc Reactor, Dot Matrix, Liquid Glass and Stark."
+    themes.apply(ctx.cfg, key)
+    return f"Switched to {themes.THEMES[key]['name']}."
+
+
 @tool("Update JARVIS to the latest version: downloads the newest verified build, installs it (keeping "
       "every permission) and restarts. JARVIS goes quiet for a minute or two.", category="self", confirm=True,
       confirm_message="update myself and restart")
