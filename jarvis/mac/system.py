@@ -73,9 +73,9 @@ def running_apps() -> list[str]:
     return [a.strip() for a in out.split(",") if a.strip()]
 
 
-def frontmost_app() -> str:
+def frontmost_app(fallback: bool = True) -> str:
     """The app in front. Asked of the window server directly (instant, no permission needed); the old
-    AppleScript route through System Events is only a fallback, as it can take a second or hang."""
+    AppleScript route through System Events is only a fallback (it can take a second or hang)."""
     try:
         from AppKit import NSWorkspace
 
@@ -84,6 +84,8 @@ def frontmost_app() -> str:
             return str(app.localizedName())
     except Exception:
         pass
+    if not fallback:
+        return ""
     try:
         return osascript(
             'tell application "System Events" to get name of first application process whose frontmost is true'

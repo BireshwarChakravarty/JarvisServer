@@ -116,7 +116,8 @@ def test_a_failing_hud_command_keeps_the_link(cfg):
 
 
 def test_live_context_never_holds_up_an_answer(cfg, monkeypatch):
-    """The front app and battery go along with each request; a slow reading is left out, not waited for."""
+    """The front app and battery go along with each request, but an answer never waits for them: the
+    battery is refreshed in the background and the latest reading is used."""
     import asyncio
     import time
 
@@ -127,26 +128,24 @@ def test_live_context_never_holds_up_an_answer(cfg, monkeypatch):
 
     def slow_battery():
         calls["battery"] += 1
-        time.sleep(2)
+        time.sleep(0.5)
         return {"percent": 80, "state": "charging"}
 
     monkeypatch.setattr(mac, "IS_MAC", True)
-    monkeypatch.setattr(mac, "frontmost_app", lambda: "Safari")
+    monkeypatch.setattr(mac, "frontmost_app", lambda fallback=True: "Safari")
     monkeypatch.setattr(mac, "battery", slow_battery)
     app = Jarvis(cfg, headless=True)
 
-    async def timed():
+    async def run():
         t0 = time.monotonic()
-        got = await app._live_context()
-        return got, time.monotonic() - t0
-    ctx, took = asyncio.run(timed())
-    assert took < 1.0                              # the answer goes ahead without the slow reading
-    assert ctx["frontmost app"] == "Safari" and "battery" not in ctx
-
-    monkeypatch.setattr(mac, "battery", lambda: calls.__setitem__("battery", calls["battery"] + 1) or {"percent": 55, "state": "discharging"})
-    app._battery_cache = None
-    ctx = asyncio.run(app._live_context())
-    assert ctx["frontmost app"] == "Safari" and ctx["battery"] == "55% discharging"
-    n = calls["battery"]
-    asyncio.run(app._live_context())
-    assert calls["battery"] == n                  # read at most once a minute
+        first = await app._live_context()
+        took = time.monotonic() - t0
+        await asyncio.sleep(0.8)                      # the background reading lands
+        second = await app._live_context()
+        third = await app._live_context()
+        return first, took, second, third
+    first, took, second, third = asyncio.run(run())
+    assert took < 0.1                                  # no waiting at all
+    assert first["frontmost app"] == "Safari" and "battery" not in first
+    assert second["battery"] == "80% charging" and third["battery"] == "80% charging"
+    assert calls["battery"] == 1                       # read at most once a minute
