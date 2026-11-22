@@ -24,4 +24,6 @@
   const q = new URLSearchParams(location.search).get("theme");
   apply(q || store.get() || "arc", false);
   window.JarvisTheme = { THEMES, apply: (n) => apply(n, true), get: () => root.dataset.theme || "arc" };
+  // another JARVIS window (Settings, the HUD) switched: follow it straight away, before the server's event lands
+  window.addEventListener("storage", (e) => { if (e.key === KEY && e.newValue) apply(e.newValue, true); });
 })();

@@ -686,8 +686,9 @@ async def voice_id(ctx, action: str):
 
 @tool("Change JARVIS's look. Four themes restyle everything at once (the HUD, the core, the mini panel, Settings "
       "and the iPhone/iPad companion): 'arc' Arc Reactor (ice-blue on black, the original), 'dot' Dot Matrix "
-      "(black, white and red LED dots), 'glass' Liquid Glass (light, frosted), 'stark' Stark (crimson and gold). "
-      "'list' says what there is. Use for 'switch to the dot matrix theme', 'make it light', 'change your look'.",
+      "(black, white and red LED dots), 'glass' Midnight Glass (frosted dark glass), 'stark' Stark (crimson and gold). "
+      "All four are dark; there is no light theme. "
+      "'list' says what there is. Use for 'switch to the dot matrix theme', 'change your look'.",
       {"theme": _p("arc, dot, glass, stark or list (a description like 'red and gold' works too)")}, ["theme"],
       category="self")
 async def set_theme(ctx, theme: str):
@@ -699,7 +700,7 @@ async def set_theme(ctx, theme: str):
                                       for t in themes.listing())
     key = themes.normalize(theme)
     if key is None:
-        return f"I don't have a theme called {theme!r}. There's Arc Reactor, Dot Matrix, Liquid Glass and Stark."
+        return f"I don't have a theme called {theme!r}. There's Arc Reactor, Dot Matrix, Midnight Glass and Stark."
     themes.apply(ctx.cfg, key)
     return f"Switched to {themes.THEMES[key]['name']}."
 

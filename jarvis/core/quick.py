@@ -153,7 +153,7 @@ def match(text: str, now: dt.datetime | None = None, rng: random.Random | None =
     m = re.fullmatch(r"(?:(?:switch|change|set|go|turn)(?: it| yourself| the (?:theme|look|colou?rs?))?(?: over)? "
                      r"(?:to|into) |use |try |make it |put on )?(?:the )?(.+?) (theme|look|skin|mode)(?: please)?", t)
     # "dark mode", "focus mode", "party mode"… belong to the Mac and to protocols, not to JARVIS's look
-    if m and not (m.group(2) == "mode" and m.group(1) not in ("dot matrix", "liquid glass", "arc reactor", "stark",
+    if m and not (m.group(2) == "mode" and m.group(1) not in ("dot matrix", "liquid glass", "midnight glass", "arc reactor", "stark",
                                                                "glass", "dot")):
         from jarvis.core import themes
 

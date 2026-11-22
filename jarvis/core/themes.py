@@ -12,18 +12,18 @@ import re
 THEMES: dict[str, dict[str, str]] = {
     "arc": {"name": "Arc Reactor", "blurb": "Ice-blue holographic light on deep black. The original."},
     "dot": {"name": "Dot Matrix", "blurb": "Black, white and signal red. LED dot type, a dot-grid core."},
-    "glass": {"name": "Liquid Glass", "blurb": "Light and airy. Frosted layers over a soft aurora."},
+    "glass": {"name": "Midnight Glass", "blurb": "Frosted, translucent dark glass over a deep aurora."},
     "stark": {"name": "Stark", "blurb": "Armour crimson and brushed gold on near-black."},
 }
 DEFAULT = "arc"
 # the window's own colour while the page loads, so opening JARVIS never flashes the wrong one
-BACKGROUND = {"arc": "#030508", "dot": "#000000", "glass": "#eef1f8", "stark": "#070203"}
+BACKGROUND = {"arc": "#030508", "dot": "#000000", "glass": "#06070d", "stark": "#070203"}
 
 _ALIASES = [
     ("dot", r"dot[\s-]*matrix|dots?|led|matrix|retro|pixel|red,? white and black|black,? white and red|mono(chrome)?"),
-    ("glass", r"liquid[\s-]*glass|glass|light|white|bright|day|frost(ed)?|aurora|apple"),
+    ("glass", r"midnight([\s-]*glass)?|liquid[\s-]*glass|glass|frost(ed)?|aurora|apple"),
     ("stark", r"stark|iron[\s-]*man|mark|armou?r|crimson|red and gold|gold and red|hot[\s-]*rod|red"),
-    ("arc", r"arc([\s-]*reactor)?|reactor|classic|original|default|blue|normal|standard|dark"),
+    ("arc", r"arc([\s-]*reactor)?|reactor|classic|original|default|blue|normal|standard"),
 ]
 
 

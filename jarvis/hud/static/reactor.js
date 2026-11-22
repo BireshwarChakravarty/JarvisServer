@@ -25,7 +25,7 @@
   };
 
   // Each theme (theme.css / theme.js) recolours the core and rings. mode: 0 light on dark,
-  // 1 dot matrix (the core drawn as a grid of LEDs, rings as dots), 2 glass marble on a light page.
+  // 1 dot matrix (the core drawn as a grid of LEDs, rings as dots), 2 glass marble (specular highlight and rim).
   const S = (a, b, swirl, glow, ring) => ({ a, b, swirl, glow, ring });
   const W3 = [0.96, 0.96, 0.96], G3 = [0.46, 0.46, 0.46], R3 = [1.0, 0.17, 0.17], DR3 = [0.55, 0.04, 0.04];
   const THEMES = {
@@ -36,16 +36,16 @@
       working: S(W3, G3, 2.0, 1.0, [255, 255, 255]),     speaking: S(W3, G3, 0.6, 1.05, [255, 255, 255]),
       booting: S(W3, G3, 1.2, 0.6, [236, 236, 236]),     error: S(R3, DR3, 0.8, 0.9, [255, 42, 42]),
       muted: S([0.4, 0.4, 0.4], [0.18, 0.18, 0.18], 0.1, 0.4, [110, 110, 110]) } },
-    glass: { mode: 2, you: [232, 98, 42], white: [12, 17, 32], label: [12, 17, 32], ink: [255, 255, 255], states: {
-      idle: S([0.58, 0.66, 1.0], [0.24, 0.33, 0.96], 0.25, 0.75, [61, 85, 245]),
-      listening: S([1.0, 0.70, 0.48], [0.91, 0.38, 0.16], 0.45, 1.0, [232, 98, 42]),
-      transcribing: S([0.72, 0.64, 1.0], [0.40, 0.30, 0.95], 0.9, 0.9, [110, 90, 240]),
-      thinking: S([0.78, 0.60, 1.0], [0.48, 0.34, 1.0], 1.6, 0.95, [123, 92, 255]),
-      working: S([0.84, 0.60, 1.0], [0.52, 0.30, 0.95], 2.0, 1.0, [140, 80, 240]),
-      speaking: S([0.50, 0.78, 1.0], [0.15, 0.45, 0.98], 0.6, 1.05, [40, 110, 245]),
-      booting: S([0.58, 0.66, 1.0], [0.24, 0.33, 0.96], 1.2, 0.6, [61, 85, 245]),
-      error: S([1.0, 0.55, 0.55], [0.90, 0.28, 0.30], 0.8, 0.9, [229, 72, 77]),
-      muted: S([0.74, 0.76, 0.82], [0.50, 0.53, 0.60], 0.1, 0.5, [120, 128, 145]) } },
+    glass: { mode: 2, you: [255, 180, 140], white: [255, 255, 255], label: [225, 230, 255], ink: [6, 7, 13], states: {
+      idle: S([0.72, 0.76, 1.0], [0.36, 0.26, 0.92], 0.25, 0.75, [165, 182, 255]),
+      listening: S([1.0, 0.82, 0.72], [0.92, 0.32, 0.55], 0.45, 1.0, [255, 180, 140]),
+      transcribing: S([0.80, 0.74, 1.0], [0.46, 0.30, 0.95], 0.9, 0.9, [190, 170, 255]),
+      thinking: S([0.84, 0.72, 1.0], [0.52, 0.28, 0.98], 1.6, 0.95, [198, 168, 255]),
+      working: S([0.86, 0.70, 1.0], [0.56, 0.26, 0.92], 2.0, 1.0, [210, 160, 255]),
+      speaking: S([0.66, 0.90, 1.0], [0.20, 0.42, 0.98], 0.6, 1.05, [150, 205, 255]),
+      booting: S([0.72, 0.76, 1.0], [0.36, 0.26, 0.92], 1.2, 0.6, [165, 182, 255]),
+      error: S([1.0, 0.62, 0.66], [0.90, 0.20, 0.32], 0.8, 0.9, [255, 107, 129]),
+      muted: S([0.56, 0.58, 0.68], [0.20, 0.20, 0.30], 0.1, 0.35, [130, 135, 160]) } },
     stark: { mode: 0, you: [255, 74, 61], white: [255, 240, 225], label: [255, 225, 190], ink: [7, 2, 3], states: {
       idle: S([1.0, 0.84, 0.55], [0.72, 0.05, 0.09], 0.25, 0.75, [255, 207, 122]),
       listening: S([1.0, 0.90, 0.76], [0.95, 0.24, 0.12], 0.45, 1.0, [255, 74, 61]),
@@ -112,7 +112,7 @@
       if (r < 1.0) {
         float z = sqrt(1.0 - r * r);
         float fres = pow(1.0 - z, 3.0);
-        vec3 deep = uMode > 1.5 ? mix(uB, vec3(1.0), 0.30) * (0.62 + 0.38 * plasma) : uB * (0.12 + 0.35 * plasma);
+        vec3 deep = uB * (0.12 + 0.35 * plasma);
         vec3 light = mix(uB, uA, 0.6);
         float core = exp(-r * r * 11.0) * (0.55 + 0.45 * uLevel);
         float corona = exp(-r * r * 3.0) * 0.35;
@@ -121,14 +121,14 @@
         if (uMode > 1.5) {            // glass marble: a crisp specular highlight and a bright rim
           vec3 n = normalize(vec3(uv / max(R, 1e-4), z));
           float spec = pow(max(dot(n, normalize(vec3(-0.45, 0.55, 0.70))), 0.0), 36.0);
-          col += vec3(1.0) * spec * 0.95 + vec3(1.0) * pow(1.0 - z, 6.0) * 0.5;
+          col += vec3(1.0) * spec * 0.85 + mix(uA, vec3(1.0), 0.5) * pow(1.0 - z, 6.0) * 0.45;
         }
       }
       // halo and sound ripples outside the body
       float d = max(r - 1.0, 0.0);
-      float halo = exp(-d * (uMode > 1.5 ? 9.0 : 5.5)) * (uMode > 1.5 ? 0.30 : 0.42) * uGlow;
+      float halo = exp(-d * 5.5) * 0.42 * uGlow;
       float ripple = uLevel * 0.5 * exp(-d * 2.8) * pow(0.5 + 0.5 * sin(d * 28.0 - t * 7.0), 8.0);
-      vec3 glowc = uMode > 1.5 ? mix(uA, vec3(1.0), 0.35) : mix(uB, uA, 0.45);
+      vec3 glowc = mix(uB, uA, 0.45);
       col += glowc * (halo + ripple) * (1.0 - alpha);
       alpha = max(alpha, clamp(halo + ripple, 0.0, 1.0));
       col *= 0.15 + 0.9 * uGlow;

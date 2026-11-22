@@ -174,7 +174,7 @@ def run_app() -> None:
         "settings": lambda: (sup.show_window("/setup"), show()),
         "quit": menubar.quit_app,
     }
-    for key in themes.THEMES:                      # Theme ▸ Arc Reactor / Dot Matrix / Liquid Glass / Stark
+    for key in themes.THEMES:                      # Theme ▸ Arc Reactor / Dot Matrix / Midnight Glass / Stark
         actions[f"theme:{key}"] = (lambda k=key: themes.apply(sup.cfg, k))
     def update_now():
         from jarvis.app.updater import start_update
