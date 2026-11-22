@@ -35,6 +35,14 @@ jobs:
           echo "CLAUDE_BIN=$(which claude)" >> "$GITHUB_ENV"
           claude --version
 
+      - name: Diagnose the quick-yes listening test (temporary)
+        continue-on-error: true
+        run: |
+          python -m pip install -e ".[dev]"
+          python -m pytest tests/test_listening_sim.py -k "quick_yes or wake_word_then_straight" -s -p no:cacheprovider \
+            -o log_cli=true --log-cli-level=DEBUG --log-cli-format="%(relativeCreated)6d %(name)s %(message)s" 2>&1 \
+            | grep -v "jarvis.tools\|httpx\|httpcore" | tail -250
+
       - name: Unit tests (source)
         run: |
           python -m pip install -e ".[dev]"
