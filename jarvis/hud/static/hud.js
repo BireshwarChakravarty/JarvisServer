@@ -10,7 +10,7 @@
   function partOfDay(h) { return h >= 5 && h < 12 ? "Good morning" : h >= 12 && h < 17 ? "Good afternoon" : "Good evening"; }
   function tick() {
     const d = new Date();
-    const parts = new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" }).formatToParts(d);
+    const parts = new Intl.DateTimeFormat([], JarvisClock.options({ hour: JarvisClock.get() ? "2-digit" : "numeric", minute: "2-digit" })).formatToParts(d);
     const hm = parts.filter((p) => p.type !== "dayPeriod").map((p) => p.value).join("").trim();
     const period = (parts.find((p) => p.type === "dayPeriod") || {}).value || "";
     $("time").innerHTML = `${hm}<span class="sec">${String(d.getSeconds()).padStart(2, "0")}</span>` +
@@ -19,6 +19,7 @@
     $("salute").textContent = `${partOfDay(d.getHours())}${owner ? ", " + owner : ""}.`;
   }
   setInterval(tick, 1000); tick();
+  window.addEventListener("jarvis-clock", () => { tick(); if (agenda.length) renderAgenda(); });
 
   /* ───────────── state ───────────── */
   const STATUS = {
@@ -190,7 +191,7 @@
       else if (!e.all_day && f < now) li.classList.add("past");
       else if (!e.all_day && !nextMarked && s > now) { li.classList.add("next"); nextMarked = true; relText = rel(s - now); }
       const t = document.createElement("span"); t.className = "t";
-      t.textContent = e.all_day ? "All day" : (e.time || "").replace(/\s?–\s?.*/, "");
+      t.textContent = e.all_day ? "All day" : e.start ? JarvisClock.time(e.start) : (e.time || "").replace(/\s?–\s?.*/, "");
       if (li.classList.contains("now")) t.textContent += "  ·  now";
       if (relText) { const r = document.createElement("span"); r.className = "rel"; r.textContent = relText; t.appendChild(r); }
       const n = document.createElement("span"); n.className = "n"; n.textContent = e.title;
@@ -211,7 +212,7 @@
       const li = document.createElement("li");
       const c = document.createElement("span"); c.className = "c";
       c.textContent = left >= 3600
-        ? new Date(a.when * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+        ? JarvisClock.time(a.when * 1000)
         : `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
       const n = document.createElement("span"); n.textContent = a.message;
       li.append(n, c); ul.appendChild(li);
@@ -400,6 +401,7 @@
   /* ───────────── event dispatch ───────────── */
   function handle(e) {
     if ((e.type === "hello" || e.type === "theme") && e.theme && window.JarvisTheme) JarvisTheme.apply(e.theme);
+    if ((e.type === "hello" || e.type === "prefs") && "clock24" in e) JarvisClock.set(e.clock24);
     switch (e.type) {
       case "hello":
         owner = e.owner || ""; tick();
@@ -509,7 +511,7 @@
       "Optical sensors online", "Facial recognition · tracking Tony", "Neural link · claude-opus-5-5"]
       .forEach((m, i) => setTimeout(() => handle({ type: "boot", message: m, ok: true }), 260 * i));
     const at = (mins) => new Date(Date.now() + mins * 60e3);
-    const span = (a, b) => `${at(a).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} – ${at(b).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+    const span = (a, b) => `${JarvisClock.time(at(a))} – ${JarvisClock.time(at(b))}`;
     setTimeout(() => {
       handle({ type: "state", state: "idle" });
       setWeather({ temperature: 14, condition: "partly cloudy", code: 2, is_day: true, high: 17, low: 9, rain_chance_12h: 20, location: "London, United Kingdom" });

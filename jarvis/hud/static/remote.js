@@ -213,6 +213,7 @@
   }
   function handle(e) {
     if ((e.type === "hello" || e.type === "theme") && e.theme && window.JarvisTheme) JarvisTheme.apply(e.theme);
+    if ((e.type === "hello" || e.type === "prefs") && "clock24" in e) JarvisClock.set(e.clock24);
     switch (e.type) {
       case "hello":
         setState(e.state || "idle");
@@ -233,7 +234,7 @@
       case "error": if (!e.replay) toast(e.message, 3500); break;
       case "interrupted": stopPlayback(); break;
       case "weather": if (e.temperature != null) $("wx").textContent = `${Math.round(e.temperature)}° ${e.condition || ""}`; break;
-      case "agenda": nextUp(e.events || []); break;
+      case "agenda": lastEvents = e.events || []; nextUp(lastEvents); break;
       case "protocols": protocols(e.items || []); break;
       // voice
       case "audio": audioMeta = e; break;
@@ -243,6 +244,8 @@
       case "dismissed": chime([1320, 990]); break;
     }
   }
+  let lastEvents = [];
+  window.addEventListener("jarvis-clock", () => nextUp(lastEvents));
   function nextUp(events) {
     const now = Date.now();
     const e = events.filter((x) => x.start && !x.all_day && new Date(x.end || x.start).getTime() > now)
@@ -251,7 +254,7 @@
     if (!e) { box.hidden = true; return; }
     const s = new Date(e.start).getTime();
     box.innerHTML = "<span></span> <b></b>";
-    box.querySelector("span").textContent = s <= now ? "Now ·" : new Date(s).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + " ·";
+    box.querySelector("span").textContent = s <= now ? "Now ·" : JarvisClock.time(s) + " ·";
     box.querySelector("b").textContent = e.title;
     box.hidden = false;
   }

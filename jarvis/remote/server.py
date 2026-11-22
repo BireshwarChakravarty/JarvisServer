@@ -28,10 +28,11 @@ from pathlib import Path
 
 import numpy as np
 from fastapi import Body, FastAPI, WebSocket
-from fastapi.responses import FileResponse, JSONResponse, Response
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse, Response
 
 from jarvis.core import themes
+from jarvis.hud import assets
+from jarvis.hud.assets import RevalidatedStatic
 from jarvis.events import bus
 
 log = logging.getLogger("jarvis.remote")
@@ -40,7 +41,7 @@ PORT = 7778
 SECURE_PORT = 7779
 
 FORWARD = {"hello", "state", "speaking", "reply", "transcript", "confirm", "confirm_result", "agenda", "weather",
-           "protocols", "hand_control", "mic", "announce", "error", "interrupted", "level", "theme"}
+           "protocols", "hand_control", "mic", "announce", "error", "interrupted", "level", "theme", "prefs"}
 REPLAY = {"agenda", "weather", "protocols", "hand_control", "mic", "state"}
 COMMANDS = {"text", "stop", "confirm", "protocol", "mute", "hand_control", "listen", "show", "lock", "voice", "ping"}
 
@@ -117,12 +118,12 @@ def create_remote_app(supervisor, store, certs=None) -> FastAPI:
             return JSONResponse({"error": "home network only"}, status_code=403)
         return await call_next(request)
 
-    app.mount("/remote/static", StaticFiles(directory=STATIC), name="static")
+    app.mount("/remote/static", RevalidatedStatic(directory=STATIC), name="static")
 
     @app.get("/")
     @app.get("/remote")
     async def page():
-        return FileResponse(STATIC / "remote.html", headers={"Cache-Control": "no-store"})
+        return assets.page(STATIC / "remote.html", STATIC, headers={"Cache-Control": "no-store"})
 
     @app.get("/remote/manifest.webmanifest")
     async def manifest():
@@ -185,7 +186,7 @@ def create_remote_app(supervisor, store, certs=None) -> FastAPI:
         cfg = supervisor.cfg
         j = supervisor.jarvis
         link.put({"type": "hello", "owner": cfg.get("owner.name", ""), "title": cfg.get("owner.title", "sir"),
-                  "device": device, "state": bus.state.get("state", "idle"), "theme": themes.current(cfg),
+                  "device": device, "state": bus.state.get("state", "idle"), "theme": themes.current(cfg), "clock24": themes.clock_24h(cfg),
                   "voice": {"secure": link.secure, "stt": bool(j is not None and getattr(j, "stt", None)),
                             "secure_port": secure_port()}})
         latest: dict[str, dict] = {}

@@ -705,6 +705,20 @@ async def set_theme(ctx, theme: str):
     return f"Switched to {themes.THEMES[key]['name']}."
 
 
+@tool("Show times as 24-hour (13:05) or 12-hour (1:05 PM) everywhere JARVIS shows a time (HUD clock, agenda, "
+      "mini panel, phone); 'auto' follows the Mac's own setting. Use for 'use 24 hour time', 'switch to a 12 hour clock'.",
+      {"mode": _p("24, 12 or auto", enum=["24", "12", "auto"])}, ["mode"], category="self")
+async def clock_format(ctx, mode: str):
+    from jarvis.core import themes
+
+    if mode not in ("24", "12", "auto"):
+        return "Say 24-hour, 12-hour, or same as the Mac."
+    shown = await asyncio.to_thread(themes.set_clock, ctx.cfg, mode)
+    if mode == "auto":
+        return "Following the Mac's clock setting" + (" (24-hour)." if shown else " (12-hour)." if shown is False else ".")
+    return "24-hour time." if mode == "24" else "12-hour time."
+
+
 @tool("Update JARVIS to the latest version: downloads the newest verified build, installs it (keeping "
       "every permission) and restarts. JARVIS goes quiet for a minute or two.", category="self", confirm=True,
       confirm_message="update myself and restart")

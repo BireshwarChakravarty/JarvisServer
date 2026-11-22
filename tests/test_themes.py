@@ -138,3 +138,58 @@ def test_the_mini_capsule_and_phone_follow_the_theme():
     assert 'addEventListener("storage"' in (STATIC / "theme.js").read_text()
     css = (STATIC / "theme.css").read_text()
     assert ':root[data-theme="glass"] #pill' in css                 # smoked, never see-through on a bright wallpaper
+
+
+def test_pages_always_load_the_matching_scripts():
+    """After an update the window must fetch the new scripts, never run old cached ones (an old core
+    inside a new page was how a theme reached the page but not the core)."""
+    from fastapi.testclient import TestClient
+
+    from jarvis.hud import assets
+    from jarvis.hud.server import create_app
+
+    client = TestClient(create_app(None))
+    html = client.get("/mini").text
+    assert re.search(r'/static/reactor\.js\?v=[0-9a-f]{10}"', html)
+    assert re.search(r'/static/theme\.css\?v=[0-9a-f]{10}"', html)
+    assert "fonts.googleapis.com/css2?family=Geist" in html                  # outside links untouched
+    r = client.get("/static/reactor.js")
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-cache"
+    # the fingerprint follows the file's contents
+    assert assets.fingerprint(STATIC / "reactor.js") in html
+    assert assets.versioned('<script src="/remote/static/remote.js"></script>', STATIC).count("?v=") == 1
+
+
+@pytest.mark.parametrize("said,mode", [("use 24 hour time", "24"), ("switch to a 12 hour clock", "12"),
+                                       ("24-hour clock", "24"), ("use twenty four hour time", "24")])
+def test_clock_by_voice(said, mode):
+    q = quick.match(said)
+    assert q is not None and q.tool == "clock_format" and q.args == {"mode": mode}
+
+
+@pytest.mark.parametrize("said", ["24 hours", "set a 24 hour timer", "for 12 hours"])
+def test_clock_leaves_durations_alone(said):
+    q = quick.match(said)
+    assert q is None or q.tool != "clock_format"
+
+
+def test_clock_setting_saves_and_tells_every_window(tmp_path, monkeypatch):
+    cfg, seen = Cfg(tmp_path), []
+    bus = SimpleNamespace(emit=lambda kind, **k: seen.append((kind, k)))
+    monkeypatch.setattr(themes, "mac_uses_24h", lambda: True)
+    assert themes.clock_setting(cfg) == "auto" and themes.clock_24h(cfg) is True      # follows the Mac
+    assert themes.set_clock(cfg, "12", bus=bus) is False
+    assert themes.clock_setting(cfg) == "12" and "clock_24h: false" in cfg.user_config_path.read_text()
+    assert seen[-1] == ("prefs", {"clock24": False})
+    themes.set_clock(cfg, "auto", bus=bus)
+    assert themes.clock_24h(cfg) is True and seen[-1] == ("prefs", {"clock24": True})
+
+
+def test_every_shown_time_goes_through_the_clock_setting():
+    for page in ("hud.js", "mini.js", "remote.js", "reactor.js"):
+        js = (STATIC / page).read_text()
+        bare = re.findall(r'toLocaleTimeString\(\[\], \{ hour: "numeric"', js)
+        assert len(bare) <= (1 if page == "reactor.js" else 0), page          # reactor keeps a fallback only
+        assert "JarvisClock" in js, page
+    for page in ("hud.js", "mini.js", "remote.js"):
+        assert '(e.type === "hello" || e.type === "prefs") && "clock24" in e' in (STATIC / page).read_text(), page

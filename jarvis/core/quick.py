@@ -150,6 +150,12 @@ def match(text: str, now: dt.datetime | None = None, rng: random.Random | None =
         return Quick("voice_id", {"action": "learn"}, "", note="started learning the user's voice")
     if re.fullmatch(r"forget my voice|stop recogni[sz]ing my voice|turn off voice (id|recognition)", t):
         return Quick("voice_id", {"action": "forget"}, "", note="forgot the user's voice")
+    m = re.fullmatch(r"(?:(?:use|switch to|change to|go to|set|show|make it|i want)(?: the| a)? )?(24|twenty[ -]?four|12|twelve)"
+                     r"[ -]?hours? (?:clock|time|format)(?: please)?", t)
+    if m:
+        mode = "24" if m.group(1) in ("24",) or m.group(1).startswith("twenty") else "12"
+        return Quick("clock_format", {"mode": mode}, f"{'24' if mode == '24' else '12'}-hour time.",
+                     note=f"switched the clock to {mode}-hour")
     m = re.fullmatch(r"(?:(?:switch|change|set|go|turn)(?: it| yourself| the (?:theme|look|colou?rs?))?(?: over)? "
                      r"(?:to|into) |use |try |make it |put on )?(?:the )?(.+?) (theme|look|skin|mode)(?: please)?", t)
     # "dark mode", "focus mode", "party mode"… belong to the Mac and to protocols, not to JARVIS's look

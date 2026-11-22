@@ -559,6 +559,23 @@
     try { await api("/api/setup/theme", { theme: t }); } catch (e) {}
   }));
 
+  /* ───────────── clock: 24-hour or 12-hour everywhere ───────────── */
+  function markClock(mode) {
+    document.querySelectorAll("#clock-seg button").forEach((b) => {
+      const on = b.dataset.v === mode;
+      b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on));
+    });
+  }
+  document.querySelectorAll("#clock-seg button").forEach((b) => (b.onclick = async () => {
+    const mode = b.dataset.v;
+    markClock(mode);
+    if (window.JarvisClock && mode !== "auto") JarvisClock.set(mode === "24");
+    try {
+      const r = await api("/api/setup/clock", { mode });
+      if (r && "clock24" in r && window.JarvisClock) JarvisClock.set(r.clock24);
+    } catch (e) {}
+  }));
+
   /* ───────────── live events ───────────── */
   function connect() {
     if (DEMO) return;
@@ -600,6 +617,8 @@
     $("hand-row").hidden = !settings;   // only meaningful while JARVIS is running
     if (S.theme && window.JarvisTheme) JarvisTheme.apply(S.theme);
     markTheme(S.theme || (window.JarvisTheme ? JarvisTheme.get() : "arc"));
+    markClock(S.clock || "auto");
+    if ("clock24" in S && window.JarvisClock) JarvisClock.set(S.clock24);
     if (settings) { $("launch").textContent = "Save & restart"; $("hello").textContent = "Settings"; }
     models = S.models; renderDownloads();
     connect();

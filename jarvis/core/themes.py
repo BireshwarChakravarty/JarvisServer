@@ -68,3 +68,67 @@ def apply(cfg, name: str, bus=None) -> str:
         bus = _bus
     bus.emit("theme", theme=key, name=THEMES[key]["name"])
     return key
+
+
+# ── clock: 24-hour or 12-hour, everywhere a time is shown ─────────────────────────────────────────
+# app.clock_24h: true (13:05), false (1:05 PM) or unset to follow the Mac's own setting
+# (System Settings › General › Date & Time › 24-hour time).
+_mac_24h: bool | None = None
+
+
+def mac_uses_24h() -> bool | None:
+    global _mac_24h
+    if _mac_24h is None:
+        try:
+            from jarvis.mac.system import IS_MAC
+
+            if not IS_MAC:
+                return None
+            import subprocess
+
+            out = subprocess.run(["defaults", "read", "-g", "AppleICUForce24HourTime"], capture_output=True,
+                                 text=True, timeout=3).stdout.strip()
+            if out in ("1", "true"):
+                _mac_24h = True
+            elif out in ("0", "false"):
+                _mac_24h = False
+            else:                                      # not set: the region decides (most of the world: 24 h)
+                from AppKit import NSDateFormatter, NSLocale
+
+                fmt = NSDateFormatter.dateFormatFromTemplate_options_locale_("j", 0, NSLocale.currentLocale())
+                _mac_24h = "a" not in str(fmt or "")
+        except Exception:
+            return None
+    return _mac_24h
+
+
+def clock_24h(cfg) -> bool | None:
+    """True / False for the pages to use, or None to leave it to the browser's language."""
+    v = cfg.get("app.clock_24h", None) if cfg is not None else None
+    if isinstance(v, bool):
+        return v
+    return mac_uses_24h()
+
+
+def clock_setting(cfg) -> str:
+    v = cfg.get("app.clock_24h", None) if cfg is not None else None
+    return "24" if v is True else "12" if v is False else "auto"
+
+
+def set_clock(cfg, mode: str, bus=None) -> bool | None:
+    """mode: '24', '12' or 'auto' (follow the Mac). Saves it and updates every window and phone."""
+    value = {"24": True, "12": False, "auto": None}[mode]
+    try:
+        from jarvis.app.setup_api import _write_user_config
+
+        _write_user_config(cfg, {"app": {"clock_24h": value}})
+    except Exception:
+        if hasattr(cfg, "data"):
+            cfg.data.setdefault("app", {})["clock_24h"] = value
+    if bus is None:
+        from jarvis.events import bus as _bus
+
+        bus = _bus
+    shown = clock_24h(cfg)
+    bus.emit("prefs", clock24=shown)
+    return shown

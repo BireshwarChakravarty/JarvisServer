@@ -413,7 +413,7 @@
       if (nextLabel && on > 0.95) {
         const a = nextLabel.a, rl = rChrono + 30 * dpr;
         const x = Math.cos(a) * rl, y = Math.sin(a) * rl;
-        const when = new Date(nextLabel.s).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        const when = window.JarvisClock ? JarvisClock.time(nextLabel.s) : new Date(nextLabel.s).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
         ctx.font = `500 ${11 * dpr}px "Geist Mono", ui-monospace, monospace`;
         ctx.textBaseline = "middle";
         ctx.fillStyle = this.rgba(nextLabel.live ? th.you : th.label, 0.85);

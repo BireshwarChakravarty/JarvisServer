@@ -128,7 +128,17 @@ def make_router(sup) -> APIRouter:
             },
             "theme": themes.current(cfg),
             "themes": themes.listing(),
+            "clock": themes.clock_setting(cfg),
+            "clock24": themes.clock_24h(cfg),
         }
+
+    @r.post("/api/setup/clock")
+    async def set_clock(body: dict = Body(...)):
+        mode = str(body.get("mode", "auto"))
+        if mode not in ("24", "12", "auto"):
+            return JSONResponse({"ok": False, "error": "mode is 24, 12 or auto"}, status_code=400)
+        shown = await asyncio.to_thread(themes.set_clock, sup.cfg, mode)
+        return {"ok": True, "clock": mode, "clock24": shown}
 
     @r.post("/api/setup/theme")
     async def set_theme(body: dict = Body(...)):

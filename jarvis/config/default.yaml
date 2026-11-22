@@ -89,7 +89,8 @@ greeting:
     - "https://hnrss.org/frontpage"
 
 app:
-  theme: arc               # arc (Arc Reactor), dot (Dot Matrix), glass (Liquid Glass) or stark
+  theme: arc               # arc (Arc Reactor), dot (Dot Matrix), glass (Midnight Glass) or stark
+  clock_24h: null          # true: 13:05 · false: 1:05 PM · null: follow the Mac's 24-hour time setting
   mini_panel: true         # a floating mini JARVIS while the window is minimised, closed or hidden
   mini_hide_when_idle: true  # it appears only while he listens, thinks or speaks, then fades away
   mini_position: null      # remembered after you drag it

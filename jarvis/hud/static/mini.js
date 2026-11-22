@@ -27,20 +27,43 @@
   }
 
   // split a sentence into blocks that fit two lines (≈60 chars), at punctuation, then words
-  function blocks(text, max = 34) {
+  // Split what he says into pieces that each fit the capsule's one line, measured in the real font at
+  // the real width (counting characters let a wide piece wrap onto a second, clipped line).
+  const measure = document.createElement("canvas").getContext("2d");
+  function fits(text) {
+    const el = $("line");
+    const room = el && el.clientWidth ? el.clientWidth - 2 : 160;
+    const cs = el ? getComputedStyle(el) : null;
+    measure.font = cs ? `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}` : "400 11.5px sans-serif";
+    return measure.measureText(text).width <= room;
+  }
+  // your words in quotes; if they're long, the latest ones (like live captions), never a cut-off line
+  function latest(text) {
+    const words = String(text || "").trim().split(/\s+/);
+    if (fits(`“${words.join(" ")}”`)) return `“${words.join(" ")}”`;
+    let tail = [];
+    for (let i = words.length - 1; i >= 0; i--) {
+      if (!fits(`“…${[words[i], ...tail].join(" ")}”`)) break;
+      tail.unshift(words[i]);
+    }
+    return `“…${tail.join(" ")}”`;
+  }
+  function blocks(text) {
     const out = [];
-    const parts = text.split(/(?<=[,;:—])\s+/);
+    const parts = text.split(/(?<=[,;:—.!?])\s+/);
     let cur = "";
+    const push = () => { if (cur) out.push(cur); cur = ""; };
     for (const p of parts) {
-      if ((cur + " " + p).trim().length <= max) { cur = (cur + " " + p).trim(); continue; }
-      if (cur) out.push(cur);
-      if (p.length <= max) { cur = p; continue; }
-      cur = "";
+      const joined = (cur + " " + p).trim();
+      if (fits(joined)) { cur = joined; continue; }
+      push();
+      if (fits(p)) { cur = p; continue; }
       for (const w of p.split(/\s+/)) {
-        if ((cur + " " + w).trim().length > max && cur) { out.push(cur); cur = w; } else cur = (cur + " " + w).trim();
+        const next = (cur + " " + w).trim();
+        if (cur && !fits(next)) { push(); cur = w; } else cur = next;
       }
     }
-    if (cur) out.push(cur);
+    push();
     return out;
   }
   // with the phrase's real audio duration, each block is shown while its words are spoken
@@ -63,6 +86,7 @@
     timer = setTimeout(next, Math.max(1300, (b.length / 15) * 1000));
   }
 
+  window.addEventListener("jarvis-clock", () => idleLine());
   function idleLine() {
     if (state !== "idle") return;
     const now = Date.now();
@@ -70,17 +94,18 @@
       .sort((a, b) => new Date(a.start) - new Date(b.start))[0];
     if (!e) return show("Say “Hey Jarvis”", "quiet");
     const s = new Date(e.start).getTime();
-    const when = s <= now ? "Now" : new Date(s).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const when = s <= now ? "Now" : JarvisClock.time(s);
     show(`${when} · ${e.title}`, "quiet");
   }
 
   function handle(e) {
     if ((e.type === "hello" || e.type === "theme") && e.theme && window.JarvisTheme) JarvisTheme.apply(e.theme);
+    if ((e.type === "hello" || e.type === "prefs") && "clock24" in e) JarvisClock.set(e.clock24);
     switch (e.type) {
       case "state": setState(e.state); break;
       case "level": if (e.source === "tts" || state === "listening") reactor.setLevel(e.value, e.source); break;
       case "wake": wake(); reactor.pulse(); setState("listening"); break;
-      case "transcript": if (!e.replay) { queue = []; clearTimeout(timer); timer = null; show(`“${e.text}”`, "you"); } break;
+      case "transcript": if (!e.replay) { queue = []; clearTimeout(timer); timer = null; show(latest(e.text), "you"); } break;
       case "speaking": if (!e.replay) say(e.text, e.duration); break;
       case "agenda": agenda = e.events || []; if (state === "idle") idleLine(); break;
       case "announce": if (!e.replay) { wake(); say(e.text); if (!ACTIVE.includes(state)) setState(state); } break;

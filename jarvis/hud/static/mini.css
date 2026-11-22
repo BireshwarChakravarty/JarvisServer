@@ -35,7 +35,7 @@ body[data-state="listening"] .pip { background: var(--gold); box-shadow: 0 0 8px
 body[data-state="thinking"] .pip, body[data-state="working"] .pip { background: var(--violet); box-shadow: 0 0 8px var(--violet); }
 body[data-state="error"] .pip { background: var(--coral); box-shadow: 0 0 8px var(--coral); }
 .line { margin: 0; font: 400 11.5px/1.25 var(--sans); color: var(--text);
-  white-space: nowrap; overflow: hidden;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transition: opacity 0.35s var(--ease); }
 .line.you { color: var(--gold); }
 .line.quiet { color: var(--muted); }

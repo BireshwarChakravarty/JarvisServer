@@ -12,10 +12,11 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
 from jarvis.aio import spawn
+from jarvis.hud import assets
+from jarvis.hud.assets import RevalidatedStatic
 from jarvis.core import themes
 from jarvis.events import bus
 
@@ -29,7 +30,7 @@ def create_app(jarvis=None, supervisor=None) -> FastAPI:
     from jarvis.hud.guard import LocalOnly
 
     app.add_middleware(LocalOnly)   # other websites can't drive JARVIS through 127.0.0.1
-    app.mount("/static", StaticFiles(directory=STATIC), name="static")
+    app.mount("/static", RevalidatedStatic(directory=STATIC), name="static")
 
     def J():
         return supervisor.jarvis if supervisor is not None else jarvis
@@ -50,23 +51,23 @@ def create_app(jarvis=None, supervisor=None) -> FastAPI:
         cfg = CFG()
         if supervisor is not None and cfg is not None and not cfg.setup_complete:
             return RedirectResponse("/setup")
-        return FileResponse(STATIC / "index.html", headers=NO_STORE)
+        return assets.page(STATIC / "index.html", STATIC, headers=NO_STORE)
 
     @app.get("/setup")
     async def setup_page():
-        return FileResponse(STATIC / "onboarding.html", headers=NO_STORE)
+        return assets.page(STATIC / "onboarding.html", STATIC, headers=NO_STORE)
 
     @app.get("/pair")
     async def pair_page():
-        return FileResponse(STATIC / "pair.html", headers=NO_STORE)
+        return assets.page(STATIC / "pair.html", STATIC, headers=NO_STORE)
 
     @app.get("/mini")
     async def mini_page():
-        return FileResponse(STATIC / "mini.html", headers=NO_STORE)
+        return assets.page(STATIC / "mini.html", STATIC, headers=NO_STORE)
 
     @app.get("/guide")
     async def guide_page():
-        return FileResponse(STATIC / "guide.html", headers=NO_STORE)
+        return assets.page(STATIC / "guide.html", STATIC, headers=NO_STORE)
 
     @app.get("/api/status")
     async def status():
@@ -112,6 +113,7 @@ def create_app(jarvis=None, supervisor=None) -> FastAPI:
             "title": cfg.get("owner.title", "sir") if cfg else "sir",
             "city": cfg.get("location.city", "") if cfg else "",
             "theme": themes.current(cfg),
+            "clock24": themes.clock_24h(cfg),
             "state": bus.state.get("state"),
             "capabilities": getattr(j, "capabilities", {}),
             "history": [e for e in bus.history if e["type"] in (
