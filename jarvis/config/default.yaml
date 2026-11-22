@@ -90,6 +90,7 @@ greeting:
 
 app:
   mini_panel: true         # a floating mini JARVIS while the window is minimised, closed or hidden
+  mini_hide_when_idle: true  # it appears only while he listens, thinks or speaks, then fades away
   mini_position: null      # remembered after you drag it
   companion: false         # iPhone / iPad companion on your home network (pair by QR code)
 

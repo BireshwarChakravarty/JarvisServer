@@ -1,6 +1,6 @@
-/* Mini JARVIS: state, the line he's saying, your words while he listens, the next meeting when idle.
-   Long sentences become caption blocks of at most two lines, paced at reading speed (~15 chars/s):
-   nothing is ever cut off with an ellipsis. */
+/* Mini JARVIS: a small capsule while he's active. State, the line he's saying, your words while he
+   listens. Sentences become one-line caption blocks (~34 characters), paced with his voice or at
+   reading speed: nothing is cut off with an ellipsis. It fades when he goes quiet. */
 (() => {
   const $ = (id) => document.getElementById(id);
   const reactor = new Reactor($("core-gl"), $("core-ui"), { compact: true });
@@ -8,11 +8,17 @@
     working: "On it", speaking: "Speaking", error: "Fault", muted: "Muted", booting: "Starting" };
   let state = "idle", agenda = [], queue = [], timer = null, quietTimer = null;
 
+  const ACTIVE = ["listening", "transcribing", "thinking", "working", "speaking", "error"];
+  let fadeTimer = null;
   function setState(s) {
     state = s; document.body.dataset.state = s; reactor.setState(s);
     $("st").textContent = LABEL[s] || s;
+    clearTimeout(fadeTimer);
+    if (ACTIVE.includes(s)) document.body.classList.remove("quiet");
+    else fadeTimer = setTimeout(() => document.body.classList.add("quiet"), 2800);   // the window goes at 3.5 s
     if (s === "idle") { clearTimeout(quietTimer); quietTimer = setTimeout(idleLine, 6000); }
   }
+  function wake() { clearTimeout(fadeTimer); document.body.classList.remove("quiet"); }
 
   function show(text, cls) {
     const el = $("line");
@@ -21,7 +27,7 @@
   }
 
   // split a sentence into blocks that fit two lines (≈60 chars), at punctuation, then words
-  function blocks(text, max = 60) {
+  function blocks(text, max = 34) {
     const out = [];
     const parts = text.split(/(?<=[,;:—])\s+/);
     let cur = "";
@@ -72,11 +78,11 @@
     switch (e.type) {
       case "state": setState(e.state); break;
       case "level": if (e.source === "tts" || state === "listening") reactor.setLevel(e.value, e.source); break;
-      case "wake": reactor.pulse(); setState("listening"); break;
+      case "wake": wake(); reactor.pulse(); setState("listening"); break;
       case "transcript": if (!e.replay) { queue = []; clearTimeout(timer); timer = null; show(`“${e.text}”`, "you"); } break;
       case "speaking": if (!e.replay) say(e.text, e.duration); break;
       case "agenda": agenda = e.events || []; if (state === "idle") idleLine(); break;
-      case "announce": if (!e.replay) say(e.text); break;
+      case "announce": if (!e.replay) { wake(); say(e.text); if (!ACTIVE.includes(state)) setState(state); } break;
       case "mic": if (e.muted) setState("muted"); break;
     }
   }

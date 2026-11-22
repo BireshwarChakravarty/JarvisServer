@@ -9,6 +9,9 @@ How it behaves (from Apple's window model, tested patterns for floating overlays
     visible frame (away from notification banners at the top-right, the Dock, Live Captions and
     Stage Manager), never shows alongside the main window, and lets clicks pass straight through
     while the air mouse is driving the pointer
+  • small (a 32-pt orb, one status word, one line) and only there while he's doing something:
+    it appears when he listens, thinks, speaks or announces, and fades away a few seconds after
+    he goes back to standby (app.mini_hide_when_idle: false keeps it up all the time)
 """
 from __future__ import annotations
 
@@ -16,7 +19,9 @@ import logging
 
 log = logging.getLogger("jarvis.mini")
 
-W, H = 360, 96
+W, H = 250, 48
+ACTIVE = {"listening", "transcribing", "thinking", "working", "speaking", "error"}
+LINGER = 3.5          # seconds it stays after he goes quiet
 _panel: "MiniPanel | None" = None
 
 
@@ -34,6 +39,13 @@ class MiniPanel:
         self.window = None
         self.visible = False
         self.enabled = bool(cfg.get("app.mini_panel", True))
+        self.only_when_active = bool(cfg.get("app.mini_hide_when_idle", True))
+        self.armed = False          # the main window is minimised / closed / hidden
+        self.active = False         # JARVIS is listening, thinking, speaking…
+        self._linger = None
+        import threading
+
+        self._lock = threading.RLock()
         _panel = self
 
     # ── creation ─────────────────────────────────────────────────────────
@@ -108,7 +120,48 @@ class MiniPanel:
             log.debug("couldn't save mini position", exc_info=True)
 
     # ── show / hide ──────────────────────────────────────────────────────
+    # show()/hide() say whether the main window is out of the way; set_active() says whether JARVIS is
+    # doing anything. The capsule is on screen only when both are true (plus a short linger).
     def show(self) -> None:
+        with self._lock:
+            self.armed = True
+            self._apply()
+
+    def hide(self) -> None:
+        with self._lock:
+            self.armed = False
+            self._apply()
+
+    def set_active(self, on: bool) -> None:
+        import threading
+
+        with self._lock:
+            if self._linger is not None:
+                self._linger.cancel()
+                self._linger = None
+            if on:
+                self.active = True
+                self._apply()
+            elif self.active:
+                def quiet():
+                    with self._lock:
+                        self.active = False
+                        self._linger = None
+                        self._apply()
+                self._linger = threading.Timer(LINGER, quiet)
+                self._linger.daemon = True
+                self._linger.start()
+
+    def wanted(self) -> bool:
+        return self.enabled and self.armed and (self.active or not self.only_when_active)
+
+    def _apply(self) -> None:
+        if self.wanted():
+            self._show_window()
+        else:
+            self._hide_window()
+
+    def _show_window(self) -> None:
         if self.window is None or self.visible or not self.enabled:
             return
         self.visible = True
@@ -119,7 +172,7 @@ class MiniPanel:
         except Exception as exc:
             log.debug("mini show: %s", exc)
 
-    def hide(self) -> None:
+    def _hide_window(self) -> None:
         if self.window is None or not self.visible:
             return
         self.visible = False

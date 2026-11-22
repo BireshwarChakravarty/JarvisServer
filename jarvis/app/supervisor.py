@@ -39,6 +39,7 @@ class Supervisor:
     async def boot(self) -> None:
         self.loop = asyncio.get_running_loop()
         bus.bind(self.loop)
+        asyncio.ensure_future(self._mini_follows_jarvis())
         if self.cfg.get("app.companion", False):
             await self.remote.start()
         if self.cfg.setup_complete:
@@ -49,6 +50,30 @@ class Supervisor:
         else:
             bus.emit("state", state="idle")
             self.start_downloads()   # start fetching models while you fill in the forms
+
+    async def _mini_follows_jarvis(self) -> None:
+        """The mini capsule appears while JARVIS is doing something and fades when he's quiet."""
+        from jarvis.app.mini import ACTIVE
+
+        q = bus.subscribe()
+        try:
+            while True:
+                e = await q.get()
+                mini = self.mini
+                if mini is None:
+                    continue
+                if e.get("type") == "state":
+                    mini.set_active(e.get("state") in ACTIVE)
+                elif e.get("type") in ("announce", "wake") and not e.get("replay"):
+                    mini.set_active(True)
+                    if bus.state.get("state") not in ACTIVE:
+                        mini.set_active(False)          # a passing note: show it, then linger out
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("mini capsule watcher stopped")
+        finally:
+            bus.unsubscribe(q)
 
     def start_downloads(self) -> None:
         if self._downloads is None or self._downloads.done():

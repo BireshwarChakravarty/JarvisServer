@@ -9,32 +9,36 @@ html, body { margin: 0; height: 100%; background: transparent; overflow: hidden;
 body { font-family: var(--sans); color: var(--text); cursor: default; }
 
 .pill {
-  position: absolute; inset: 6px; display: flex; align-items: center; gap: 12px; padding: 0 18px 0 8px;
+  position: absolute; inset: 4px; display: flex; align-items: center; gap: 8px; padding: 0 14px 0 4px;
   border-radius: 999px; overflow: hidden;
   background: linear-gradient(180deg, rgb(14 22 32 / 0.92), rgb(5 8 13 / 0.94));
   border: 1px solid rgb(143 236 255 / 0.18);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 0 0 0.5px rgb(0 0 0 / 0.6);
-  transition: border-color 0.5s var(--ease);
+  transition: border-color 0.5s var(--ease), opacity 0.45s var(--ease), transform 0.45s var(--ease);
+  animation: arrive 0.35s var(--ease);
 }
+/* quiet: fade out (the window itself is taken away a moment later) */
+body.quiet .pill { opacity: 0; transform: scale(0.96); }
+@keyframes arrive { from { opacity: 0; transform: scale(0.94); } }
 body[data-state="listening"] .pill { border-color: rgb(255 196 108 / 0.55); }
 body[data-state="speaking"] .pill { border-color: rgb(143 236 255 / 0.45); }
 
-#core { position: relative; flex: none; width: 64px; height: 64px; }
+#core { position: relative; flex: none; width: 32px; height: 32px; }
 #core canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 #core #core-ui { inset: -30%; width: 160%; height: 160%; pointer-events: none; }
 
 .txt { min-width: 0; flex: 1; }
-.st { margin: 0 0 3px; display: flex; align-items: center; gap: 7px; font: 500 10px/1 var(--mono);
-  letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
-.pip { width: 5px; height: 5px; border-radius: 50%; background: var(--ice); box-shadow: 0 0 8px var(--ice); }
+.st { margin: 0 0 2px; display: flex; align-items: center; gap: 5px; font: 500 8px/1 var(--mono);
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+.pip { width: 4px; height: 4px; border-radius: 50%; background: var(--ice); box-shadow: 0 0 8px var(--ice); }
 body[data-state="listening"] .pip { background: var(--gold); box-shadow: 0 0 8px var(--gold); }
 body[data-state="thinking"] .pip, body[data-state="working"] .pip { background: #a9b2ff; box-shadow: 0 0 8px #a9b2ff; }
 body[data-state="error"] .pip { background: #ff7a7a; box-shadow: 0 0 8px #ff7a7a; }
-.line { margin: 0; font: 400 13.5px/1.35 var(--sans); color: var(--text);
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+.line { margin: 0; font: 400 11.5px/1.25 var(--sans); color: var(--text);
+  white-space: nowrap; overflow: hidden;
   transition: opacity 0.35s var(--ease); }
 .line.you { color: var(--gold); }
 .line.quiet { color: var(--muted); }
 .line.swap { opacity: 0; }
 
-@media (prefers-reduced-motion: reduce) { .line, .pill { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .line, .pill { transition: none; animation: none; } }
