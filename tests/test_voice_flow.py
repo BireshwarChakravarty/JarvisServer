@@ -116,3 +116,23 @@ def test_listen_trigger_survives_its_own_chime(cfg):
 
     client = asyncio.run(run())
     assert client.requests and client.requests[0]["messages"][0]["content"][-1]["text"] == "how was the market today?"
+
+
+def test_an_utterance_still_ends_when_the_mic_stops_sending_audio():
+    """A device change or an echo-cancellation restart can pause the frames mid-sentence: listening must
+    still end (with what you said) rather than wait forever for audio that never comes."""
+    import time
+
+    from jarvis.voice.audio import record_utterance
+
+    async def run():
+        q = asyncio.Queue()
+        for f in frames("speech", 12):              # you speak… then the mic goes quiet: no frames at all
+            q.put_nowait(f)
+        t0 = time.monotonic()
+        audio = await asyncio.wait_for(record_utterance(q, energy_vad(), end_silence=1.0, turn_patience=1.0), 10)
+        return audio, time.monotonic() - t0
+
+    audio, took = asyncio.run(run())
+    assert audio is not None and len(audio) > 0
+    assert took < 4

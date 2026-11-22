@@ -329,6 +329,12 @@ async def record_utterance(
         except asyncio.TimeoutError:
             if not started and time.monotonic() - t0 > start_timeout:
                 return None
+            if started and stop_event is None:
+                # No audio at all for a second (the mic paused, a device changed): that is silence too,
+                # so the utterance still ends instead of waiting for frames that may never come.
+                silence += 1.0
+                if silence >= max(end_silence, turn_patience):
+                    break
             continue
         speech = vad.is_speech(frame)
         if speech and min_level and frame_rms(frame) < min_level:
