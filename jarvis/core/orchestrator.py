@@ -1262,6 +1262,14 @@ class Jarvis:
             title = self.cfg.get("owner.title", "sir")
             data = await gather(self.cfg, self.memory, "login" if kind == "login" else "return") \
                 if self.cfg.get("greeting.briefing", True) else {"part_of_day": part_of_day()}
+            if kind == "login":
+                from jarvis.core import routines
+
+                habits = await asyncio.to_thread(routines.from_memory, self.memory)
+                ready = routines.due_now(habits)
+                if ready:
+                    # what they usually ask about at this hour: have it ready, as someone who knows them would
+                    data["they_usually_ask_now_about"] = ready
             bad = [r for r in getattr(self, "health_results", []) if not r["ok"]]
             if bad and kind == "login":
                 from jarvis.core import health

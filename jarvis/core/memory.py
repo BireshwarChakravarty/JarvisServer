@@ -186,6 +186,30 @@ class Memory:
             ).fetchall()
             return [dict(r) for r in rows]
 
+    def conversations(self, query: str = "", since: float = 0.0, until: float | None = None,
+                      limit: int = 40) -> list[dict]:
+        """Past turns (both sides), newest last: what you asked, what he said. `query` matches words."""
+        until = until or time.time() + 1
+        with self._lock:
+            if query.strip():
+                words = [w for w in re.findall(r"\w+", query.lower()) if len(w) > 2][:6]
+                where = " OR ".join(["lower(text) LIKE ? ESCAPE '\\'"] * len(words)) or "1"
+                args = [_like(w) for w in words]
+                sessions = [r[0] for r in self.db.execute(
+                    f"SELECT DISTINCT session FROM transcript WHERE ts BETWEEN ? AND ? AND ({where})",
+                    (since, until, *args)).fetchall()]
+                if not sessions:
+                    return []
+                marks = ",".join("?" * len(sessions))
+                rows = self.db.execute(
+                    f"SELECT role, text, ts FROM transcript WHERE session IN ({marks}) AND ts BETWEEN ? AND ? "
+                    "ORDER BY ts DESC LIMIT ?", (*sessions, since, until, limit)).fetchall()
+            else:
+                rows = self.db.execute(
+                    "SELECT role, text, ts FROM transcript WHERE ts BETWEEN ? AND ? ORDER BY ts DESC LIMIT ?",
+                    (since, until, limit)).fetchall()
+            return [dict(r) for r in rows][::-1]
+
     def recent_summaries(self, limit: int = 5) -> list[dict]:
         with self._lock:
             rows = self.db.execute(

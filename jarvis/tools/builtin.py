@@ -732,6 +732,25 @@ async def diagnostics(ctx):
     return health.summary(orch.health_results)
 
 
+@tool("Look back through past conversations with the user: what they asked and what you said, by topic "
+      "and/or time ('yesterday', 'today', 'this morning', 'last week', 'Monday', '3 days ago'). Use for 'what did I "
+      "ask you yesterday?', 'what did you say about the flight?', 'remind me what we talked about on Monday'.",
+      {"about": _p("Words to look for (optional)"), "when": _p("When (optional): today, yesterday, last week, a day name…")},
+      category="memory")
+def past_conversations(ctx, about: str = "", when: str = ""):
+    from jarvis.core import routines
+
+    since, until, label = routines.period(when)
+    turns = ctx.memory.conversations(about or "", since=since, until=until, limit=40)
+    if not turns:
+        return f"Nothing {('about ' + about + ' ') if about else ''}{label}."
+    import datetime as _dt
+
+    lines = [f"{_dt.datetime.fromtimestamp(t['ts']):%a %H:%M} {'you' if t['role'] == 'user' else 'JARVIS'}: "
+             f"{t['text'][:220]}" for t in turns]
+    return f"Conversations {label}:\n" + "\n".join(lines)
+
+
 @tool("Update JARVIS to the latest version: downloads the newest verified build, installs it (keeping "
       "every permission) and restarts. JARVIS goes quiet for a minute or two.", category="self", confirm=True,
       confirm_message="update myself and restart")
