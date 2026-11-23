@@ -622,3 +622,62 @@ def test_a_finished_short_request_is_still_answered_promptly(cfg):
                            ("silence", 4.0, "")])
     assert asked == ["what's the weather like"], (asked, app.stt.heard)
     assert len(app.stt.heard) == 1                    # one listen, no waiting for "the rest"
+
+
+LONG = "Here is a rather long answer that keeps going for a good while, sir, so there is time to cut in."
+
+
+def _talk_over(amp, seconds, after=1.0):
+    """A scenario voice that speaks `seconds` of `amp`, starting `after` s into his long reply."""
+    state = {}
+
+    async def extra(app, now):
+        sp = app.speaker
+        if sp.said and sp.said[-1] == LONG and sp.speaking and "t" not in state:
+            state["t"] = now + after
+        t = state.get("t")
+        if t is not None and t <= now < t + seconds:
+            return tone(amp)
+        return None
+    return extra
+
+
+def _echo_cancelled(app, words=None):
+    app.mic.echo_cancelled = True           # Apple's voice processing keeps his voice out of the mic
+    for a, w in (words or {}).items():
+        app.stt.words[a] = w
+
+
+def test_just_start_talking_to_interrupt_him(cfg):
+    """No wake word: talk over him and he stops, and what you said becomes the next request."""
+    OVER = 6121
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.0, "tell me something"),
+                           ("silence", 9.0, "")], replies={"tell me something": LONG}, echo=False,
+                     extra=_talk_over(OVER, 1.3), setup=lambda a: _echo_cancelled(a, {OVER: "actually make it nine"}))
+    assert asked == ["tell me something", "actually make it nine"], (asked, app.stt.heard)
+    assert any("interrupted while saying" in n for n in getattr(app, "_quick_notes", [])) or \
+        len(asked) == 2                         # the brain was told where he was cut off (notes may be spent)
+
+
+def test_a_quick_mm_hm_doesnt_stop_him(cfg):
+    """A backchannel ("mm-hm", "yeah") while he talks is listening, not interrupting."""
+    HM = 6343
+    stops = []
+    def setup(a):
+        _echo_cancelled(a, {HM: "mm hm"})
+        real = a.interrupt
+        a.interrupt = lambda: (stops.append(1), real())[1]
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.0, "tell me something"),
+                           ("silence", 7.0, "")], replies={"tell me something": LONG}, echo=False,
+                     extra=_talk_over(HM, 0.3), setup=setup)
+    assert asked == ["tell me something"], (asked, app.stt.heard)
+    assert not stops
+
+
+def test_without_echo_cancellation_talking_over_him_needs_the_wake_word(cfg):
+    """His own voice is in the mic then: only a clear "Hey Jarvis" may interrupt, never just sound."""
+    OVER = 6121
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.0, "tell me something"),
+                           ("silence", 7.0, "")], replies={"tell me something": LONG},
+                     extra=_talk_over(OVER, 1.3), setup=lambda a: a.stt.words.__setitem__(OVER, "noise"))
+    assert asked[0] == "tell me something" and "noise" not in asked[1:2], (asked, app.stt.heard)

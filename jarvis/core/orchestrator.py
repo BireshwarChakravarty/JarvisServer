@@ -622,13 +622,13 @@ class Jarvis:
                 self.speaker.enqueue(f"Very good, {self.cfg.get('owner.title', 'sir')}.")
                 return
             turn = asyncio.create_task(self.handle_text(text, source="voice"))
-            outcome = await self._monitor_barge_in(q, turn)
+            outcome = await self._monitor_barge_in(q, turn, your_level)
             if outcome == "stopped":
                 return
             follow_up = True
             if outcome == "barge":
                 window = time.monotonic() + 6.0
-                continue  # user interrupted with the wake word: listen right away
+                continue  # you interrupted (by voice or the wake word): listen right away
             await self._settle_keep(q)  # his voice lingers in the room for a moment: let it fade first
             window = time.monotonic() + self._follow_up_for(turn)
 
@@ -826,10 +826,24 @@ class Jarvis:
         await self._settle_keep(q, quiet=0.2, max_wait=0.7, tail=0.4)   # "Sir?" still ringing in the room
         bus.emit("state", state="listening")
 
-    async def _monitor_barge_in(self, q: asyncio.Queue, turn: asyncio.Task) -> str:
-        """While JARVIS thinks/talks, watch for the wake word or a ✋ to interrupt."""
+    async def _monitor_barge_in(self, q: asyncio.Queue, turn: asyncio.Task, your_level: float = 0.0) -> str:
+        """While JARVIS thinks/talks, watch for you to interrupt: just start talking (when echo
+        cancellation keeps his own voice out of the mic), say "Hey Jarvis", or ✋.
+
+        Talking over him works like it does with a person: he stops within about half a second and
+        what you've started saying becomes your next request. "Mm-hm", "yeah", a cough (anything
+        under about 0.6 s of speech) doesn't stop him; with Voice ID set up, only your voice does."""
+        from jarvis.voice.audio import FRAME, SAMPLE_RATE, frame_rms
+
         self._interrupt.clear()
         barge = bool(self.cfg.get("voice.barge_in", True)) and self.wake is not None and self.wake.available
+        talk = (bool(self.cfg.get("voice.barge_in_by_voice", True)) and self.echo_cancelled
+                and self.vad is not None)
+        need = float(self.cfg.get("voice.barge_in_seconds", 0.6))
+        floor = max(0.008, your_level * 0.4) if your_level else 0.01
+        frame_s = FRAME / SAMPLE_RATE
+        run: list = []                      # your speech so far while he talks (with short gaps)
+        spoken, gap = 0.0, 0.0
         if self.wake:
             self.wake.reset()
         while not (turn.done() and not self.speaker.speaking):
@@ -842,7 +856,25 @@ class Jarvis:
                 continue
             guiding = self.guide is not None and getattr(self.guide, "_cancel", None) is not None
             if not (self.speaker.speaking or guiding):
+                run, spoken, gap = [], 0.0, 0.0
                 continue                # thinking: a false "Hey Jarvis" here would throw your request away
+            if talk and self.speaker.speaking:
+                if self.vad.is_speech(frame) and frame_rms(frame) >= floor:
+                    run.append(frame)
+                    spoken, gap = spoken + frame_s, 0.0
+                elif run:
+                    run.append(frame)
+                    gap += frame_s
+                    if gap > 0.3:               # a backchannel ("mm-hm") and silence: not an interruption
+                        run, spoken, gap = [], 0.0, 0.0
+                if spoken >= need and await self._interrupting_is_you(run):
+                    self._note_cut_off()
+                    self._wake_preroll, self._preroll_live = list(run), True   # your words so far
+                    self.interrupt()
+                    log.info("you talked over him (%.1fs): stopped, listening", spoken)
+                    return "barge"
+                if spoken >= need:
+                    run, spoken, gap = [], 0.0, 0.0   # someone else's voice: carry on
             # without echo cancellation his own voice is in the mic: interrupt only on a sure "Hey Jarvis"
             strict = None if (self.echo_cancelled or not self.speaker.speaking) else \
                 max(0.8, float(getattr(self.wake, "threshold", 0.5)) + 0.3)
@@ -852,12 +884,36 @@ class Jarvis:
                     bus.emit("state", state="speaking")
                     continue
                 # while he talks, or quietly waits for your click on a guided step
+                self._note_cut_off()
                 self.interrupt()
                 self.speaker.play_tone("wake")
                 return "barge"
         if turn.done() and turn.exception():
             log.error("turn failed: %s", turn.exception())
         return "done"
+
+    async def _interrupting_is_you(self, frames: list) -> bool:
+        """With Voice ID set up, only your voice may talk over him (not the TV, not a guest)."""
+        vid = self.voice_id
+        if vid is None or not vid.active:
+            return True
+        audio = np.concatenate(frames).astype(np.float32) / 32768.0
+        try:
+            kind, score = await asyncio.to_thread(vid.check, audio, False)
+        except Exception:
+            return True
+        if kind == "not_you":
+            log.info("someone else talked over him (%.2f): carrying on", score)
+            return False
+        return True
+
+    def _note_cut_off(self) -> None:
+        """Tell the brain where it was cut off, so it doesn't assume you heard the rest."""
+        said = (getattr(self.speaker, "current_text", "") or "").strip() if self.speaker else ""
+        if said and self.speaker.speaking:
+            notes = getattr(self, "_quick_notes", [])
+            self._quick_notes = (notes + [f"you were interrupted while saying “{said[:160]}”; "
+                                          "they didn't hear the rest of that reply"])[-4:]
 
     def interrupt(self) -> None:
         """Stop talking and abandon the current turn."""
