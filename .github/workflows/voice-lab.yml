@@ -1,0 +1,29 @@
+name: voice lab
+
+# Designs candidate voices and times Qwen3-TTS on Apple Silicon (see scripts/voice_lab.py).
+# Runs when the lab itself changes, or by hand.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "scripts/voice_lab.py"
+      - ".github/workflows/voice-lab.yml"
+
+jobs:
+  lab:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: python -m pip install --upgrade pip "mlx-audio==0.6.7" soundfile numpy
+      - name: Run the lab
+        run: python scripts/voice_lab.py voice-lab
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-lab
+          path: voice-lab/
