@@ -179,3 +179,36 @@ def _daypart(m: re.Match) -> str:
     if day == "tonight":
         return " tonight"
     return f" this {part}"
+
+
+# ── spoken style: the persona's rules, enforced on what is actually said ─────────────────────────────
+_OPENERS = re.compile(
+    r"^(?:certainly|absolutely|of course|sure thing|sure|great question|good question|happy to help|"
+    r"i'd be happy to help|i would be happy to help|no problem)\s*[!.,]+\s+(?=\S)", re.I)
+_SIGNOFF = re.compile(
+    r"^(?:is there anything else (?:i can (?:help|do)(?: you)?(?: with)?|you need)|"
+    r"let me know if (?:you need|there's) anything else|i hope (?:this|that) helps)\b[^.?!]*[.?!]?$", re.I)
+
+
+def polish_spoken(sentence: str, state: dict, title: str = "sir") -> str:
+    """Tidy one sentence of a reply before it's spoken: no assistant filler ("Certainly!", "I hope this
+    helps"), and the title ("sir") at most once per reply, as a person would. `state` is per reply."""
+    s = (sentence or "").strip()
+    if not s:
+        return s
+    if not state.get("started"):
+        trimmed = _OPENERS.sub("", s)
+        if trimmed != s and trimmed:
+            s = trimmed[0].upper() + trimmed[1:]
+        state["started"] = True
+    if _SIGNOFF.match(s):
+        return ""
+    t = re.escape(title.strip()) if title else ""
+    if t:
+        pat = re.compile(rf"(,\s*{t}\b(?=[\s.,!?;:]|$))|(^{t},\s*)", re.I)
+        if state.get("titled"):
+            s = pat.sub(lambda m: "" if m.group(1) else "", s)
+            s = s[:1].upper() + s[1:] if s else s
+        elif pat.search(s):
+            state["titled"] = True
+    return s.strip()

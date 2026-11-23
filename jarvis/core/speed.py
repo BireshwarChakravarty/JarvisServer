@@ -13,8 +13,8 @@ SPEEDS = ("fast", "balanced", "thorough")
 
 
 def speed(cfg) -> str:
-    s = str(cfg.get("brain.speed", "fast") or "fast").lower()
-    return s if s in SPEEDS else "fast"
+    s = str(cfg.get("brain.speed", "balanced") or "balanced").lower()
+    return s if s in SPEEDS else "balanced"
 
 
 def claude_code(cfg) -> tuple[str | None, str]:

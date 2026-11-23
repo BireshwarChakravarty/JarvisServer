@@ -937,8 +937,13 @@ class Jarvis:
         self._turn_active = True
 
         first = asyncio.Event()
+        style: dict = {}
+        from jarvis.voice.text import polish_spoken
 
         async def on_sentence(sentence: str) -> None:
+            sentence = polish_spoken(sentence, style, self.cfg.get("owner.title", "sir"))
+            if not sentence:
+                return
             first.set()
             bus.emit("state", state="speaking")
             if self.speaker:
@@ -1014,8 +1019,8 @@ class Jarvis:
     # A person answers within a second or so, even if only to say they're on it. When the model is
     # slow to its first word (a tool call, a web search) JARVIS says so instead of leaving silence,
     # in words that fit what you asked, and never the same line twice in a row.
-    FILLERS = ["One moment, {t}.", "Just a moment.", "Bear with me, {t}.", "Let me see.", "Right, let me check.",
-               "Give me a second, {t}.", "On it."]
+    FILLERS = ["Hm, one moment.", "Let me see.", "Right, let me check.", "Bear with me.", "Just a second.",
+               "On it.", "Mm, give me a moment."]
     STILL = ["Still working on it, {t}.", "Nearly there.", "This is taking a little longer than I'd like, {t}.",
              "Almost there, {t}."]
     TOPICAL = [
@@ -1048,7 +1053,8 @@ class Jarvis:
     async def _filler(self, first: asyncio.Event, cancel: asyncio.Event, text: str = "") -> None:
         # a lookup is obviously coming ("what's on my calendar"): say so sooner, as a person would
         topical = any(re.search(p, text or "", re.I) for p, _ in self.TOPICAL)
-        for delay, slow in ((0.7 if topical else 1.3, False), (9.0, True)):
+        # a lookup that's obviously coming gets a word sooner; otherwise only a real wait earns one
+        for delay, slow in ((0.8 if topical else 1.8, False), (9.0, True)):
             try:
                 await asyncio.wait_for(first.wait(), delay)
                 return

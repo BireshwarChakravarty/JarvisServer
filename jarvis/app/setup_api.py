@@ -240,7 +240,7 @@ def make_router(sup) -> APIRouter:
             asyncio.to_thread(brain_setup.status, "codex", cfg.get("brain.codex_path")))
         return {"provider": cfg.get("brain.provider", "anthropic"), "claude": claude, "codex": codex,
                 "has_key": _has_key(), "claude_model": cfg.get("brain.claude_model") or "",
-                "speed": cfg.get("brain.speed", "fast") or "fast",
+                "speed": cfg.get("brain.speed", "balanced") or "balanced",
                 "recommended_model": recommended_model(claude.get("subscription", ""))}
 
     @r.post("/api/setup/brain")

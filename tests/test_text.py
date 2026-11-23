@@ -46,3 +46,15 @@ def test_an_en_dash_is_a_pause_in_prose_and_to_in_a_range():
     assert clean_for_speech("It's raining – take an umbrella.") == "It's raining, take an umbrella."
     assert clean_for_speech("Open 9–5 on weekdays.") == "Open 9 to 5 on weekdays."
     assert clean_for_speech("From 2 – 3 pm.") == "From 2 to 3 pm."
+
+
+def test_spoken_polish_drops_assistant_filler_and_extra_sirs():
+    from jarvis.voice.text import polish_spoken
+
+    st = {}
+    said = [polish_spoken(x, st) for x in ["Certainly! Your meeting is at three, sir.", "The rain stops by five, sir.",
+                                             "Sir, the door is locked.", "Is there anything else I can help you with?"]]
+    assert said == ["Your meeting is at three, sir.", "The rain stops by five.", "The door is locked.", ""]
+    st = {}
+    assert polish_spoken("Of course.", st) == "Of course."          # a whole answer isn't stripped to nothing
+    assert polish_spoken("Very good, ma'am.", {}, "ma'am") == "Very good, ma'am."

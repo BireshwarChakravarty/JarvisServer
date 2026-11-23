@@ -1,4 +1,4 @@
-"""Response speed: fast by default (quick model, little deliberation), with smarter options."""
+"""Response speed: balanced (natural conversation) by default, with faster and deeper options."""
 from types import SimpleNamespace
 
 from jarvis.core import speed
@@ -9,13 +9,14 @@ def cfg(**brain):
     return SimpleNamespace(get=lambda k, d=None: data.get(k, d))
 
 
-def test_fast_is_the_default_everywhere():
+def test_natural_is_the_default_everywhere():
     c = cfg()
-    assert speed.speed(c) == "fast"
-    assert speed.claude_code(c) == ("haiku", "low")
-    assert speed.api(c) == ("claude-haiku-5-5", "low")
+    assert speed.speed(c) == "balanced"
+    assert speed.claude_code(c) == ("sonnet", "low")
+    assert speed.api(c) == ("claude-sonnet-5-5", "low")
+    assert speed.claude_code(cfg(speed="fast")) == ("haiku", "low")
     assert speed.codex(c) == "low"
-    assert speed.speed(cfg(speed="warp")) == "fast"              # unknown values fall back safely
+    assert speed.speed(cfg(speed="warp")) == "balanced"          # unknown values fall back safely
 
 
 def test_balanced_and_thorough_respect_the_chosen_model():

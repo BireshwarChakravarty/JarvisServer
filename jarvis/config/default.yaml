@@ -19,7 +19,7 @@ brain:
   provider: claude-code    # claude-code (your Claude Pro/Max plan) | codex (your ChatGPT plan)
                            # | anthropic (API key) | ollama (offline, no tools)
   quick_answers: true      # time, timers, music, volume, lock: answered instantly, no AI round trip
-  speed: fast              # fast (≈1 s to his first word) | balanced (smarter, a beat slower) | thorough (thinks longer)
+  speed: balanced          # balanced (natural, the default) | fast (a beat quicker, plainer) | thorough (thinks longer)
   claude_model: null       # used by balanced/thorough: "sonnet", "opus"; null = your plan's default
   codex_model: null
   model: claude-opus-5-5   # used by the API-key provider
