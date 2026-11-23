@@ -243,3 +243,4 @@ body.settings .ob-steps i { cursor: pointer; }
 .swatch.stark { background: repeating-linear-gradient(115deg, #ffffff06 0 2px, transparent 2px 7px), radial-gradient(60% 80% at 50% 50%, #3a0a0c, #070203 70%); }
 .swatch.stark::after { background: radial-gradient(circle, #fff 0 12%, #ffcf7a 35%, #b80d16 72%, transparent 74%);
   box-shadow: 0 0 18px #ff4a3d88, 0 0 0 5px #070203, 0 0 0 6px #ffcf7a55; }
+.build-tag { margin-top: 18px; font: 500 11px/1 var(--mono); letter-spacing: 0.08em; color: var(--faint); text-transform: uppercase; }

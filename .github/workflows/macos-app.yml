@@ -40,6 +40,9 @@ jobs:
           python -m pip install -e ".[dev]"
           python -m pytest -q -rs
 
+      - name: Stamp the build number
+        run: echo "${GITHUB_SHA::7}" > jarvis/_build.txt
+
       - name: Create app bundle
         run: briefcase create macOS app --no-input
 

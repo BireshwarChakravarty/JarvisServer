@@ -149,5 +149,7 @@ else
   xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
 fi
 
-echo "✓ Installed. Opening JARVIS…"
+BUILT="$(find "$APP/Contents" -path '*/jarvis/_build.txt' -print -quit 2>/dev/null | xargs cat 2>/dev/null || true)"
+echo "✓ Installed JARVIS build ${BUILT:-unknown}. Opening it…"
+echo "  (you can check it any time: the JARVIS menu-bar icon shows the build at the top)"
 open "$APP"

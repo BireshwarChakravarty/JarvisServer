@@ -618,6 +618,7 @@
     if (S.theme && window.JarvisTheme) JarvisTheme.apply(S.theme);
     markTheme(S.theme || (window.JarvisTheme ? JarvisTheme.get() : "arc"));
     markClock(S.clock || "24");
+    if (S.build) { $("build-tag").textContent = `JARVIS build ${S.build}`; document.title = `JARVIS · build ${S.build}`; }
     if ("clock24" in S && window.JarvisClock) JarvisClock.set(S.clock24);
     if (settings) { $("launch").textContent = "Save & restart"; $("hello").textContent = "Settings"; }
     models = S.models; renderDownloads();
