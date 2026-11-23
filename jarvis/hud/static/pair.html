@@ -16,8 +16,7 @@
   <a class="back" href="/" aria-label="Back to JARVIS">← JARVIS</a>
   <p class="eyebrow">Companion</p>
   <h1>Pair your iPhone or iPad.</h1>
-  <p class="lede">Talk to JARVIS, hear him answer, run protocols and see what he's saying, from any
-    iPhone or iPad on your home Wi-Fi.</p>
+  <p class="lede">Talk to JARVIS, hear him answer, run protocols and see what he's saying, from your iPhone or iPad: at home, or anywhere with Tailscale.</p>
 
   <section id="off" class="card" hidden>
     <p>The companion is off. Turning it on lets devices on your home network pair with this Mac. Nothing is
@@ -28,6 +27,9 @@
 
   <section id="on" class="grid" hidden>
     <figure class="qr-card card">
+      <div class="seg where" id="where" role="radiogroup" aria-label="Where you'll use it" hidden>
+        <button data-v="home" class="on" role="radio">At home</button><button data-v="anywhere" role="radio">Anywhere</button>
+      </div>
       <div id="qr" class="qr" role="img" aria-label="QR code for pairing"></div>
       <figcaption><span class="mono" id="host"></span><span id="expires" class="muted"></span></figcaption>
       <button class="btn ghost small" id="newcode">New code</button>
@@ -40,8 +42,20 @@
           (a small certificate from this Mac, so iOS allows the microphone).</li>
         <li><b>Add to Home Screen</b> (Share ▸ Add to Home Screen) for a full-screen app.</li>
       </ol>
-      <p class="hint">Same Wi-Fi as this Mac. If the link won't open, type <span class="mono" id="ipurl"></span>
+      <p class="hint" id="home-hint">Same Wi-Fi as this Mac. If the link won't open, type <span class="mono" id="ipurl"></span>
         in Safari instead.</p>
+      <p class="hint" id="anywhere-hint" hidden>Works anywhere your iPhone has internet, through your private
+        Tailscale network: keep Tailscale on, on the iPhone. The Mac must stay on and awake.</p>
+      <div class="hint away" id="away-setup">
+        <b>Use it away from home too (free)</b>
+        <ol>
+          <li>Install <a href="#" data-open="https://tailscale.com/download/mac">Tailscale</a> on this Mac and
+            from the App Store on your iPhone.</li>
+          <li>Sign in to both with the same account.</li>
+          <li>Come back here and choose <b>Anywhere</b>, then scan the code.</li>
+        </ol>
+        It's a private, encrypted network between your own devices; nothing is opened to the internet.
+      </div>
       <h2 class="label gap">Paired devices</h2>
       <ul class="devices" id="devices"></ul>
       <div class="row">

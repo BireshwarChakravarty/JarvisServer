@@ -484,7 +484,7 @@ def make_router(sup) -> APIRouter:
     # ── iPhone / iPad companion ───────────────────────────────────────────
     @r.get("/api/remote")
     async def remote_state():
-        from jarvis.remote.server import PORT, lan_addresses
+        from jarvis.remote.server import PORT, lan_addresses, tailscale_address
 
         enabled = bool(sup.cfg.get("app.companion", False))
         out = {"enabled": enabled, "running": sup.remote.running, "error": sup.remote.error,
@@ -494,9 +494,14 @@ def make_router(sup) -> APIRouter:
         if enabled and sup.remote.running:
             name, ip = await asyncio.to_thread(lan_addresses)
             code, expires = sup.devices.current_code()
+            ts_name, ts_ip = await asyncio.to_thread(tailscale_address)
+            ts_host = ts_name or ts_ip
             out.update(url=f"http://{name}:{PORT}/remote#pair={code}",
                        ip_url=f"http://{ip}:{PORT}/remote#pair={code}" if ip else None,
-                       host=name, expires=int(expires))
+                       host=name, expires=int(expires),
+                       # away from home: the same companion through your Tailscale network
+                       anywhere={"available": bool(ts_host), "host": ts_host,
+                                 "url": f"http://{ts_host}:{PORT}/remote#pair={code}" if ts_host else None})
         return out
 
     @r.post("/api/remote/enable")

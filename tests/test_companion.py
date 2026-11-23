@@ -155,3 +155,28 @@ def test_his_voice_is_sent_to_the_phone_that_asked(remote):
         assert wav[:4] == b"RIFF" and len(wav) == meta["bytes"] and len(wav) > 48000
     time.sleep(0.2)
     assert route(tone, 24000, "x") is False                                  # phone gone: the Mac speaks instead
+
+
+def test_your_tailscale_network_counts_as_yours_the_internet_does_not():
+    """Away from home the phone reaches the Mac through Tailscale (100.64.0.0/10); nothing else from
+    outside the home network gets in."""
+    from jarvis.remote.server import private_client
+
+    for ok in ("100.101.2.3", "100.64.0.1", "100.127.255.254", "fd7a:115c:a1e0::5", "192.168.1.4", "127.0.0.1"):
+        assert private_client(ok), ok
+    for bad in ("8.8.8.8", "100.128.0.1", "100.63.255.255", "2606:4700::1111"):
+        assert not private_client(bad), bad
+
+
+def test_tailscale_address_from_its_status(monkeypatch):
+    import json
+    import subprocess
+    from types import SimpleNamespace
+
+    from jarvis.remote import server
+
+    status = {"Self": {"Online": True, "DNSName": "mac-mini.tail1234.ts.net.", "TailscaleIPs": ["100.101.2.3", "fd7a::1"]}}
+    monkeypatch.setattr(server.os.path if hasattr(server, "os") else __import__("os").path, "exists",
+                        lambda p: p == server.TAILSCALE_CLI[0])
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(stdout=json.dumps(status)))
+    assert server.tailscale_address() == ("mac-mini.tail1234.ts.net", "100.101.2.3")

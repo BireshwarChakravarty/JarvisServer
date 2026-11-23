@@ -10,6 +10,28 @@
     return data;
   }
   let refresh = null;
+  let where = "home", last = null;
+  document.querySelectorAll("#where button").forEach((b) => (b.onclick = () => {
+    where = b.dataset.v;
+    document.querySelectorAll("#where button").forEach((x) => x.classList.toggle("on", x === b));
+    if (last) show(last);
+  }));
+  document.querySelectorAll("[data-open]").forEach((a) => (a.onclick = (ev) => {
+    ev.preventDefault();
+    fetch("/api/setup/open-url", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: a.dataset.open }) }).catch(() => window.open(a.dataset.open));
+  }));
+  function show(s) {
+    const any = s.anywhere && s.anywhere.available;
+    if (!any) where = "home";
+    $("where").hidden = !any;
+    $("away-setup").hidden = !!any;
+    const away = where === "anywhere" && any;
+    drawQR(away ? s.anywhere.url : s.url);
+    $("host").textContent = away ? s.anywhere.host : s.host;
+    $("home-hint").hidden = away;
+    $("anywhere-hint").hidden = !away;
+  }
 
   function drawQR(url) {
     const qr = qrcode(0, "M");               // auto size, medium error correction
@@ -30,8 +52,7 @@
       : (s.enabled && s.voice && !s.voice.running && s.voice.error)
         ? `Talking through the phone isn't available: ${s.voice.error}. Buttons and typing still work.` : "";
     if (s.enabled && s.running) {
-      drawQR(s.url);
-      $("host").textContent = s.host;
+      last = s; show(s);
       $("ipurl").textContent = s.ip_url ? s.ip_url.split("#")[0] : "";
       const mins = Math.max(1, Math.round((s.expires - Date.now() / 1000) / 60));
       $("expires").textContent = `Code valid for ${mins} more minute${mins === 1 ? "" : "s"}`;
@@ -62,7 +83,7 @@
   // demo data for screenshots without a running JARVIS
   function demo(path) {
     if (path === "/api/remote") return Promise.resolve({ enabled: true, running: true, host: "Tonys-Mac-mini.local",
-      url: "http://Tonys-Mac-mini.local:7778/remote#pair=demo-code-0123456789", ip_url: "http://192.168.1.20:7778/remote#pair=x",
+      url: "http://Tonys-Mac-mini.local:7778/remote#pair=demo-code-0123456789", ip_url: "http://192.168.1.20:7778/remote#pair=x", anywhere: new URLSearchParams(location.search).has("away") ? { available: true, host: "tonys-mac-mini.tail1234.ts.net", url: "http://tonys-mac-mini.tail1234.ts.net:7778/remote#pair=demo" } : { available: false },
       expires: Date.now() / 1000 + 540, devices: [{ id: "a", name: "iPhone", last_seen: Date.now() / 1000 - 30 },
         { id: "b", name: "iPad", last_seen: Date.now() / 1000 - 7200 }] });
     return Promise.resolve({ ok: true });

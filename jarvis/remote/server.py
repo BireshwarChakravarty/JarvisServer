@@ -46,12 +46,55 @@ REPLAY = {"agenda", "weather", "protocols", "hand_control", "mic", "state"}
 COMMANDS = {"text", "stop", "confirm", "protocol", "mute", "hand_control", "listen", "show", "lock", "voice", "ping"}
 
 
+TAILNET = ipaddress.ip_network("100.64.0.0/10")         # Tailscale (and other carrier-grade NAT) addresses
+
+
 def private_client(host: str | None) -> bool:
+    """Your home network, this Mac, or your own Tailscale network (the phone away from home)."""
     try:
         ip = ipaddress.ip_address((host or "").split("%")[0])
     except ValueError:
         return host == "testclient"
-    return ip.is_private or ip.is_loopback or ip.is_link_local
+    return ip.is_private or ip.is_loopback or ip.is_link_local or (ip.version == 4 and ip in TAILNET)
+
+
+TAILSCALE_CLI = ["/Applications/Tailscale.app/Contents/MacOS/Tailscale", "/opt/homebrew/bin/tailscale",
+                 "/usr/local/bin/tailscale"]
+
+
+def tailscale_address() -> tuple[str | None, str | None]:
+    """(MagicDNS name like 'mac-mini.tail1234.ts.net', 100.x IP) if this Mac is on a Tailscale network.
+
+    Tailscale (free for personal use) joins your Mac and iPhone in a private, encrypted network, so the
+    companion works from anywhere without opening anything to the internet."""
+    import os
+
+    for cli in TAILSCALE_CLI:
+        if not os.path.exists(cli):
+            continue
+        try:
+            out = subprocess.run([cli, "status", "--json"], capture_output=True, text=True, timeout=4)
+            me = (json.loads(out.stdout or "{}").get("Self") or {})
+            if not me.get("Online", True):
+                return None, None
+            name = (me.get("DNSName") or "").rstrip(".") or None
+            ip = next((a for a in me.get("TailscaleIPs") or [] if "." in a), None)
+            if name or ip:
+                return name, ip
+        except Exception:
+            pass
+    try:                                        # no CLI: a 100.64/10 address on an interface is Tailscale's
+        out = subprocess.run(["ifconfig"], capture_output=True, text=True, timeout=4).stdout
+        for word in out.split():
+            try:
+                ip = ipaddress.ip_address(word)
+            except ValueError:
+                continue
+            if ip.version == 4 and ip in TAILNET:
+                return None, str(ip)
+    except Exception:
+        pass
+    return None, None
 
 
 def lan_addresses() -> tuple[str, str | None]:
@@ -399,7 +442,9 @@ class RemoteServer:
         if secure_port and self.certs is not None:
             for attempt in (1, 2):
                 try:
-                    pem, key = await asyncio.to_thread(self.certs.ensure_server, [name], [ip] if ip else [])
+                    ts_name, ts_ip = await asyncio.to_thread(tailscale_address)
+                    pem, key = await asyncio.to_thread(self.certs.ensure_server, [name, ts_name or ""],
+                                                       [a for a in (ip, ts_ip) if a])
                     if await self._serve(app, host, secure_port, ssl_certfile=str(pem), ssl_keyfile=str(key)):
                         self.secure_running, self.secure_error = True, ""
                         log.info("companion (secure, for voice) listening on port %s", secure_port)

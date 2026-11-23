@@ -30,3 +30,10 @@ body.pair { overflow-y: auto; }
 .btn:hover { border-color: rgb(var(--ice-rgb) / 0.4); }
 .err { color: var(--coral); font-size: 13.5px; min-height: 1.3em; margin: 10px 0 0; }
 @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } .pair-shell { padding: 28px 16px 48px; } }
+.where { margin: 0 auto 14px; display: inline-flex; }
+.away { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--hair); border-radius: 14px; }
+.away ol { margin: 6px 0 6px 18px; padding: 0; }
+.away a { color: var(--ice); }
+.seg { display: inline-flex; padding: 4px; gap: 4px; border-radius: 14px; background: rgb(var(--fg-rgb) / 0.04); border: 1px solid var(--hair-2); flex-wrap: wrap; }
+.seg button { border: 0; background: transparent; color: var(--muted); font: 500 14px var(--sans); padding: 9px 16px; border-radius: 10px; cursor: pointer; transition: all 0.2s; }
+.seg button.on { background: rgb(var(--ice-rgb) / 0.14); color: var(--text); }
