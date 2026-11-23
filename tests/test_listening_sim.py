@@ -595,3 +595,30 @@ def test_learn_my_voice_by_talking_to_him(cfg, tmp_path):
     assert app.voice_id.profile.ready and app.voice_id.profile.enrolled == 5
     assert not any("once more" in s.lower() for s in app.speaker.said), app.speaker.said   # it waited for you
     assert any("I know your voice now" in s for s in app.speaker.said), app.speaker.said
+
+
+def test_a_pause_after_a_dangling_word_waits_for_the_rest(cfg):
+    """'Remind me to…' (thinking) '…call the bank': the voice sounds finished, the words plainly aren't."""
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.0, "remind me to"),
+                           ("silence", 1.8, ""), ("say", 0.9, "call the bank"), ("silence", 4.5, "")])
+    assert asked == ["remind me to call the bank"], (asked, app.stt.heard)
+
+
+def test_a_long_request_survives_a_short_thinking_pause(cfg):
+    """After several seconds of talking, a half-second breath isn't the end of the request."""
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""),
+                           ("say", 4.6, "book a table for four at the italian place near the office tomorrow"),
+                           ("silence", 0.5, ""), ("say", 1.0, "around eight"), ("silence", 4.5, "")])
+    assert asked == ["book a table for four at the italian place near the office tomorrow around eight"], \
+        (asked, app.stt.heard)
+
+
+def test_a_finished_short_request_is_still_answered_promptly(cfg):
+    """The extra patience is only for unfinished words and long requests: 'what time is it' isn't held up."""
+    import time as _t
+
+    t0 = _t.monotonic()
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 0.9, "what's the weather like"),
+                           ("silence", 4.0, "")])
+    assert asked == ["what's the weather like"], (asked, app.stt.heard)
+    assert len(app.stt.heard) == 1                    # one listen, no waiting for "the rest"

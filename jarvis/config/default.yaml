@@ -48,7 +48,7 @@ voice:
   voice_id: true           # once you've said "learn my voice", he answers only you
   voice_id_threshold: 0.45 # how sure he must be it's you (higher: stricter)
   push_to_talk_key: "alt_r"  # hold to talk (needs Accessibility permission); null to disable
-  max_utterance_seconds: 30
+  max_utterance_seconds: 60
   smart_turn: true         # judge when you've finished speaking from your voice, not a fixed silence
   turn_patience: 2.5       # mid-thought pauses: wait up to this long before answering
   end_silence: 1.0         # a pause this long ends your turn when Smart Turn can't tell

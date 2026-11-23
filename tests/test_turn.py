@@ -210,3 +210,14 @@ def test_speaker_plays_prepared_phrases_instantly():
     assert sp.say_now("Sir?") is True
     assert sp._idle.wait(3)
     sp.close()
+
+
+def test_words_that_cant_end_a_request():
+    from jarvis.voice.turn import sounds_unfinished
+
+    for t in ("Remind me to", "Send it to Pepper and", "Set a timer for", "um", "Play something by",
+              "Text Happy that I'll be late, because", "Open the,", "Book it for the…"):
+        assert sounds_unfinished(t), t
+    for t in ("What's the weather like?", "Turn the lights on.", "Yes.", "The first one", "Call me",
+              "Remind me to call the bank.", "Log in", "Do that", "", "No, the other one."):
+        assert not sounds_unfinished(t), t

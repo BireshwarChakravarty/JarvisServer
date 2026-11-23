@@ -564,7 +564,7 @@ class Jarvis:
                         await self._acknowledge(q)
                     else:
                         bus.emit("state", state="transcribing")
-                        text, verdict = await self._hear(head)
+                        head, text, verdict = await self._hear_whole(q, head, self._endpointing())
                         if self._not_you(verdict, follow_up=False):
                             bus.emit("state", state="idle")
                             return              # someone else said "Hey Jarvis": stay quiet
@@ -600,7 +600,10 @@ class Jarvis:
                     bus.emit("state", state="idle")
                     return
                 bus.emit("state", state="transcribing")
-                text, verdict = await self._hear(audio)
+                if stop_evt is None:
+                    audio, text, verdict = await self._hear_whole(q, audio, ep)
+                else:
+                    text, verdict = await self._hear(audio)      # push-to-talk: you said when you'd finished
                 if self._not_you(verdict, follow_up):
                     if follow_up and time.monotonic() < window - 0.5:
                         continue            # someone else in the room: keep listening for you
@@ -628,6 +631,28 @@ class Jarvis:
                 continue  # user interrupted with the wake word: listen right away
             await self._settle_keep(q)  # his voice lingers in the room for a moment: let it fade first
             window = time.monotonic() + self._follow_up_for(turn)
+
+    async def _hear_whole(self, q, audio, ep: dict):
+        """Transcribe what you said; if the words plainly stop mid-thought ("remind me to…", "and…",
+        "um"), keep listening for the rest and hear it all as one request. A pause where you're
+        thinking is not the end of your turn."""
+        from jarvis.voice.audio import SAMPLE_RATE, record_utterance
+        from jarvis.voice.turn import sounds_unfinished
+
+        text, verdict = await self._hear(audio)
+        wait = float(self.cfg.get("voice.unfinished_wait", 3.0))
+        for _ in range(3):
+            if not sounds_unfinished(text):
+                break
+            log.info("sounds unfinished (%r): listening for the rest", text[-40:])
+            bus.emit("state", state="listening", follow_up=False)
+            more = await record_utterance(q, self.vad, start_timeout=wait, **ep)
+            if more is None:
+                break                                   # that really was all
+            audio = np.concatenate([audio, np.zeros(int(0.25 * SAMPLE_RATE), np.float32), more])
+            bus.emit("state", state="transcribing")
+            text, verdict = await self._hear(audio)
+        return audio, text, verdict
 
     async def _hear(self, audio) -> tuple[str, tuple[str, float]]:
         """Transcribe, and (at the same time) check it's your voice."""
@@ -749,7 +774,7 @@ class Jarvis:
         waiting half a second longer. Smart Turn ends early only when it's sure you're done."""
         c = self.cfg.get
         return {"end_silence": float(c("voice.end_silence", 1.0)),
-                "max_seconds": float(c("voice.max_utterance_seconds", 30)),
+                "max_seconds": float(c("voice.max_utterance_seconds", 60)),
                 "turn": self.turn,
                 "turn_quick": float(c("voice.turn_quick", 0.35)),
                 "turn_threshold": float(c("voice.turn_threshold", 0.8)),

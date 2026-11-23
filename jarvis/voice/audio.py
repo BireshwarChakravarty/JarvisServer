@@ -362,16 +362,22 @@ async def record_utterance(
             silence, asked, verdict = 0.0, False, None
         else:
             silence += frame_s
-        if use_turn and not asked and silence >= turn_quick:
+        # A long request has thinking pauses: once you've talked for a few seconds, wait a little longer
+        # before asking whether you've finished, and only stop early when the model is surer.
+        spoken = last_voice * frame_s
+        long_turn = spoken > 4.0
+        quick = max(turn_quick, 0.6) if long_turn else turn_quick
+        sure = max(turn_threshold, 0.9) if long_turn else turn_threshold
+        if use_turn and not asked and silence >= quick:
             asked = True
             so_far = _yours(frames, last_voice)
             p = await asyncio.to_thread(turn.probability, so_far)
             if p is not None:
-                verdict = True if p >= turn_threshold else (False if p < turn_unsure else None)
+                verdict = True if p >= sure else (False if p < turn_unsure else None)
                 log.debug("turn: p(finished)=%.2f after %.2fs pause", p, silence)
                 if verdict:
                     break
-        limit = turn_patience if verdict is False else end_silence
+        limit = turn_patience if verdict is False else (max(end_silence, 1.4) if long_turn else end_silence)
         if silence >= limit or len(frames) * frame_s >= max_seconds:
             break
     if not started or not frames:

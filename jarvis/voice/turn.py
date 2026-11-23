@@ -129,3 +129,34 @@ class TurnDetector:
         except Exception as exc:
             log.debug("Smart Turn inference failed: %s", exc)
             return None
+
+
+# ── words that can't end a request ────────────────────────────────────────────────────────────────
+# The voice can sound finished while the words plainly aren't: "remind me to… call the bank",
+# "send it to Pepper and…", "um". When what you've said so far ends like this, JARVIS keeps
+# listening for the rest instead of answering half a sentence.
+DANGLING = frozenset("""
+and or but so because cause to the a an of for with about from into onto at by than as whether
+um umm uh uhh er erm hmm uhm like then which who whose whom if when while until unless after before
+my your his her their our its this these those is are was were will would should could can
+also plus and then maybe
+""".split())
+
+
+def sounds_unfinished(text: str) -> bool:
+    """True when a transcript plainly stops mid-thought (a dangling word or a trailing comma/dash)."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    if t.endswith(("…", "...", ",", "—", "–", "-", ":", ";")):
+        return True
+    if t.endswith(("?", "!")):
+        return False                    # a question or exclamation is a finished thought
+    words = t.lower().rstrip(".!?\"'”’ ").split()
+    if not words:
+        return False
+    last = words[-1].strip(",.;:!?\"'“”‘’()")
+    if last in ("and", "or", "but", "um", "uh", "er", "erm", "uhm", "umm", "uhh"):
+        return True
+    # a lone short reply ("yes", "the first one") is complete even if it ends oddly
+    return len(words) >= 3 and last in DANGLING
