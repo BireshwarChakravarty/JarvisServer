@@ -308,6 +308,7 @@ class Speaker:
     route = None
 
     _cache: dict = {}
+    gain = 1.0                  # how loudly he speaks: softer late at night (set by the orchestrator)
 
     def prepare(self, texts: list[str]) -> None:
         """Synthesise short phrases ahead of time (in the background) so they play instantly."""
@@ -507,6 +508,8 @@ class Speaker:
                 sink = self.route
                 if sink is not None and self._send_elsewhere(sink, audio, sr, text, gen):
                     continue
+                if self.gain != 1.0:
+                    audio = np.asarray(audio, dtype=np.float32) * float(self.gain)
                 self._play(audio, sr, gen, pause=breath_after(text))
             except Exception as exc:  # no output device, device unplugged … keep the worker alive
                 log.error("audio playback failed: %s", exc)

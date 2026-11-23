@@ -56,3 +56,28 @@ def test_he_waits_for_a_pause_in_the_room(cfg, monkeypatch):
     t0 = asyncio.run(run())
     (at, text), = app.speaker.said
     assert text.startswith("Your next meeting") and at - t0 >= 1.3      # not over the conversation
+
+
+def test_softer_and_briefer_late_at_night(cfg, monkeypatch):
+    import datetime as real_dt
+
+    from jarvis.core import orchestrator
+
+    app = Jarvis(cfg, headless=True)
+    app.speaker = SimpleNamespace(gain=1.0)
+
+    class Late(real_dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return real_dt.datetime(2026, 11, 23, 23, 40)
+    monkeypatch.setattr(orchestrator.dt, "datetime", Late)
+    ctx = asyncio.run(app._live_context())
+    assert app.speaker.gain == 0.6 and "late at night" in ctx["mood"]
+
+    class Day(real_dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return real_dt.datetime(2026, 11, 23, 11, 0)
+    monkeypatch.setattr(orchestrator.dt, "datetime", Day)
+    ctx = asyncio.run(app._live_context())
+    assert app.speaker.gain == 1.0 and "mood" not in ctx

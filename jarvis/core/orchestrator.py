@@ -1122,6 +1122,13 @@ class Jarvis:
 
     async def _live_context(self) -> dict:
         ctx: dict[str, Any] = {}
+        hour = dt.datetime.now().hour
+        late = hour >= int(self.cfg.get("voice.night_from", 23)) or hour < int(self.cfg.get("voice.night_until", 6))
+        if self.speaker is not None:
+            # a person lowers their voice at night: softer, and the brain is asked to keep it brief
+            self.speaker.gain = float(self.cfg.get("voice.night_volume", 0.6)) if late else 1.0
+        if late:
+            ctx["mood"] = "late at night: speak softly and briefly, no jokes unless they start it"
         try:
             from jarvis.mac import system as mac
 
