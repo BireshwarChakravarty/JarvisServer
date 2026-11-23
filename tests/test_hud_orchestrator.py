@@ -149,3 +149,20 @@ def test_live_context_never_holds_up_an_answer(cfg, monkeypatch):
     assert first["frontmost app"] == "Safari" and "battery" not in first
     assert second["battery"] == "80% charging" and third["battery"] == "80% charging"
     assert calls["battery"] == 1                       # read at most once a minute
+
+
+def test_a_doubtful_transcript_is_flagged_to_the_brain(cfg):
+    from types import SimpleNamespace
+
+    from jarvis.core.orchestrator import Jarvis
+    from jarvis.voice.stt import _confidence
+
+    assert _confidence([-0.2, -0.4]) == -0.30000000000000004 or abs(_confidence([-0.2, -0.4]) + 0.3) < 1e-9
+    assert _confidence([None]) is None
+    app = Jarvis(cfg, headless=True)
+    app.stt = SimpleNamespace(last_confidence=-1.2)
+    app._note_if_unsure()
+    assert any(n.startswith("speech recognition was unsure") for n in app._quick_notes)
+    app._quick_notes, app.stt.last_confidence = [], -0.3
+    app._note_if_unsure()
+    assert app._quick_notes == []

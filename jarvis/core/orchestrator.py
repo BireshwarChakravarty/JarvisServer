@@ -643,6 +643,7 @@ class Jarvis:
         from jarvis.voice.turn import sounds_unfinished
 
         text, verdict = await self._hear(audio)
+        self._note_if_unsure()
         wait = float(self.cfg.get("voice.unfinished_wait", 3.0))
         for _ in range(3):
             if not sounds_unfinished(text):
@@ -655,7 +656,17 @@ class Jarvis:
             audio = np.concatenate([audio, np.zeros(int(0.25 * SAMPLE_RATE), np.float32), more])
             bus.emit("state", state="transcribing")
             text, verdict = await self._hear(audio)
+            self._note_if_unsure()
         return audio, text, verdict
+
+    def _note_if_unsure(self) -> None:
+        """When speech recognition was guessing, tell the brain, so a doubtful name or action is
+        checked with one short question rather than acted on."""
+        conf = getattr(self.stt, "last_confidence", None)
+        if conf is not None and conf < float(self.cfg.get("voice.unsure_below", -0.8)):
+            notes = [n for n in getattr(self, "_quick_notes", []) if not n.startswith("speech recognition")]
+            self._quick_notes = (notes + ["speech recognition was unsure of this request; if a name, number or "
+                                          "action in it looks doubtful, ask one short question before acting"])[-4:]
 
     async def _hear(self, audio) -> tuple[str, tuple[str, float]]:
         """Transcribe, and (at the same time) check it's your voice."""

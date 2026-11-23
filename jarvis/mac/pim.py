@@ -259,10 +259,58 @@ def create_reminder(title: str, due: dt.datetime | None = None, notes: str = "",
 
 
 # ═════════════════════════════ Contacts & Messages ═══════════════════════════
-def find_contact(name: str) -> dict:
+class AmbiguousContact(RuntimeError):
+    """Several contacts match: JARVIS asks which one rather than guessing."""
+
+    expected = True
+
+    def __init__(self, name: str, options: list[str]) -> None:
+        self.options = options
+        shown = ", ".join(options[:-1]) + f" or {options[-1]}" if len(options) > 1 else options[0]
+        super().__init__(f"Several contacts match {name!r}: {shown}. Ask which one they mean.")
+
+
+def contact_names(name: str) -> list[str]:
     out = osascript(
         'tell application "Contacts"\n'
         f"  set ps to (every person whose name contains {q(name)})\n"
+        '  set out to ""\n'
+        "  repeat with p in ps\n"
+        '    set out to out & (name of p) & linefeed\n'
+        "  end repeat\n"
+        "  return out\n"
+        "end tell",
+        timeout=30,
+    )
+    return [n.strip() for n in (out or "").splitlines() if n.strip()]
+
+
+def pick_contact(name: str, names: list[str]) -> str | None:
+    """The one contact meant by `name`, or raise AmbiguousContact. An exact full-name match wins; so
+    does a single contact whose first name is exactly it ('Pepper' among 'Pepper Potts', 'Peppa Pig')."""
+    if not names:
+        return None
+    want = name.strip().lower()
+    exact = [n for n in names if n.lower() == want]
+    if len(exact) == 1:
+        return exact[0]
+    first = [n for n in names if n.lower().split()[0] == want] if want else []
+    if len(first) == 1:
+        return first[0]
+    pool = exact or first or names
+    if len(pool) == 1:
+        return pool[0]
+    raise AmbiguousContact(name, pool[:4])
+
+
+def find_contact(name: str) -> dict:
+    chosen = pick_contact(name, contact_names(name))
+    if not chosen:
+        return {}
+    name = chosen
+    out = osascript(
+        'tell application "Contacts"\n'
+        f"  set ps to (every person whose name is {q(name)})\n"
         '  if (count of ps) is 0 then return ""\n'
         "  set p to item 1 of ps\n"
         '  set ph to ""\n  set em to ""\n'

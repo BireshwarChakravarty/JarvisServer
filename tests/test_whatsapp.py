@@ -219,3 +219,14 @@ def test_greeting_can_lead_with_whatsapp():
     data = {"whatsapp_waiting": [{"from": "Pepper Potts", "said": "It's urgent"}]}
     picks = {gs.pick_angle(data, [], 3600, [], dt.datetime(2026, 11, 20, 9), random.Random(i)) for i in range(60)}
     assert "whatsapp" in picks
+
+
+def test_two_equally_likely_chats_are_asked_about_not_guessed():
+    import pytest
+
+    from jarvis.mac import whatsapp
+
+    ranked = [(0.9, {"ZPARTNERNAME": "Mum"}), (0.88, {"ZPARTNERNAME": "Mum's Birthday"})]
+    with pytest.raises(whatsapp.AmbiguousChat) as err:
+        raise whatsapp.AmbiguousChat("mum", [r["ZPARTNERNAME"] for _, r in ranked])
+    assert "Mum or Mum's Birthday" in str(err.value) and err.value.expected

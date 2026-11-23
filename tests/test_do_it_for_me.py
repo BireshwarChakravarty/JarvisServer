@@ -113,3 +113,17 @@ def test_the_tools_are_registered_and_explain_themselves():
     ctx = SimpleNamespace(orchestrator=None, confirm=None, require_confirmation=True)
     assert "isn't available" in asyncio.run(builtin.click_on_screen(ctx, "Archive"))
     assert "don't know that key" in asyncio.run(builtin.press_keys(ctx, "cmd+banana"))
+
+
+def test_which_contact_is_asked_when_several_match():
+    import pytest
+
+    from jarvis.mac import pim
+
+    assert pim.pick_contact("Pepper", ["Pepper Potts", "Peppa Pig"]) == "Pepper Potts"
+    assert pim.pick_contact("John Smith", ["John Smith", "John Smithers"]) == "John Smith"
+    assert pim.pick_contact("Happy", ["Happy Hogan"]) == "Happy Hogan"
+    assert pim.pick_contact("x", []) is None
+    with pytest.raises(pim.AmbiguousContact) as err:
+        pim.pick_contact("John", ["John Smith", "John Appleseed"])
+    assert "John Smith or John Appleseed" in str(err.value)

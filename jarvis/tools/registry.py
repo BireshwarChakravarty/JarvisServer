@@ -239,7 +239,10 @@ class ToolRegistry:
                 value = await asyncio.to_thread(tool.func, ctx, **args)
             result = ToolResult(_normalise(value))
         except Exception as exc:  # tools must never crash the brain
-            log.exception("tool %s failed", name)
+            if getattr(exc, "expected", False):          # e.g. "which John?": a question, not a fault
+                log.info("tool %s: %s", name, exc)
+            else:
+                log.exception("tool %s failed", name)
             result = ToolResult(f"{type(exc).__name__}: {exc}", is_error=True)
         elapsed = time.perf_counter() - started
         bus.emit(

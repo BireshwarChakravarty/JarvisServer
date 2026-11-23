@@ -247,21 +247,37 @@ def _score(name: str, want: str) -> float:
     return SequenceMatcher(None, n, w).ratio() * 0.75
 
 
+class AmbiguousChat(WhatsAppError):
+    """Two or more chats match about equally: JARVIS asks which one."""
+
+    expected = True
+
+    def __init__(self, name: str, options: list[str]) -> None:
+        self.options = options
+        shown = ", ".join(options[:-1]) + f" or {options[-1]}"
+        super().__init__(f"More than one WhatsApp chat matches {name!r}: {shown}. Ask which one they mean.")
+
+
 def find_chat(name: str, path: Path | None = None) -> dict | None:
     """The chat best matching a name ('Pepper', 'mum', 'the family group')."""
     want = re.sub(r"(?i)^(the|my)\s+|\s+(group|chat)$", "", (name or "").strip())
     with _Snapshot(path) as con:
-        best, best_s = None, 0.0
+        scored = []
         for r in _chat_rows(con):
             if not _live(r):
                 continue
             s = _score(r["ZPARTNERNAME"] or "", want)
             if not s and _digits(want) and _digits(want) in _digits(r["ZCONTACTJID"]):
                 s = 0.95
-            if s > best_s:
-                best, best_s = r, s
-        if best is None or best_s < 0.6:
+            if s:
+                scored.append((s, r))
+        scored.sort(key=lambda x: -x[0])
+        if not scored or scored[0][0] < 0.6:
             return None
+        best_s, best = scored[0]
+        close = [r for s, r in scored[1:4] if s >= 0.8 and best_s - s < 0.05 and best_s < 1.0]
+        if close:              # "Mum" and "Mum's birthday" equally likely: ask rather than guess
+            raise AmbiguousChat(name, [best["ZPARTNERNAME"]] + [r["ZPARTNERNAME"] for r in close])
         return {**_chat(best), "jid": best["ZCONTACTJID"], "pk": best["Z_PK"]}
 
 
@@ -339,6 +355,8 @@ def send(recipient: str, text: str, path: Path | None = None, wait: float = 8.0)
     chat = None
     try:
         chat = find_chat(recipient, path)
+    except AmbiguousChat as exc:
+        return str(exc)                               # which one? never guess who a message goes to
     except WhatsAppError as exc:
         log.info("whatsapp chats unreadable for send: %s", exc)
     phone = ""

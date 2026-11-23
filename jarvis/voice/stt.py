@@ -94,6 +94,8 @@ class Transcriber:
         except Exception as exc:  # pragma: no cover
             log.warning("STT warmup failed: %s", exc)
 
+    last_confidence: float | None = None    # of the latest transcript (see _confidence)
+
     def transcribe(self, audio: np.ndarray) -> str:
         self.load()
         with self._busy:
@@ -110,8 +112,9 @@ class Transcriber:
                 initial_prompt=self.prompt, condition_on_previous_text=False, fp16=True,
             )
             segs = result.get("segments")
-            text = " ".join(str(sg.get("text", "")) for sg in segs if _real(sg.get("no_speech_prob"), sg.get(
-                "avg_logprob"))) if segs else result.get("text", "")
+            kept = [sg for sg in segs or [] if _real(sg.get("no_speech_prob"), sg.get("avg_logprob"))]
+            text = " ".join(str(sg.get("text", "")) for sg in kept) if segs else result.get("text", "")
+            self.last_confidence = _confidence([sg.get("avg_logprob") for sg in kept])
         else:
             segments, _ = impl.transcribe(
                 audio, language=self.language, beam_size=1,
@@ -119,11 +122,19 @@ class Transcriber:
                 vad_filter=len(audio) > 16000 * 20, without_timestamps=True,
                 initial_prompt=self.prompt, condition_on_previous_text=False,
             )
-            text = " ".join(s.text for s in segments
-                            if _real(getattr(s, "no_speech_prob", None), getattr(s, "avg_logprob", None)))
+            kept = [s for s in segments if _real(getattr(s, "no_speech_prob", None), getattr(s, "avg_logprob", None))]
+            text = " ".join(s.text for s in kept)
+            self.last_confidence = _confidence([getattr(s, "avg_logprob", None) for s in kept])
         text = clean_transcript(text)
         log.info("STT %.0f ms: %r", (time.perf_counter() - t0) * 1000, text)
         return text
+
+
+def _confidence(logprobs: list) -> float | None:
+    """How sure the recogniser was (its average per-token log-probability; below about -0.8 it was
+    guessing). None when it didn't say."""
+    vals = [float(v) for v in logprobs if v is not None]
+    return sum(vals) / len(vals) if vals else None
 
 
 def _real(no_speech_prob, avg_logprob) -> bool:
