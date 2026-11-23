@@ -450,6 +450,7 @@
 
   /* ───────────── speech: pick a voice, hear it ───────────── */
   let voiceSel = null;
+  const RECOMMENDED = "butler";       // the natural voice chosen for JARVIS; Classic stays one tap away
   const sample = () => `Good evening, ${S.profile.title || "sir"}. I've run the diagnostics and everything checks out. Shall I bring the rest of the house online?`;
   async function loadVoices() {
     const v = await api("/api/setup/voices").catch(() => null);
@@ -462,24 +463,43 @@
       b.innerHTML = `<span class="pdot"></span><div><b></b><span></span></div><i class="vplay" aria-hidden="true"></i>`;
       b.querySelector("b").textContent = o.label + (o.id === "jarvis" ? "" : "");
       b.querySelector("div span").textContent = o.about;
-      if (o.id === "jarvis") b.querySelector("b").insertAdjacentHTML("beforeend", ' <em class="ptag">Recommended</em>');
+      if (o.id === RECOMMENDED) b.querySelector("b").insertAdjacentHTML("beforeend", ' <em class="ptag">Recommended</em>');
+      if (kind === "natural") { b.dataset.sample = o.sample; b.querySelector("b").insertAdjacentHTML("beforeend", ' <em class="ptag nat">Natural</em>'); }
+      if (o.id === "jarvis") b.querySelector("b").firstChild.textContent = "Classic JARVIS";
       if (kind === "neural" && !v.neural_ready) b.disabled = true;
       b.onclick = () => pickVoice(o.id);
       box.appendChild(b);
     };
+    (v.natural || []).forEach((o) => add({ ...o, about: o.about }, "natural"));
     v.presets.forEach((o) => add(o, "neural"));
     v.mac.forEach((o) => add(o, "mac"));
     markVoice();
-    $("voice-hint").innerHTML = !v.neural_ready ? "My neural voices are still downloading; the Apple voices work right away."
+    $("voice-hint").innerHTML = (v.natural || []).length && v.natural.some((o) => o.id === v.current) && !v.natural_ready
+      ? "Downloading the natural voice (about 2 GB). I'll use the Classic voice until it's ready, then switch by myself."
+      : v.natural_status && /slow/.test(v.natural_status) ? "The natural voices are a touch too slow on this Mac, so I'm using the Classic voice."
+      : !v.neural_ready ? "My neural voices are still downloading; the Apple voices work right away."
       : v.mac_has_premium ? "" : 'Prefer an Apple voice? Download a free Premium one (Jamie is excellent) in <a href="#" id="get-voices">Spoken Content settings</a>, then come back.';
     const gv = $("get-voices"); if (gv) gv.onclick = (e) => { e.preventDefault(); api("/api/setup/open-voice-settings", {}).catch(() => {}); };
   }
   function markVoice() {
     document.querySelectorAll("#voices .voice").forEach((b) => { const on = b.dataset.v === voiceSel; b.classList.toggle("on", on); b.setAttribute("aria-checked", on); });
   }
+  const preview = new Audio();
   async function pickVoice(id) {
     voiceSel = id; markVoice(); $("speech-err").textContent = "";
     document.querySelectorAll("#voices .voice").forEach((b) => b.classList.toggle("playing", b.dataset.v === id));
+    const card = document.querySelector(`#voices .voice[data-v="${CSS.escape(id)}"]`);
+    preview.pause();
+    if (card && card.dataset.sample) {        // a natural voice: hear it at once, while it downloads
+      try {
+        const r = await api("/api/setup/voice", { voice: id });
+        reactor.setState("speaking");
+        preview.src = card.dataset.sample; preview.play().catch(() => {});
+        preview.onended = () => { reactor.setState("idle"); card.classList.remove("playing"); };
+        if (r && r.ready === false) loadVoices();
+      } catch (e) { $("speech-err").textContent = e.message; }
+      return;
+    }
     try {
       await api("/api/setup/voice", { voice: id });
       reactor.setState("speaking"); caption(sample()); await speak(sample());
@@ -649,7 +669,10 @@
       claude: { installed: true, version: "2.1.325 (Claude Code)", logged_in: false }, codex: { installed: false } });
     if (path === "/api/setup/devices") return Promise.resolve({ microphones: [{ name: "Studio Display Microphone", default: true }, { name: "Logitech BRIO" }],
       cameras: [{ index: 0, name: "Logitech BRIO" }, { index: 1, name: "iPhone Camera" }], input_device: null, camera_index: 0 });
-    if (path === "/api/setup/voices") return Promise.resolve({ current: "jarvis", neural_ready: true, mac_has_premium: true,
+    if (path === "/api/setup/voices") return Promise.resolve({ current: "butler", neural_ready: true, mac_has_premium: true,
+      natural_ready: true, natural: [["butler", "Butler", "Refined English butler: calm, dry, quietly witty"], ["oxford", "Oxford", "Measured, composed, a soft Oxford accent"],
+        ["assistant", "Assistant", "Articulate and warm, with a hint of amusement"], ["gentleman", "Gentleman", "Deep, warm, unflappable English gentleman"]]
+        .map(([id, label, about]) => ({ id, label, about, sample: `/static/voices/${id}.mp3` })),
       presets: [["jarvis", "JARVIS", "Calm, dry British butler (a blend of George and Fable)"], ["george", "George", "Warm, steady British male"],
         ["fable", "Fable", "Brighter, more expressive British male"], ["lewis", "Lewis", "Deeper British male"], ["emma", "Emma", "British female (a FRIDAY alternative)"]]
         .map(([id, label, about]) => ({ id, label, about })),

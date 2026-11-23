@@ -156,6 +156,24 @@ def run() -> int:
             raise RuntimeError(f"audio too short: {secs:.2f}s")
         return f"{secs:.1f}s of audio in {time.time() - t0:.2f}s"
 
+    @check("natural voice: Qwen3-TTS speaks in the Butler voice", required=False, timeout=900)
+    def _():
+        # WARN-only: GitHub's virtual Mac is far slower than a real one, so speed is reported, not judged
+        from jarvis.voice import qwen_tts as q
+        if not q.supported():
+            raise RuntimeError("MLX not available")
+        nv = q.QwenVoice("butler", state["cfg"].models_dir, max_rtf=99)
+        try:
+            rtf = nv.load()
+            t0 = time.time()
+            audio = nv.synth("Good evening, sir. Everything checks out.")
+            secs = len(audio) / nv.sample_rate
+            if secs < 1.0:
+                raise RuntimeError(f"audio too short: {secs:.2f}s")
+            return f"{secs:.1f}s of audio in {time.time() - t0:.1f}s; {rtf:.2f}x real time on this machine"
+        finally:
+            nv.close()
+
     @check("voice: macOS 'say' fallback", required=False)
     def _():
         from jarvis.voice.tts import MacSay

@@ -438,9 +438,18 @@ def make_router(sup) -> APIRouter:
         installed = await asyncio.to_thread(mac_voices)
         british = [v["name"] for v in installed if v["lang"] in ("en_GB", "en_IE", "en_AU", "en_IN", "en_ZA")]
         good = [n for n in british if "(Premium)" in n or "(Enhanced)" in n]
+        from jarvis.voice import qwen_tts
+
+        natural_ok = await asyncio.to_thread(qwen_tts.supported)
+        j = sup.jarvis
         return {
             "current": _current_voice(sup.cfg),
             "neural_ready": sup.models.ready("voice"),
+            # the natural voices: an instant sample plays in the page; the model downloads when one is chosen
+            "natural": [{"id": k, "label": v["label"], "about": v["about"], "sample": f"/static/voices/{k}.mp3"}
+                        for k, v in qwen_tts.HUMAN_VOICES.items()] if natural_ok else [],
+            "natural_ready": sup.models.ready("human"),
+            "natural_status": (getattr(j, "capabilities", {}) or {}).get("natural_voice") if j else None,
             "presets": [{"id": k, "label": v["label"], "about": v["about"]} for k, v in VOICE_PRESETS.items()],
             "mac": [{"id": f"mac:{n}", "label": n, "about": "Apple voice, built into macOS"} for n in good or british[:4]],
             "mac_best": best_mac_voice(installed) if installed else None,
@@ -451,7 +460,18 @@ def make_router(sup) -> APIRouter:
     async def set_voice(body: dict = Body(...)):
         from jarvis.voice.tts import VOICE_PRESETS
 
+        from jarvis.voice import qwen_tts
+
         vid = str(body.get("voice") or "")
+        if vid in qwen_tts.HUMAN_VOICES:
+            _write_user_config(sup.cfg, {"voice": {"tts": {"backend": "auto", "voice": vid}}})
+            sup.models.want("human")
+            sup.start_downloads()                         # fetches the natural voice if it isn't here yet
+            j = sup.jarvis
+            if j is not None:
+                j.cfg.data.setdefault("voice", {}).setdefault("tts", {})["voice"] = vid
+                spawn(j.upgrade_voice())                  # switches as soon as it's ready
+            return {"ok": True, "current": vid, "natural": True, "ready": sup.models.ready("human")}
         if vid.startswith("mac:"):
             tts = {"backend": "say", "say_voice": vid[4:]}
         elif vid in VOICE_PRESETS:

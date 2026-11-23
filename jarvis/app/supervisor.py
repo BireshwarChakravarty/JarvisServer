@@ -76,8 +76,14 @@ class Supervisor:
             bus.unsubscribe(q)
 
     def start_downloads(self) -> None:
+        from jarvis.voice import qwen_tts
+
+        order = ["wake", "ears", "voice", "eyes"]
+        if self.cfg.get("voice.tts.voice") in qwen_tts.HUMAN_VOICES and qwen_tts.supported():
+            self.models.want("human")
+            order.append("human")              # the natural voice last: everything else works without it
         if self._downloads is None or self._downloads.done():
-            self._downloads = asyncio.ensure_future(self.models.ensure_all(["wake", "ears", "voice", "eyes"]))
+            self._downloads = asyncio.ensure_future(self.models.ensure_all(order))
 
     async def start_jarvis(self, greet: bool = True) -> None:
         if self.jarvis is not None:

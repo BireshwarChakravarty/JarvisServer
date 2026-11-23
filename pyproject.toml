@@ -61,7 +61,7 @@ jarvis = "jarvis.__main__:main"
 include = ["jarvis*"]
 
 [tool.setuptools.package-data]
-jarvis = ["hud/static/*", "config/*.yaml"]
+jarvis = ["hud/static/*", "hud/static/**/*", "config/*.yaml", "voice/voices/*.wav"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -194,6 +194,7 @@ class Jarvis:
             self.speaker.prepare(self.ack_phrases())     # ready to say instantly
         self.capabilities.update(tts=backend.name, wake_word=wake_ok, stt=stt_name)
         self.boot(f"Voice synthesis: {backend.name}", backend.name != "silent")
+        spawn(self.upgrade_voice())       # the natural voice, once downloaded and proven fast enough here
         self.boot(f"Speech recognition: {stt_name or 'unavailable'}", bool(stt_name))
         self.boot("Wake word: 'Hey Jarvis'" if wake_ok else "Wake word: transcript fallback", wake_ok)
         self.vad = VAD()
@@ -1440,6 +1441,47 @@ class Jarvis:
             if nxt <= now:
                 nxt += dt.timedelta(days=1)
             await asyncio.sleep((nxt - now).total_seconds())
+
+    async def upgrade_voice(self) -> None:
+        """Switch to the natural voice (Qwen3-TTS) when it's chosen, downloaded, and keeps up with
+        real-time speech on this Mac. Until then, and if it can't, the Classic voice speaks."""
+        from jarvis.voice import qwen_tts as q
+
+        voice = self.cfg.get("voice.tts.voice")
+        if voice not in q.HUMAN_VOICES or self.speaker is None or not await asyncio.to_thread(q.supported):
+            return
+        if getattr(self.speaker.backend, "name", "") == "qwen3" and getattr(self.speaker.backend, "voice", "") == voice:
+            return
+        while not q.model_ready(self.cfg.models_dir):
+            await asyncio.sleep(30)                       # still downloading (Settings shows the progress)
+        nv = q.QwenVoice(voice, self.cfg.models_dir, max_rtf=float(self.cfg.get("voice.tts.natural_max_rtf", q.MAX_RTF)))
+        try:
+            rtf = await asyncio.to_thread(nv.load)
+        except q.TooSlow as exc:
+            nv.close()
+            log.warning("natural voice too slow on this Mac (%s): keeping Classic", exc)
+            self.capabilities["natural_voice"] = f"too slow here ({exc})"
+            if not self.memory.get("natural_voice_slow_told"):
+                self.memory.set("natural_voice_slow_told", True)
+                await self.announce("My natural voice is a touch too slow on this Mac, so I'll keep the classic one "
+                                    "for now. Everything else works the same.", "normal")
+            return
+        except Exception as exc:
+            nv.close()
+            log.warning("natural voice unavailable: %s", exc)
+            self.capabilities["natural_voice"] = f"unavailable ({exc})"
+            return
+        if self.cfg.get("voice.tts.voice") != voice:      # changed while it loaded
+            nv.close()
+            return
+        old, self.speaker.backend = self.speaker.backend, nv
+        self.speaker._cache = {}
+        if self.cfg.get("voice.spoken_acks", True):
+            self.speaker.prepare(self.ack_phrases())
+        if getattr(old, "name", "") == "qwen3":
+            old.close()
+        self.capabilities.update(tts="qwen3", natural_voice=f"{q.HUMAN_VOICES[voice]['label']}, {rtf:.2f}x real time")
+        self.boot(f"Voice: {q.HUMAN_VOICES[voice]['label']} (natural)", True)
 
     CALL_APPS = {"FaceTime", "zoom.us", "Webex", "Cisco Webex Meetings", "Microsoft Teams", "Skype"}
 

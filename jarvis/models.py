@@ -33,6 +33,7 @@ class Group:
     title: str
     purpose: str
     assets: list[Asset] = field(default_factory=list)
+    optional: bool = False          # only fetched (and shown) when the feature that needs it is chosen
 
 
 def whisper_assets(model: str) -> list[Asset]:
@@ -47,6 +48,8 @@ def whisper_assets(model: str) -> list[Asset]:
 
 
 def groups(stt_model: str = "small.en") -> list[Group]:
+    from jarvis.voice import qwen_tts as qwen
+
     return [
         Group("wake", "Wake word", "Hears “Hey Jarvis”", [
             Asset("oww/melspectrogram.onnx", [f"{OWW}/melspectrogram.onnx"], 1_087_958),
@@ -57,6 +60,9 @@ def groups(stt_model: str = "small.en") -> list[Group]:
             Asset("kokoro-v1.0.onnx", [f"{KOKORO}/kokoro-v1.0.onnx"], 325_532_387),
             Asset("voices-v1.0.bin", [f"{KOKORO}/voices-v1.0.bin"], 28_214_398),
         ]),
+        Group("human", "Natural voice", "His natural, human-sounding voice (Qwen3-TTS, about 2 GB)", [
+            Asset(f"{qwen.DIRNAME}/{f}", [f"{HF}/{qwen.REPO}/resolve/main/{f}"], size)
+            for f, size in qwen.FILES.items()], optional=True),
         Group("ears", "Speech recognition",
               "Understands what you say (Whisper), when you've finished (Smart Turn) and that it's you (Voice ID)",
               whisper_assets(stt_model) + [
@@ -100,9 +106,20 @@ class ModelManager:
     def ready(self, key: str) -> bool:
         return all((self.dir / a.name).exists() for a in self.group(key).assets)
 
+    wanted: set = set()
+
+    def want(self, key: str) -> None:
+        """Ask for an optional group (the natural voice, once you choose it)."""
+        self.wanted = set(self.wanted) | {key}
+
+    def _shown(self, g: Group) -> bool:
+        return not g.optional or g.key in self.wanted or self.ready(g.key)
+
     def status(self) -> list[dict]:
         out = []
         for g in self.groups:
+            if not self._shown(g):
+                continue
             total = sum(a.size for a in g.assets)
             p = self.progress.get(g.key, {})
             out.append({
@@ -113,7 +130,7 @@ class ModelManager:
         return out
 
     def all_ready(self) -> bool:
-        return all(self.ready(g.key) for g in self.groups)
+        return all(self.ready(g.key) for g in self.groups if self._shown(g))
 
     # ── downloading ──────────────────────────────────────────────────────
     def ensure(self, key: str) -> bool:

@@ -219,6 +219,10 @@ def make_backend(kind: str, voice: str, speed: float, say_voice: str, models_dir
     if kind == "silent":
         return SilentTTS()
     voice = voice or "jarvis"
+    from jarvis.voice.qwen_tts import HUMAN_VOICES
+
+    if voice in HUMAN_VOICES:
+        voice = "jarvis"          # a natural voice starts on Classic; Jarvis.upgrade_voice switches when it's ready
     speed = float(speed or 1.0) * VOICE_PRESETS.get(voice, {}).get("speed", 1.0)   # presets carry their own pace
     order = [kind] if kind != "auto" else ["kokoro-onnx", "say"]
     if kind == "auto" and not (models_dir / "kokoro-v1.0.onnx").exists():

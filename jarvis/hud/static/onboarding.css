@@ -244,3 +244,4 @@ body.settings .ob-steps i { cursor: pointer; }
 .swatch.stark::after { background: radial-gradient(circle, #fff 0 12%, #ffcf7a 35%, #b80d16 72%, transparent 74%);
   box-shadow: 0 0 18px #ff4a3d88, 0 0 0 5px #070203, 0 0 0 6px #ffcf7a55; }
 .build-tag { margin-top: 18px; font: 500 11px/1 var(--mono); letter-spacing: 0.08em; color: var(--faint); text-transform: uppercase; }
+.voice .ptag.nat { color: var(--ice); border-color: rgb(var(--ice-rgb) / 0.4); }
