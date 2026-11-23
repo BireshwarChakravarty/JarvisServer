@@ -499,6 +499,8 @@ class Jarvis:
                 except asyncio.TimeoutError:
                     continue
                 recent.append(frame)
+                if self.vad is not None and self.vad.is_speech(frame):
+                    self._room_speech_at = time.monotonic()     # people talking: announcements wait
                 if self.wake.process(frame):
                     # the detector decides a moment after "Hey Jarvis" ends: keep what was said meanwhile
                     self._wake_preroll = list(recent)
@@ -1361,13 +1363,19 @@ class Jarvis:
 
     # ═════════════════════════════ announcements ═════════════════════════
     async def announce(self, text: str, priority: str = "normal") -> None:
+        """Say something he noticed (a meeting soon, a timer). Politely: a notification instead of his
+        voice while you're on a call, in Focus / Do Not Disturb, away or muted; otherwise he waits for a
+        pause in the room's conversation, and never talks over a reply in progress."""
         bus.emit("announce", text=text, priority=priority)
         from jarvis.mac.session import screen_locked
 
         locked = screen_locked()
         quiet = self.mic is not None and self.mic.muted and priority != "high"
         away = self.presence is not None and not self.presence.present and priority != "high"
-        if locked or quiet or away or self.speaker is None:
+        busy = await asyncio.to_thread(self._busy_reason) if priority != "high" else None
+        if busy:
+            log.info("announcement as a notification (%s): %s", busy, text[:80])
+        if locked or quiet or away or busy or self.speaker is None:
             try:
                 from jarvis.mac.system import notify
 
@@ -1379,9 +1387,40 @@ class Jarvis:
         while self._turn_active:
             await asyncio.sleep(0.3)
         await self.speaker.wait_done(timeout=60)
+        # people are talking in the room: wait for a natural pause (up to a minute), as a person would
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline and time.monotonic() - getattr(self, "_room_speech_at", 0.0) < 1.5:
+            await asyncio.sleep(0.25)
         self.speaker.play_tone("done")
         await asyncio.sleep(0.3)
         self.speaker.enqueue(text)
+
+    CALL_APPS = {"FaceTime", "zoom.us", "Webex", "Cisco Webex Meetings", "Microsoft Teams", "Skype"}
+
+    def _busy_reason(self) -> str | None:
+        """'call' while you're in a call or meeting, 'focus' in Focus / Do Not Disturb, else None."""
+        from jarvis.mac.system import IS_MAC
+
+        if not IS_MAC:
+            return None
+        import subprocess
+
+        try:   # Zoom runs CptHost only during a meeting; a call app in front means you're on a call
+            if subprocess.run(["pgrep", "-x", "CptHost"], capture_output=True, timeout=2).returncode == 0:
+                return "call"
+            from jarvis.mac.system import frontmost_app
+
+            if frontmost_app(fallback=False) in self.CALL_APPS:
+                return "call"
+        except Exception:
+            pass
+        try:   # Focus / Do Not Disturb (readable with the Full Disk Access JARVIS already has)
+            data = json.loads((Path.home() / "Library/DoNotDisturb/DB/Assertions.json").read_text())
+            if any(rec.get("storeAssertionRecords") for rec in data.get("data", [])):
+                return "focus"
+        except Exception:
+            pass
+        return None
 
     async def say(self, text: str) -> None:
         bus.emit("reply", text=text)
