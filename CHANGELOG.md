@@ -3,6 +3,33 @@
 All builds are published to the `jarvis-latest` release after passing unit tests, the in-app self-test
 on Apple Silicon, a real launch, packaging, and a clean install on a fresh Mac.
 
+Release numbers are MAJOR.MINOR from the `VERSION` file plus the number of commits since it last changed
+(`scripts/version.sh`); the running version is at the top of the menu-bar menu. The 30 builds published
+between 14 and 23 November 2026 count as 1.0 to 1.30; everything below "2.0" is from that series.
+
+## 2.0: talks like a person
+- **Natural voice**: Qwen3-TTS (1.7B, Apache-2.0) on the Mac, free and offline, in an original British
+  voice designed for JARVIS from a written description: Butler (default), Assistant or Gentleman, chosen
+  by ear from four candidates (`scripts/voice_lab.py`). Downloads once (2.3 GB); JARVIS times it on your
+  Mac and uses it only if it keeps up with real-time speech, otherwise the Classic voice (Kokoro).
+- **Natural replies**: Claude Sonnet by default ("Natural"; "Fast" remains); spoken replies lose assistant
+  filler ("Certainly!") and say "sir" at most once; fillers are rarer; the persona gains the JARVIS
+  manner. A long first sentence starts on its first clause.
+- **Never cut off mid-thought**: if your words stop on "to", "and", "um" or a comma, he waits for the rest;
+  longer patience once you've talked a few seconds; requests up to 60 s; listening ends even if the mic
+  stops sending audio.
+- **Interrupt by talking**: talk over him and he stops, keeping your words as the next request;
+  "mm-hm" doesn't count; with Voice ID only your voice does.
+- **Asks instead of guessing**: which John, which chat, and doubtful transcripts.
+- **Memory**: "what did I ask you yesterday?"; routines noticed and anticipated.
+- **Polite**: notifications instead of speech on calls and in Focus; waits for a pause; softer at night.
+- **Phone anywhere** through Tailscale, and conversation history on the phone.
+- **Self-check** nightly and on "run diagnostics"; reply speed measured every turn.
+- **Themes** (Arc Reactor, Dot Matrix, Midnight Glass, Stark), all dark; 24-hour clock by default;
+  updates always load matching scripts; version numbers in the menu bar, Settings and the installer.
+
+# 1.x (14-23 November 2026)
+
 ## Do it for me, and fixes to voice setup, WhatsApp sending and permissions
 - **Do it for me**: JARVIS clicks, types, presses keys and scrolls in any app himself (the other half of the
   on-screen guidance: that showed you where to click; now he can do it). One step at a time, checking the

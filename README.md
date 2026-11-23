@@ -25,8 +25,8 @@ smart home and terminal. Everything shows on a live, holographic HUD.
 |---|---|
 | 🌅 **Greets you at login** | A greeting that fits the time of day ("Good morning, sir… burning the midnight oil again?") plus a spoken briefing of weather, your next meetings, overdue reminders, unread mail and headlines. Then *"What shall we tackle first?"*, and he listens with no wake word needed. |
 | 🔁 **Notices you're back** | Unlock the Mac or simply sit down in front of the camera after time away, and he welcomes you back. The first return of the day gets the full briefing. |
-| 🎙️ **Hands-free voice** | Wake word "Hey Jarvis" (openWakeWord), or hold **Right ⌥** to talk. Whisper large-v3-turbo transcribes on your Apple GPU. His **JARVIS voice** (a blend of Kokoro's British George and Fable voices, all on-device) starts within about a second and speaks in whole phrases with natural pauses. Times and units are said the way a person would ("nine tomorrow morning"), and if an answer is slow he says "One moment, sir." instead of leaving silence. Pick another voice, or a free Apple Premium voice such as Jamie, in setup. |
-| ✋ **Interrupt anytime** | Say "Jarvis" while he's talking, raise an open palm, or press Esc. After each answer he keeps listening for a few seconds, so follow-ups don't need the wake word. |
+| 🎙️ **Hands-free voice** | Wake word "Hey Jarvis" (openWakeWord), or hold **Right ⌥** to talk. Whisper large-v3-turbo transcribes on your Apple GPU. His **natural voice** (Qwen3-TTS on your Mac, free and offline) speaks in an original British voice designed for him: **Butler** (default), **Assistant** or **Gentleman**. It downloads once (2.3 GB); until then, and on a Mac too slow for it, the **Classic** voice (Kokoro) speaks. He keeps listening while you pause to think ("remind me to… call the bank"), and if an answer is slow he says a short word instead of leaving silence. Free Apple Premium voices such as Jamie are in Settings too. |
+| ✋ **Interrupt anytime** | Just start talking: he stops within about half a second and your words become the next request ("mm-hm" doesn't stop him). Or say "Jarvis", raise an open palm, or press Esc. After each answer he keeps listening for a few seconds, so follow-ups don't need the wake word. |
 | 👁️ **Sees** | "What am I holding?", "How do I look?", "What's on my screen?", "Read this error": camera frames and screenshots go straight to Claude's vision. |
 | 🧑‍🚀 **Knows you** | Face recognition (OpenCV YuNet + SFace) tells you apart from visitors. Optional **sentry mode** photographs unknown faces while you're away; optional auto-lock when you leave. |
 | 🤚 **Gestures** | Hold a pose: ✋ stop · 👍 / 👎 answer a confirmation · ✌️ start listening · 🤟 play/pause music. Or move: **swipe ← →** for the previous or next track · **flick ↑** to bring up the HUD · **pinch and drag up or down** to turn the volume like a dial · **pinch and drag sideways** to spin the hologram core. A reticle on the HUD follows your hand, so you can see what he sees. |
@@ -44,8 +44,10 @@ smart home and terminal. Everything shows on a live, holographic HUD.
 | 🏠 **Smart home & everything else** | Runs any **macOS Shortcut**, which covers HomeKit scenes, lights, thermostats, Focus modes and any app with Shortcuts actions |
 | 🛠️ **Developer mode** | Shell commands (confirmed first), AppleScript, git and brew |
 | 🌐 **Knows the world** | Live **web search**, weather (Open-Meteo, no key), news headlines |
-| ⏱️ **Time** | Timers and spoken alarms. He also warns you 10 minutes before meetings and when the battery runs low. |
-| 🧠 **Remembers** | Long-term memory of your preferences and people ("I take my coffee black"), plus summaries of past conversations |
+| ⏱️ **Time** | Timers and spoken alarms. He warns you 10 minutes before meetings, politely: a notification instead of his voice while you're on a call or in Focus, and otherwise he waits for a pause in the room. Softer and briefer late at night. |
+| 🧠 **Remembers** | Long-term memory of your preferences and people ("I take my coffee black"); *"what did I ask you yesterday?"* searches past conversations; he notices your routines (the weather around eight on weekdays) and has the answer ready. When a name is ambiguous ("message John") he asks which one instead of guessing. |
+| 🎨 **Themes** | Four dark themes restyle everything at once, phone included: Arc Reactor, Dot Matrix (black, white and red LEDs), Midnight Glass and Stark. Settings, the menu-bar icon, or *"switch to the dot matrix theme"*. 24-hour clock by default. |
+| 🩺 **Looks after himself** | A quiet self-check every night (microphone, voices, brain, permissions, disk, reply speed): one line in the morning briefing only if something needs you. *"Run diagnostics"* any time. The menu-bar icon shows the version (JARVIS 2.0.x). |
 | 🎛️ **Protocols** | Your own named routines, e.g. *"Jarvis, engage house party protocol"* (see below) |
 | 🔌 **Extensible** | Plug in any **MCP server** (GitHub, Notion, Home Assistant, databases…) with three lines of config |
 | 🛡️ **Asks first** | Before sending messages, running commands or deleting things he asks *"Shall I…?"* You answer by voice, 👍 or the HUD button. |
@@ -62,6 +64,12 @@ Home Screen** for a full-screen app. From it you can talk to him or type, answer
 questions, run protocols, see what he's saying as subtitles, and stop, mute the Mac's microphone,
 switch hand control, lock the Mac or bring JARVIS up on its screen. Every tap shows whether the Mac
 did it; if the link went stale while the phone slept, it reconnects and delivers the tap.
+
+**Away from home**: install [Tailscale](https://tailscale.com) (free for personal use) on the Mac and
+the iPhone, sign in to both with the same account, then choose **Anywhere** on the pairing screen. The
+companion then works wherever the phone has internet, through your own private, encrypted network;
+nothing is opened to the internet. The Mac must stay on and awake. The **history** button shows the
+conversation so far; tap something you said to ask it again.
 
 ### Talking to him from the phone
 
