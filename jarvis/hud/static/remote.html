@@ -32,6 +32,7 @@
   <header class="top">
     <span class="link"><i class="led" id="led"></i><span id="link">Connecting…</span></span>
     <span class="top-r"><span class="wx" id="wx"></span>
+      <button class="icon-btn" id="btn-history" aria-label="Conversation history" title="History"><svg viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1M3.5 4v4h4"/><path d="M12 7.5V12l3 2"/></svg></button>
       <button class="icon-btn" id="btn-voice" aria-label="Voice settings" title="Voice settings"><svg viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg></button></span>
   </header>
   <button class="banner" id="banner" hidden></button>
@@ -81,6 +82,14 @@
     </ol>
     <p class="err" id="setup-err" role="status"></p>
     <div class="yn"><button class="btn" id="setup-close">Not now</button><button class="btn gold" id="setup-go">Continue</button></div>
+  </div>
+
+  <div class="sheet tall" id="hist" role="dialog" aria-modal="true" aria-labelledby="hist-h" hidden>
+    <p class="label">History</p>
+    <h2 class="sheet-h" id="hist-h">Your conversation</h2>
+    <p class="sheet-p small">Tap something you said to ask it again.</p>
+    <ol class="convo" id="convo"></ol>
+    <div class="yn one"><button class="btn" id="hist-clear">Clear on this phone</button><button class="btn gold" id="hist-done">Done</button></div>
   </div>
 
   <div class="sheet tall" id="vset" role="dialog" aria-modal="true" aria-labelledby="vset-h" hidden>

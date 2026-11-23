@@ -223,9 +223,10 @@
       case "ack": ack(e); break;
       case "state": setState(e.state); break;
       case "level": if (reactor && (e.source === "tts" || macState === "listening") && !voice.capturing) reactor.setLevel(e.value, e.source); break;
-      case "transcript": if (!e.replay) { $("you").textContent = e.text; $("jarvis").textContent = ""; } break;
+      case "transcript": remember("transcript", e.text, e.ts); if (!e.replay) { $("you").textContent = e.text; $("jarvis").textContent = ""; } break;
+      case "history": (e.items || []).forEach((h) => remember(h.type, h.text, h.ts)); break;
       case "speaking": if (!e.replay) { lastSpoke = Date.now(); subtitle(e.text, e.duration); } break;
-      case "reply": if (!e.replay && Date.now() - lastSpoke > 30000) subtitle(e.text); break;
+      case "reply": remember("reply", e.text, e.ts); if (!e.replay && Date.now() - lastSpoke > 30000) subtitle(e.text); break;
       case "confirm": $("confirm-q").textContent = e.action; $("confirm").hidden = false; break;
       case "confirm_result": $("confirm").hidden = true; break;
       case "mic": muted = !!e.muted; $("c-mute").setAttribute("aria-pressed", muted); setState(macState); break;
@@ -293,6 +294,46 @@
     prefs.speak = store.get("jarvis-speak") !== "0";
     $("opt-wake").checked = prefs.wake; $("opt-speak").checked = prefs.speak;
   }
+  /* ───────────── conversation history (kept on this phone) ───────────── */
+  const HKEY = "jarvis-history";
+  let history = (() => { try { return JSON.parse(store.get(HKEY) || "[]"); } catch (err) { return []; } })();
+  function remember(type, text, ts) {
+    text = String(text || "").trim();
+    if (!text || (type !== "transcript" && type !== "reply")) return;
+    ts = Number(ts) || Date.now() / 1000;
+    if (history.some((h) => h.type === type && h.text === text && Math.abs(h.ts - ts) < 5)) return;
+    history.push({ type, text, ts });
+    history.sort((a, b) => a.ts - b.ts);
+    history = history.slice(-100);
+    store.set(HKEY, JSON.stringify(history));
+    if (!$("hist").hidden) renderHistory();
+  }
+  function renderHistory() {
+    const ol = $("convo"); ol.innerHTML = "";
+    if (!history.length) { const li = document.createElement("li"); li.className = "empty"; li.textContent = "Nothing yet."; ol.appendChild(li); }
+    let lastDay = "";
+    history.forEach((h) => {
+      const d = new Date(h.ts * 1000), day = d.toDateString();
+      if (day !== lastDay) {
+        lastDay = day;
+        const sep = document.createElement("li"); sep.className = "day";
+        sep.textContent = day === new Date().toDateString() ? "Today" : d.toLocaleDateString([], { weekday: "long", day: "numeric", month: "short" });
+        ol.appendChild(sep);
+      }
+      const li = document.createElement("li");
+      li.className = h.type === "transcript" ? "me" : "him";
+      const b = document.createElement(h.type === "transcript" ? "button" : "p");
+      b.textContent = h.text;
+      const t = document.createElement("time"); t.textContent = window.JarvisClock ? JarvisClock.time(d) : d.toLocaleTimeString();
+      if (h.type === "transcript") b.onclick = () => { $("hist").hidden = true; send({ type: "text", text: h.text, speak: prefs.speak && SECURE }); };
+      li.append(b, t); ol.appendChild(li);
+    });
+    ol.lastElementChild && ol.lastElementChild.scrollIntoView({ block: "end" });
+  }
+  $("btn-history").onclick = () => { renderHistory(); $("hist").hidden = false; };
+  $("hist-done").onclick = () => ($("hist").hidden = true);
+  $("hist-clear").onclick = () => { history = []; store.set(HKEY, "[]"); renderHistory(); };
+
   $("btn-voice").onclick = () => { if (!SECURE && !DEMO) return openSetup(); $("vset").hidden = false; };
   $("vset-done").onclick = () => ($("vset").hidden = true);
   $("opt-speak").onchange = (e) => { prefs.speak = e.target.checked; store.set("jarvis-speak", prefs.speak ? "1" : "0");

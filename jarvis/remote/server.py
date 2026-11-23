@@ -238,6 +238,10 @@ def create_remote_app(supervisor, store, certs=None) -> FastAPI:
                 latest[e["type"]] = e
         for e in latest.values():
             link.put({**e, "replay": True})
+        # the conversation so far, for the phone's history (what you asked, what he said)
+        said = [e for e in list(bus.history) if e.get("type") in ("transcript", "reply")][-40:]
+        link.put({"type": "history", "items": [{"type": e["type"], "text": e.get("text", ""),
+                                                "ts": e.get("ts", 0)} for e in said]})
 
         async def forward():
             while True:

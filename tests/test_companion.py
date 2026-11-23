@@ -180,3 +180,17 @@ def test_tailscale_address_from_its_status(monkeypatch):
                         lambda p: p == server.TAILSCALE_CLI[0])
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(stdout=json.dumps(status)))
     assert server.tailscale_address() == ("mac-mini.tail1234.ts.net", "100.101.2.3")
+
+
+def test_the_phone_gets_the_conversation_so_far(remote):
+    """On connecting, the phone receives what was said recently (both sides) for its history."""
+    from jarvis.events import bus
+
+    client, store, got = remote
+    bus.history.append({"type": "transcript", "text": "What's on today?", "ts": 1.0})
+    bus.history.append({"type": "reply", "text": "Two meetings, the first at ten.", "ts": 2.0})
+    token = _paired(client, store)
+    with client.websocket_connect(f"/remote/ws?token={token}") as ws:
+        hist = _until(ws, "history")
+    texts = [(h["type"], h["text"]) for h in hist["items"]]
+    assert ("transcript", "What's on today?") in texts and ("reply", "Two meetings, the first at ten.") in texts
