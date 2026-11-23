@@ -382,6 +382,7 @@ class Jarvis:
             asyncio.create_task(sup("requests", self._request_worker), name="requests"),
             asyncio.create_task(sup("scheduler", self.scheduler.watch), name="watch"),
             asyncio.create_task(sup("telemetry", self._stats_loop), name="stats"),
+            asyncio.create_task(sup("health", self._health_loop), name="health"),
         ]
         if self.mic is not None:
             tasks.append(asyncio.create_task(sup("voice", self._voice_loop), name="voice"))
@@ -961,6 +962,7 @@ class Jarvis:
         except Exception:
             # never leave you in silence: say so, and keep everything else running
             log.exception("turn failed for %r", text[:80])
+            self._turn_failures = (getattr(self, "_turn_failures", []) + [time.time()])[-20:]
             reply = f"Sorry, {self.cfg.get('owner.title', 'sir')}, something went wrong on my side. Could you try that again?"
             bus.emit("reply", text=reply)
             if self.speaker:
@@ -1249,6 +1251,11 @@ class Jarvis:
             title = self.cfg.get("owner.title", "sir")
             data = await gather(self.cfg, self.memory, "login" if kind == "login" else "return") \
                 if self.cfg.get("greeting.briefing", True) else {"part_of_day": part_of_day()}
+            bad = [r for r in getattr(self, "health_results", []) if not r["ok"]]
+            if bad and kind == "login":
+                from jarvis.core import health
+
+                data["needs_attention"] = health.summary(self.health_results)   # one line, only when needed
             bus.emit("briefing", data=data)
             # Fresh every time: a different angle, what changed, and his own recent lines to avoid
             from jarvis.core import greeting_style as gs
@@ -1394,6 +1401,26 @@ class Jarvis:
         self.speaker.play_tone("done")
         await asyncio.sleep(0.3)
         self.speaker.enqueue(text)
+
+    async def _health_loop(self) -> None:
+        """A quiet self-check a couple of minutes after starting, then every night at half past three."""
+        from jarvis.core import health
+
+        await asyncio.sleep(120)
+        while True:
+            try:
+                self.health_results = await asyncio.to_thread(health.check, self)
+                bad = health.problems(self.health_results)
+                bus.emit("health", ok=not bad, problems=[b["what"] for b in bad])
+                if bad:
+                    log.warning("self-check: %s", health.summary(self.health_results))
+            except Exception as exc:
+                log.debug("self-check failed: %s", exc)
+            now = dt.datetime.now()
+            nxt = now.replace(hour=3, minute=30, second=0, microsecond=0)
+            if nxt <= now:
+                nxt += dt.timedelta(days=1)
+            await asyncio.sleep((nxt - now).total_seconds())
 
     CALL_APPS = {"FaceTime", "zoom.us", "Webex", "Cisco Webex Meetings", "Microsoft Teams", "Skype"}
 

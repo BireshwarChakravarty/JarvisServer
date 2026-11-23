@@ -719,6 +719,19 @@ async def clock_format(ctx, mode: str):
     return "24-hour time." if mode == "24" else "12-hour time."
 
 
+@tool("Run JARVIS's own diagnostics: microphone, voice, hearing, wake word, brain, permissions, disk space and "
+      "recent errors. Use for 'run diagnostics', 'are you all right?', 'system check', 'is everything working?'.",
+      category="self")
+async def diagnostics(ctx):
+    from jarvis.core import health
+
+    orch = ctx.orchestrator
+    if orch is None:
+        return "Diagnostics need the full JARVIS running."
+    orch.health_results = await asyncio.to_thread(health.check, orch)
+    return health.summary(orch.health_results)
+
+
 @tool("Update JARVIS to the latest version: downloads the newest verified build, installs it (keeping "
       "every permission) and restarts. JARVIS goes quiet for a minute or two.", category="self", confirm=True,
       confirm_message="update myself and restart")

@@ -43,7 +43,7 @@ BANNER = f"""{CYAN}
 
 def setup_logging(verbose: bool = False) -> None:
     home = jarvis_home()
-    fmt = logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s", "%H:%M:%S")
+    fmt = logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s", "%Y-%m-%d %H:%M:%S")
     root = logging.getLogger()
     root.setLevel(logging.DEBUG if verbose else logging.INFO)
     fh = RotatingFileHandler(home / "jarvis.log", maxBytes=5_000_000, backupCount=3)

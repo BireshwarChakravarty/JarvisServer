@@ -168,6 +168,9 @@ def match(text: str, now: dt.datetime | None = None, rng: random.Random | None =
             name = themes.THEMES[key]["name"]
             return Quick("set_theme", {"theme": key}, _pick([f"{name}.", f"{name} it is.", "Done."], rng),
                          note=f"switched to the {name} theme")
+    if re.fullmatch(r"(run (a )?(diagnostics?|self[- ]?check|system check)|are you (all right|alright|ok(ay)?)|"
+                    r"system check|status report|is everything (working|ok(ay)?|all right|alright))", t):
+        return Quick("diagnostics", {}, "", note="ran diagnostics")
     if re.fullmatch(r"lock( the| my)?( mac| screen| computer)?( now)?", t):
         return Quick("system_action", {"action": "lock_screen"}, _pick(["Locking it now.", "Locking."], rng),
                      note="locked the Mac")
