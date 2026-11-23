@@ -130,6 +130,7 @@ def make_router(sup) -> APIRouter:
             "themes": themes.listing(),
             "clock": themes.clock_setting(cfg),
             "build": __import__("jarvis").build(),
+            "version": __import__("jarvis").version(),
             "clock24": themes.clock_24h(cfg),
         }
 

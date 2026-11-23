@@ -21,6 +21,8 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # the release number counts commits since VERSION changed
 
       - uses: actions/setup-python@v5
         with:
@@ -40,8 +42,14 @@ jobs:
           python -m pip install -e ".[dev]"
           python -m pytest -q -rs
 
-      - name: Stamp the build number
-        run: echo "${GITHUB_SHA::7}" > jarvis/_build.txt
+      - name: Stamp the release number
+        run: |
+          V="$(scripts/version.sh)"
+          echo "$V" > jarvis/_version.txt
+          echo "${GITHUB_SHA::7}" > jarvis/_build.txt
+          sed -i '' "s/^version = \"[0-9.]*\"/version = \"$V\"/" pyproject.toml   # the app's own version
+          echo "JARVIS_VERSION=$V" >> "$GITHUB_ENV"
+          echo "Release $V (build ${GITHUB_SHA::7})"
 
       - name: Create app bundle
         run: briefcase create macOS app --no-input
@@ -169,12 +177,12 @@ jobs:
           TAG=jarvis-latest
           git tag -f "$TAG" "$GITHUB_SHA"
           git push -f origin "refs/tags/$TAG"
-          NOTES="Built from ${GITHUB_SHA::7} and verified by the in-app self-test on Apple Silicon. Download the DMG, open it and drag JARVIS to Applications."
+          NOTES="JARVIS $JARVIS_VERSION (build ${GITHUB_SHA::7}), verified by the in-app self-test on Apple Silicon. Download the DMG, open it and drag JARVIS to Applications."
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --title "JARVIS for Mac" --notes "$NOTES" --latest
+            gh release edit "$TAG" --title "JARVIS $JARVIS_VERSION" --notes "$NOTES" --latest
             gh release upload "$TAG" dist/JARVIS-macOS-AppleSilicon.dmg dist/JARVIS-macOS-AppleSilicon.zip dist/SHA256SUMS.txt --clobber
           else
-            gh release create "$TAG" --title "JARVIS for Mac" --notes "$NOTES" --latest \
+            gh release create "$TAG" --title "JARVIS $JARVIS_VERSION" --notes "$NOTES" --latest \
               dist/JARVIS-macOS-AppleSilicon.dmg dist/JARVIS-macOS-AppleSilicon.zip dist/SHA256SUMS.txt
           fi
 

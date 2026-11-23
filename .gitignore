@@ -14,3 +14,5 @@ models/
 
 # written by the Mac build: the commit the app was built from
 jarvis/_build.txt
+
+jarvis/_version.txt

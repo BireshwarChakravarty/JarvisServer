@@ -90,10 +90,10 @@ def install(actions: dict) -> None:
         button.setToolTip_("JARVIS")
 
         menu = AppKit.NSMenu.alloc().init()
-        from jarvis import build
+        from jarvis import version
 
-        info = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(f"JARVIS · build {build()}", None, "")
-        info.setEnabled_(False)                      # which build is running, at a glance
+        info = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(f"JARVIS {version()}", None, "")
+        info.setEnabled_(False)                      # which release is running, at a glance
         menu.addItem_(info)
         menu.addItem_(AppKit.NSMenuItem.separatorItem())
         for title, key, shortcut in (
