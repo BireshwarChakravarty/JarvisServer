@@ -309,6 +309,7 @@ class Speaker:
 
     _cache: dict = {}
     gain = 1.0                  # how loudly he speaks: softer late at night (set by the orchestrator)
+    turn_mark: float | None = None   # when you stopped talking (monotonic), for measuring his reply time
 
     def prepare(self, texts: list[str]) -> None:
         """Synthesise short phrases ahead of time (in the background) so they play instantly."""
@@ -504,6 +505,12 @@ class Speaker:
             self.current_text = text
             # duration lets the HUD pace subtitles to the actual audio, word for word
             bus.emit("speaking", text=text, duration=round(len(audio) / max(1, sr), 2))
+            mark, self.turn_mark = self.turn_mark, None
+            if mark:
+                gap = time.monotonic() - mark
+                log.info("first word %.2f s after you stopped (%s)", gap, self.backend.name)
+                bus.emit("latency", seconds=round(gap, 2), voice=self.backend.name)
+                self.latencies = (list(getattr(self, "latencies", [])) + [gap])[-50:]
             try:
                 sink = self.route
                 if sink is not None and self._send_elsewhere(sink, audio, sr, text, gen):

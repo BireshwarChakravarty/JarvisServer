@@ -64,7 +64,7 @@ def test_voice_setup_endpoints(cfg):
 
     _, client = make_client(cfg)
     r = client.get("/api/setup/voices").json()
-    assert r["current"] == "jarvis" and any(p["id"] == "jarvis" for p in r["presets"])
+    assert r["current"] == "butler" and any(p["id"] == "jarvis" for p in r["presets"])     # natural voice by default
     assert client.post("/api/setup/voice", json={"voice": "lewis"}).json()["current"] == "lewis"
     assert client.post("/api/setup/voice", json={"voice": "mac:Jamie (Premium)"}).json()["current"] == "mac:Jamie (Premium)"
     assert client.post("/api/setup/voice", json={"voice": "nope"}).status_code == 400
@@ -91,7 +91,7 @@ def test_filler_covers_slow_starts_only():
 
     asyncio.run(run(0.2))      # a quick answer: no filler
     assert said == []
-    asyncio.run(run(1.6))      # a slow one: exactly one acknowledgement
+    asyncio.run(run(2.1))      # a slow one: exactly one acknowledgement
     assert len(said) == 1 and said[0] in [f.format(t="sir") for f in Orchestrator.FILLERS]
 
 

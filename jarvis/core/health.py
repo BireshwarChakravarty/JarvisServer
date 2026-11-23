@@ -42,6 +42,11 @@ def check(j) -> list[dict]:
             "the speech model may still be downloading")
         add("wake word", bool(caps.get("wake_word", True)), "'Hey Jarvis' detection isn't loaded",
             "the wake-word model may still be downloading")
+    lat = sorted(getattr(getattr(j, "speaker", None), "latencies", []) or [])
+    if len(lat) >= 5:
+        median = lat[len(lat) // 2]
+        add("reply speed", median <= 4.0, f"typically {median:.1f} seconds from you finishing to his first word",
+            "in Settings, choose the Fast reply mode or the Classic voice")
     failures = [t for t in getattr(j, "_turn_failures", []) if time.time() - t < 86400]
     add("brain", len(failures) < 3, f"{len(failures)} requests failed in the last day",
         "check Claude Code is signed in (Settings › Brain › Test)")

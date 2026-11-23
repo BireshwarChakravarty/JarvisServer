@@ -2,8 +2,9 @@
 
 The voices are original: each was made once with Qwen3-TTS VoiceDesign from a written description (a
 refined English butler, an Oxford-educated man in his forties…; see scripts/voice_lab.py) and is shipped
-as a ten-second reference recording. At run time the small Qwen3-TTS Base model (0.6B, 8-bit, about
-2 GB, downloaded once) speaks every reply in that voice, on this Mac, free and offline.
+as a ten-second reference recording. At run time the Qwen3-TTS Base model (1.7B, 4-bit, about 2.3 GB,
+downloaded once; it ran no slower than the 0.6B model and sounded better) speaks every reply in that
+voice, on this Mac, free and offline.
 
 It's heavier than the Classic voice (Kokoro), so JARVIS starts with Classic, loads this in the
 background, times it on this Mac and switches only if it keeps up with real-time speech. If it can't,
@@ -21,11 +22,11 @@ import numpy as np
 
 log = logging.getLogger("jarvis.qwen_tts")
 
-REPO = "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit"
-DIRNAME = "qwen3-tts-0.6b-base-8bit"
+REPO = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit"
+DIRNAME = "qwen3-tts-1.7b-base-4bit"
 FILES = {                       # what the model needs, with sizes (bytes) for download progress
     "config.json": 5_522, "generation_config.json": 245, "merges.txt": 1_671_839,
-    "model.safetensors": 1_304_461_214, "model.safetensors.index.json": 77_731,
+    "model.safetensors": 1_649_238_423, "model.safetensors.index.json": 78_070,
     "preprocessor_config.json": 127, "tokenizer_config.json": 7_344, "vocab.json": 2_776_833,
     "speech_tokenizer/config.json": 2_336, "speech_tokenizer/configuration.json": 76,
     "speech_tokenizer/model.safetensors": 682_293_092, "speech_tokenizer/preprocessor_config.json": 234,
@@ -36,12 +37,12 @@ REF_TEXT = ("Good evening, sir. I've taken the liberty of moving your three o'cl
             "The weather, I'm pleased to say, looks rather promising for the weekend.")
 
 VOICES_DIR = Path(__file__).with_name("voices")
-HUMAN_VOICES = {
+HUMAN_VOICES = {                # chosen by ear from the voice lab's candidates
     "butler": {"label": "Butler", "about": "Refined English butler: calm, dry, quietly witty"},
-    "oxford": {"label": "Oxford", "about": "Measured, composed, a soft Oxford accent"},
     "assistant": {"label": "Assistant", "about": "Articulate and warm, with a hint of amusement"},
     "gentleman": {"label": "Gentleman", "about": "Deep, warm, unflappable English gentleman"},
 }
+DEFAULT_VOICE = "butler"
 
 MAX_RTF = 0.85                  # it must speak faster than this fraction of real time to be used
 

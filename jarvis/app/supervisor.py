@@ -138,7 +138,11 @@ class Supervisor:
         cfg = self.cfg
         choice = cfg.get("voice.tts.backend", "auto")
         want = "say" if choice == "say" or not self.models.ready("voice") else "kokoro-onnx"
+        from jarvis.voice.qwen_tts import HUMAN_VOICES
+
         voice = cfg.get("voice.tts.voice", "jarvis")
+        if voice in HUMAN_VOICES:
+            voice = "jarvis"        # setup previews natural voices from their samples; Classic speaks the rest
         speed = float(cfg.get("voice.tts.speed", 1.0)) * VOICE_PRESETS.get(voice, {}).get("speed", 1.0)
         live = self.jarvis.speaker if self.jarvis is not None and getattr(self.jarvis, "speaker", None) else None
         for sp in (live, self.speaker):

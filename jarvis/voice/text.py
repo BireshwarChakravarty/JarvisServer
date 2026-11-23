@@ -212,3 +212,23 @@ def polish_spoken(sentence: str, state: dict, title: str = "sir") -> str:
         elif pat.search(s):
             state["titled"] = True
     return s.strip()
+
+
+def first_clause(sentence: str, min_len: int = 90, title: str = "sir") -> list[str]:
+    """A long opening sentence split at its first comma, so the voice can start on the short part
+    while the rest is synthesised. Short sentences, commas too early to stand alone, and a comma
+    before the title ("…, sir, …") stay whole."""
+    s = (sentence or "").strip()
+    if len(s) < min_len:
+        return [s]
+    for m in re.finditer(r",\s+", s):
+        cut = m.start()
+        if cut < 24:
+            continue
+        head, tail = s[:cut + 1], s[m.end():].strip()
+        if len(tail) < 20:
+            break
+        if title and tail.lower().startswith(title.lower()):
+            continue
+        return [head, tail]
+    return [s]

@@ -633,7 +633,7 @@ def _talk_over(amp, seconds, after=1.0):
 
     async def extra(app, now):
         sp = app.speaker
-        if sp.said and sp.said[-1] == LONG and sp.speaking and "t" not in state:
+        if sp.said and sp.said[-1] in LONG and sp.speaking and "t" not in state:
             state["t"] = now + after
         t = state.get("t")
         if t is not None and t <= now < t + seconds:

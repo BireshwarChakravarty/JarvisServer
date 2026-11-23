@@ -475,7 +475,7 @@
     v.mac.forEach((o) => add(o, "mac"));
     markVoice();
     $("voice-hint").innerHTML = (v.natural || []).length && v.natural.some((o) => o.id === v.current) && !v.natural_ready
-      ? "Downloading the natural voice (about 2 GB). I'll use the Classic voice until it's ready, then switch by myself."
+      ? "Downloading the natural voice (about 2.3 GB). I'll use the Classic voice until it's ready, then switch by myself."
       : v.natural_status && /slow/.test(v.natural_status) ? "The natural voices are a touch too slow on this Mac, so I'm using the Classic voice."
       : !v.neural_ready ? "My neural voices are still downloading; the Apple voices work right away."
       : v.mac_has_premium ? "" : 'Prefer an Apple voice? Download a free Premium one (Jamie is excellent) in <a href="#" id="get-voices">Spoken Content settings</a>, then come back.';
@@ -670,7 +670,7 @@
     if (path === "/api/setup/devices") return Promise.resolve({ microphones: [{ name: "Studio Display Microphone", default: true }, { name: "Logitech BRIO" }],
       cameras: [{ index: 0, name: "Logitech BRIO" }, { index: 1, name: "iPhone Camera" }], input_device: null, camera_index: 0 });
     if (path === "/api/setup/voices") return Promise.resolve({ current: "butler", neural_ready: true, mac_has_premium: true,
-      natural_ready: true, natural: [["butler", "Butler", "Refined English butler: calm, dry, quietly witty"], ["oxford", "Oxford", "Measured, composed, a soft Oxford accent"],
+      natural_ready: true, natural: [["butler", "Butler", "Refined English butler: calm, dry, quietly witty"],
         ["assistant", "Assistant", "Articulate and warm, with a hint of amusement"], ["gentleman", "Gentleman", "Deep, warm, unflappable English gentleman"]]
         .map(([id, label, about]) => ({ id, label, about, sample: `/static/voices/${id}.mp3` })),
       presets: [["jarvis", "JARVIS", "Calm, dry British butler (a blend of George and Fable)"], ["george", "George", "Warm, steady British male"],

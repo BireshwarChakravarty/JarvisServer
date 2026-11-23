@@ -625,6 +625,8 @@ class Jarvis:
                 bus.emit("transcript", text=text, source="voice")
                 self.speaker.enqueue(f"Very good, {self.cfg.get('owner.title', 'sir')}.")
                 return
+            if self.speaker is not None:
+                self.speaker.turn_mark = getattr(self, "_heard_at", None) or time.monotonic()
             turn = asyncio.create_task(self.handle_text(text, source="voice"))
             outcome = await self._monitor_barge_in(q, turn, your_level)
             if outcome == "stopped":
@@ -643,6 +645,7 @@ class Jarvis:
         from jarvis.voice.audio import SAMPLE_RATE, record_utterance
         from jarvis.voice.turn import sounds_unfinished
 
+        self._heard_at = time.monotonic()               # you stopped talking (for the latency measure)
         text, verdict = await self._hear(audio)
         self._note_if_unsure()
         wait = float(self.cfg.get("voice.unfinished_wait", 3.0))
@@ -953,16 +956,21 @@ class Jarvis:
 
         first = asyncio.Event()
         style: dict = {}
-        from jarvis.voice.text import polish_spoken
+        from jarvis.voice.text import first_clause, polish_spoken
 
         async def on_sentence(sentence: str) -> None:
             sentence = polish_spoken(sentence, style, self.cfg.get("owner.title", "sir"))
             if not sentence:
                 return
+            opening = not first.is_set()
             first.set()
             bus.emit("state", state="speaking")
             if self.speaker:
-                self.speaker.enqueue(sentence)
+                # a long first sentence: start on its first clause while the rest is voiced, as a person
+                # starts talking before the whole thought is formed
+                for part in (first_clause(sentence, title=self.cfg.get("owner.title", "sir")) if opening
+                             else [sentence]):
+                    self.speaker.enqueue(part)
 
         filler = asyncio.create_task(self._filler(first, cancel, text)) if (
             self.speaker and source in ("voice", "hud", "protocol", "phone") and self.cfg.get("voice.tts.fillers", True)) else None

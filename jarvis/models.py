@@ -60,7 +60,7 @@ def groups(stt_model: str = "small.en") -> list[Group]:
             Asset("kokoro-v1.0.onnx", [f"{KOKORO}/kokoro-v1.0.onnx"], 325_532_387),
             Asset("voices-v1.0.bin", [f"{KOKORO}/voices-v1.0.bin"], 28_214_398),
         ]),
-        Group("human", "Natural voice", "His natural, human-sounding voice (Qwen3-TTS, about 2 GB)", [
+        Group("human", "Natural voice", "His natural, human-sounding voice (Qwen3-TTS, about 2.3 GB)", [
             Asset(f"{qwen.DIRNAME}/{f}", [f"{HF}/{qwen.REPO}/resolve/main/{f}"], size)
             for f, size in qwen.FILES.items()], optional=True),
         Group("ears", "Speech recognition",

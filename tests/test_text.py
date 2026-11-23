@@ -58,3 +58,14 @@ def test_spoken_polish_drops_assistant_filler_and_extra_sirs():
     st = {}
     assert polish_spoken("Of course.", st) == "Of course."          # a whole answer isn't stripped to nothing
     assert polish_spoken("Very good, ma'am.", {}, "ma'am") == "Very good, ma'am."
+
+
+def test_a_long_first_sentence_starts_on_its_first_clause():
+    from jarvis.voice.text import first_clause
+
+    assert first_clause("Two meetings this afternoon, the first at half past two with the design team, and it's drizzling.") == \
+        ["Two meetings this afternoon,", "the first at half past two with the design team, and it's drizzling."]
+    assert first_clause("Done. The lights are off.") == ["Done. The lights are off."]
+    long_sir = "Here is a rather long answer that keeps going for a good while, sir, so there is time to cut in."
+    assert first_clause(long_sir) == ["Here is a rather long answer that keeps going for a good while, sir,",
+                                      "so there is time to cut in."]    # not before "sir", but after it
