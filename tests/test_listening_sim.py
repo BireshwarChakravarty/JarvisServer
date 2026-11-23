@@ -281,7 +281,7 @@ def test_mid_thought_pause_is_one_request(cfg):
     app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 0.8, "set a timer for…"),
                            ("silence", 1.0, ""), ("say", 0.8, "ten minutes"), ("silence", 4.0, "")])
     assert asked == ["set a timer for… ten minutes"], (asked, app.stt.heard)
-    yours = [h for h in app.stt.heard if h and "ten minutes" in h or "timer" in h]
+    yours = [h for h in app.stt.heard if (h and "ten minutes" in h) or "timer" in h]
     assert len(yours) == 1, app.stt.heard                                 # one utterance, not two
 
 
@@ -615,9 +615,6 @@ def test_a_long_request_survives_a_short_thinking_pause(cfg):
 
 def test_a_finished_short_request_is_still_answered_promptly(cfg):
     """The extra patience is only for unfinished words and long requests: 'what time is it' isn't held up."""
-    import time as _t
-
-    t0 = _t.monotonic()
     app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 0.9, "what's the weather like"),
                            ("silence", 4.0, "")])
     assert asked == ["what's the weather like"], (asked, app.stt.heard)

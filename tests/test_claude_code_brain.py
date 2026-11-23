@@ -18,8 +18,8 @@ CLAUDE_BIN = os.environ.get("CLAUDE_BIN") or shutil.which("claude")
 pytestmark = pytest.mark.skipif(not CLAUDE_BIN, reason="claude CLI not installed")
 
 uvicorn = pytest.importorskip("uvicorn")
-from fastapi import FastAPI, Request  # noqa: E402
-from fastapi.responses import JSONResponse, StreamingResponse  # noqa: E402
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 
 SEEN: list[dict] = []
 

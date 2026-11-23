@@ -204,8 +204,7 @@ def _download(urls: str | list[str], dest: Path) -> None:
             with httpx.stream("GET", url, follow_redirects=True, timeout=httpx.Timeout(30, read=120)) as r:
                 r.raise_for_status()
                 with open(tmp, "wb") as fh:
-                    for chunk in r.iter_bytes(1 << 20):
-                        fh.write(chunk)
+                    fh.writelines(r.iter_bytes(1 << 20))
             tmp.rename(dest)
             return
         except Exception as exc:
@@ -318,7 +317,8 @@ class Speaker:
                 if t in self._cache:
                     continue
                 try:
-                    self._cache = {**self._cache, t: self.backend.synth(speech_form(t))}
+                    render = getattr(self.backend, "synth_later", self.backend.synth)   # never ahead of live speech
+                    self._cache = {**self._cache, t: render(speech_form(t))}
                 except Exception as exc:
                     log.debug("couldn't pre-render %r: %s", t, exc)
         threading.Thread(target=work, daemon=True, name="tts-prepare").start()

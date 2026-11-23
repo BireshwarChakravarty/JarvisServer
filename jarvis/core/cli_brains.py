@@ -20,8 +20,9 @@ import os
 import shutil
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from jarvis.aio import spawn
 from jarvis.core import speed
@@ -248,7 +249,7 @@ class ClaudeCodeBrain(_CLIBrain):
                     self.proc.stdin.write((json.dumps(msg) + "\n").encode())
                     await self.proc.stdin.drain()
                     reply = await asyncio.wait_for(self._read_turn(on_sentence, cancel, quiet_exit=attempt == 1), limit)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # a stalled turn must not block every request after it
                     log.error("claude turn exceeded %.0fs; stopping it", limit)
                     await self._stop()
@@ -288,7 +289,7 @@ class ClaudeCodeBrain(_CLIBrain):
                 await self._interrupt()
             try:
                 raw = await asyncio.wait_for(self.proc.stdout.readline(), timeout=0.25 if not interrupted else 8)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 if interrupted:
                     await self._stop()  # didn't acknowledge the interrupt: restart next turn (resumes)
                     return " ".join(spoken)
@@ -449,7 +450,7 @@ class CodexBrain(_CLIBrain):
                     break
                 try:
                     raw = await asyncio.wait_for(proc.stdout.readline(), timeout=0.25)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
                 if not raw:
                     break

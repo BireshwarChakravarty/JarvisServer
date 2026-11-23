@@ -105,7 +105,7 @@ def test_not_on_screen_says_what_to_do():
 
 
 def test_the_tools_are_registered_and_explain_themselves():
-    from jarvis.tools import builtin  # noqa: F401
+    from jarvis.tools import builtin
     from jarvis.tools.registry import registry
 
     for name in ("click_on_screen", "type_on_screen", "press_keys", "scroll_screen"):

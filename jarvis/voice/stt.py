@@ -153,7 +153,7 @@ def clean_transcript(text: str) -> str:
     return text
 
 
-WAKE_PATTERN = re.compile(r"\b(hey|hi|ok|okay|yo)?[\s,]*(jarvis|jarvi|javis|jervis|jarvas)\b[\s,.!?]*", re.I)
+WAKE_PATTERN = re.compile(r"\b(hey|hi|ok|okay|yo)?[\s,]*(jarvis|jarvi|javis|jervis|jarvas)\b[\s,.!?]*", re.IGNORECASE)
 
 
 def strip_wake_phrase(text: str) -> tuple[bool, str]:

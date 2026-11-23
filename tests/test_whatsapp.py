@@ -7,7 +7,7 @@ import pytest
 
 from jarvis.mac import whatsapp as wa
 
-NOW = dt.datetime(2026, 11, 20, 18, 0, tzinfo=dt.timezone.utc)
+NOW = dt.datetime(2026, 11, 20, 18, 0, tzinfo=dt.UTC)
 
 
 @pytest.fixture
@@ -128,7 +128,7 @@ class FakeMac:
         self.sent_text, self.box = self.box, ""
         if self.lands:
             con = sqlite3.connect(str(self.db))
-            t = (dt.datetime.fromtimestamp(self.now, dt.timezone.utc) - wa.EPOCH).total_seconds()
+            t = (dt.datetime.fromtimestamp(self.now, dt.UTC) - wa.EPOCH).total_seconds()
             con.execute("INSERT INTO ZWAMESSAGE (ZISFROMME, ZCHATSESSION, ZMESSAGEDATE, ZTEXT) VALUES (1, 1, ?, ?)",
                         (t, self.sent_text))
             con.commit()

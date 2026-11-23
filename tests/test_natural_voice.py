@@ -105,3 +105,31 @@ def test_upgrade_switches_only_when_ready_and_fast(cfg, monkeypatch, tmp_path):
     asyncio.run(app.upgrade_voice())
     assert app.speaker.backend.name == "qwen3" and app.capabilities["tts"] == "qwen3"
     app.speaker.backend.close()
+
+
+def test_live_speech_goes_before_pre_rendering(tmp_path):
+    """Pre-rendered acknowledgements wait behind anything he's about to say live."""
+    import threading
+    import time
+
+    nv = q.QwenVoice("butler", tmp_path)
+    order, gate, busy = [], threading.Event(), threading.Event()
+
+    def hold():
+        busy.set()
+        gate.wait(5)
+    threads = [threading.Thread(target=lambda: nv._call(hold))]
+    threads[0].start()
+    assert busy.wait(2)                                      # the model is busy with something
+    for i in range(3):                                       # meanwhile: three pre-renders queue up…
+        threads.append(threading.Thread(target=lambda i=i: nv._call(lambda: order.append(f"later{i}"), later=True)))
+        threads[-1].start()
+    time.sleep(0.1)
+    threads.append(threading.Thread(target=lambda: nv._call(lambda: order.append("live"))))   # …then a reply
+    threads[-1].start()
+    time.sleep(0.1)
+    gate.set()
+    for t in threads:
+        t.join(5)
+    nv.close()
+    assert order[0] == "live" and sorted(order[1:]) == ["later0", "later1", "later2"], order

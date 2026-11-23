@@ -43,7 +43,7 @@ def check(name: str, required: bool = True, timeout: float = 180):
         def target():
             try:
                 box["detail"] = fn()
-            except BaseException as exc:  # noqa: BLE001
+            except BaseException as exc:
                 box["exc"] = exc
                 box["trace"] = traceback.format_exc()[-1500:]
 
@@ -85,34 +85,42 @@ def run() -> int:
 
     @check("imports: core")
     def _():
-        import anthropic, fastapi, uvicorn, yaml, numpy, psutil, httpx, PIL  # noqa: F401
-        import jarvis.core.orchestrator, jarvis.hud.server, jarvis.tools.builtin  # noqa: F401
+        import anthropic
+        import PIL  # noqa: F401
+
+        import jarvis.core.orchestrator
+        import jarvis.hud.server
+        import jarvis.tools.builtin  # noqa: F401
         from jarvis.tools.registry import registry
         return f"{len(registry)} tools, anthropic {anthropic.__version__}"
 
     @check("imports: native frameworks")
     def _():
-        import AppKit, AVFoundation, Contacts, EventKit, Quartz, ServiceManagement, ApplicationServices  # noqa: F401
+        import ApplicationServices  # noqa: F401
         import webview  # noqa: F401
         return "pyobjc + pywebview ok"
 
     @check("imports: audio & ML engines")
     def _():
-        import ctranslate2, faster_whisper, kokoro_onnx, onnxruntime, openwakeword, sounddevice  # noqa: F401
+        import ctranslate2
+        import onnxruntime
+        import sounddevice
         import webrtcvad  # noqa: F401
         return f"onnxruntime {onnxruntime.__version__}, ctranslate2 {ctranslate2.__version__}, " \
                f"portaudio {sounddevice.get_portaudio_version()[1]}"
 
     @check("imports: vision engines")
     def _():
-        import cv2, mediapipe  # noqa: F401
+        import cv2
+        import mediapipe
         return f"opencv {cv2.__version__}, mediapipe {mediapipe.__version__}"
 
     @check("multiprocessing helpers don't relaunch the app", timeout=60)
     def _():
         import multiprocessing
-        import psutil
         from multiprocessing import resource_tracker
+
+        import psutil
         lock = multiprocessing.RLock()  # what tqdm does: starts the resource tracker helper
         time.sleep(2)
         pid = getattr(resource_tracker._resource_tracker, "_pid", None)
@@ -183,6 +191,7 @@ def run() -> int:
     @check("ears: wake word hears 'Hey Jarvis'")
     def _():
         import numpy as np
+
         from jarvis.voice.audio import FRAME, WakeWord
         ww = WakeWord("hey_jarvis", 0.5, models_dir=state["cfg"].models_dir)
         if not ww.load():
@@ -217,13 +226,13 @@ def run() -> int:
     @check("voice: the JARVIS blend speaks clearly, in spoken form", timeout=300)
     def _():
         from jarvis.voice.text import speech_form
-        from jarvis.voice.tts import KokoroONNX, VOICE_PRESETS
+        from jarvis.voice.tts import VOICE_PRESETS, KokoroONNX
         p = VOICE_PRESETS["jarvis"]
         tts = KokoroONNX("jarvis", p["speed"], state["cfg"].models_dir)
         line = speech_form("Your board call is at 9:00 AM tomorrow, sir.")
         audio = tts.synth(line)
         text = state["stt"].transcribe(resample(audio, tts.sample_rate)).lower()
-        if "nine" not in text and "9" not in text or "morning" not in text:
+        if ("nine" not in text and "9" not in text) or "morning" not in text:
             raise RuntimeError(f"said {line!r}, heard {text!r}")
         return f"said {line!r}; Whisper heard {text!r}"
 
@@ -255,6 +264,7 @@ def run() -> int:
     @check("eyes: face engine")
     def _():
         import numpy as np
+
         from jarvis.vision.faces import FaceEngine
         fe = FaceEngine(state["cfg"].models_dir, state["cfg"].faces_dir, process_every=0)
         if not fe.load():
@@ -265,6 +275,7 @@ def run() -> int:
     @check("eyes: gesture recogniser")
     def _():
         import numpy as np
+
         from jarvis.vision.gestures import GestureEngine
         ge = GestureEngine(state["cfg"].models_dir, lambda *a: None, fps=1000)
         if not ge.load():
@@ -550,8 +561,8 @@ def run() -> int:
 
     @check("ears: echo cancellation buffers (Apple voice processing)", timeout=60)
     def _():
-        import numpy as np
         import AVFoundation as AV
+        import numpy as np
 
         from jarvis.voice.apple_io import PLAY_RATE, StreamResampler, channel, make_buffer
 
@@ -615,7 +626,8 @@ def run() -> int:
         import ApplicationServices as AX
         from AppKit import NSRunningApplication
 
-        from jarvis.mac import control, screen_elements as se
+        from jarvis.mac import control
+        from jarvis.mac import screen_elements as se
 
         doc = P(tempfile.mkdtemp()) / "jarvis-hands.txt"
         doc.write_text("")
@@ -675,6 +687,7 @@ def run() -> int:
     @check("setup + HUD server")
     def _():
         from fastapi.testclient import TestClient
+
         from jarvis.app.supervisor import Supervisor
         from jarvis.hud.server import create_app
         sup = Supervisor(state["cfg"])

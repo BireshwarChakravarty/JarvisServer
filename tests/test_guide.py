@@ -180,8 +180,8 @@ def test_task_names_are_matched_loosely():
 def test_tools_route_to_the_guide():
     from types import SimpleNamespace
 
-    from jarvis.tools.registry import registry
     import jarvis.tools.builtin  # noqa: F401
+    from jarvis.tools.registry import registry
 
     g, _ = make_guide([(0, 0, False), (530, 50, True)])
 

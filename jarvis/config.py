@@ -136,14 +136,14 @@ def _load_env(home: Path) -> None:
 def load_config(path: str | Path | None = None, overrides: dict | None = None) -> Config:
     home = jarvis_home()
     _load_env(home)
-    with open(DEFAULT_CONFIG, "r", encoding="utf-8") as fh:
+    with open(DEFAULT_CONFIG, encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
 
     user_path = Path(path).expanduser() if path else home / "config.yaml"
     source = None
     if user_path.exists():
         try:
-            with open(user_path, "r", encoding="utf-8") as fh:
+            with open(user_path, encoding="utf-8") as fh:
                 mine = yaml.safe_load(fh) or {}
             if not isinstance(mine, dict):
                 raise yaml.YAMLError("the file isn't a set of settings")

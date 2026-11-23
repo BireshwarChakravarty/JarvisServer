@@ -89,16 +89,33 @@ class QwenVoice:
         self.dir = model_dir(models_dir)
         self.max_rtf = max_rtf
         self.rtf: float | None = None
-        self._jobs: queue.Queue = queue.Queue()
+        self._jobs: queue.Queue = queue.Queue()       # live speech: always first
+        self._later: queue.Queue = queue.Queue()      # pre-rendering ("Yes, sir?"): only when idle
         self._thread: threading.Thread | None = None
         self.model = None
 
     # ── the model's own thread ─────────────────────────────────────────────
+    def _next_job(self):
+        try:
+            return self._jobs.get_nowait()
+        except queue.Empty:
+            pass
+        try:
+            return self._later.get_nowait()
+        except queue.Empty:
+            pass
+        return self._jobs.get(timeout=0.2) if self._later.empty() else None
+
     def _run(self) -> None:
         while True:
-            job = self._jobs.get()
+            try:
+                job = self._next_job()
+            except queue.Empty:
+                continue
             if job is None:
-                return
+                if self._closing:
+                    return
+                continue
             fn, box, done = job
             try:
                 box["value"] = fn()
@@ -106,13 +123,15 @@ class QwenVoice:
                 box["error"] = exc
             done.set()
 
-    def _call(self, fn, timeout: float | None = 120):
+    _closing = False
+
+    def _call(self, fn, timeout: float | None = 120, later: bool = False):
         if self._thread is None or not self._thread.is_alive():
             self._thread = threading.Thread(target=self._run, daemon=True, name="qwen-tts")
             self._thread.start()
         box: dict = {}
         done = threading.Event()
-        self._jobs.put((fn, box, done))
+        (self._later if later else self._jobs).put((fn, box, done))
         if not done.wait(timeout):
             raise TimeoutError("the voice took too long")
         if "error" in box:
@@ -153,5 +172,10 @@ class QwenVoice:
     def synth(self, text: str) -> np.ndarray:
         return self._call(lambda: self._generate(text))
 
+    def synth_later(self, text: str) -> np.ndarray:
+        """Pre-rendering: waits behind anything he's about to say live."""
+        return self._call(lambda: self._generate(text), timeout=600, later=True)
+
     def close(self) -> None:
+        self._closing = True
         self._jobs.put(None)

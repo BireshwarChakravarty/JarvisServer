@@ -68,12 +68,12 @@ def test_durations_are_said_naturally():
 def test_orchestrator_answers_instantly_and_tells_the_brain_next_turn():
     from types import SimpleNamespace
 
+    import jarvis.tools.builtin  # noqa: F401
     from jarvis.core.orchestrator import Jarvis
     from jarvis.tools.registry import registry
-    import jarvis.tools.builtin  # noqa: F401
 
     said, added = [], []
-    sched = SimpleNamespace(add_timer=lambda s, l: added.append((s, l)) or {"message": l or "timer"}, list=lambda: [])
+    sched = SimpleNamespace(add_timer=lambda s, l: added.append((s, l)) or {"message": l or "timer"}, list=list)
     j = Jarvis.__new__(Jarvis)
     j.cfg = SimpleNamespace(get=lambda k, d=None: d)
     j.speaker = SimpleNamespace(enqueue=said.append)

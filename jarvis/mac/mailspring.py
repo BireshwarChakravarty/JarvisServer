@@ -103,12 +103,12 @@ def _when(value) -> dt.datetime | None:
         n = float(value)
         if n > 1e11:
             n /= 1000.0
-        return dt.datetime.fromtimestamp(n, dt.timezone.utc)
+        return dt.datetime.fromtimestamp(n, dt.UTC)
     except (TypeError, ValueError, OverflowError, OSError):
         pass
     try:
         d = dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        return d if d.tzinfo else d.replace(tzinfo=dt.timezone.utc)
+        return d if d.tzinfo else d.replace(tzinfo=dt.UTC)
     except ValueError:
         return None
 
@@ -197,7 +197,7 @@ def messages(days: int = 3, now: dt.datetime | None = None, path: Path | None = 
     path = path or db_path()
     if path is None:
         return []
-    now = now or dt.datetime.now(dt.timezone.utc)
+    now = now or dt.datetime.now(dt.UTC)
     since = (now - dt.timedelta(days=days)).timestamp()
     with _DB(path) as con:
         accounts = _accounts(con)
@@ -227,7 +227,7 @@ def unread(days: int = 3, limit: int = 40, now: dt.datetime | None = None, path:
     path = path or db_path()
     if path is None:
         return SETUP_HINT
-    now = now or dt.datetime.now(dt.timezone.utc)
+    now = now or dt.datetime.now(dt.UTC)
     try:
         got = messages(days=days, now=now, path=path)
     except sqlite3.Error as exc:
@@ -314,7 +314,7 @@ SCHEMA = [
 def make_sample(folder: Path, now: dt.datetime | None = None) -> Path:
     """An edgehill.db shaped like Mailspring's, with an IMAP inbox and a Gmail inbox label:
     an urgent unread mail, an unread newsletter, one already read, one in Archive, and a draft."""
-    now = now or dt.datetime.now(dt.timezone.utc)
+    now = now or dt.datetime.now(dt.UTC)
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / DB_NAME
     con = sqlite3.connect(str(path))

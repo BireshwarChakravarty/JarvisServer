@@ -1,8 +1,9 @@
 """Everything a tool might need, passed as the first argument to every tool."""
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any
 
 
 @dataclass
@@ -15,7 +16,7 @@ class ToolContext:
     scheduler: Any = None        # jarvis.core.scheduler.Scheduler
     protocols: Any = None        # jarvis.core.protocols.Protocols
     orchestrator: Any = None     # back-reference for speak/listen
-    confirm: Optional[Callable[[str], Awaitable[bool]]] = None
+    confirm: Callable[[str], Awaitable[bool]] | None = None
     require_confirmation: bool = True
     extras: dict = field(default_factory=dict)
 

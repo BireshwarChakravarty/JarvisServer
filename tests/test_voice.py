@@ -3,8 +3,15 @@ import numpy as np
 import pytest
 
 from jarvis.voice.text import speech_form
-from jarvis.voice.tts import (VOICE_PRESETS, SilentTTS, Speaker, best_mac_voice, breath_after,
-                              parse_voice_spec, shape_audio)
+from jarvis.voice.tts import (
+    VOICE_PRESETS,
+    SilentTTS,
+    Speaker,
+    best_mac_voice,
+    breath_after,
+    parse_voice_spec,
+    shape_audio,
+)
 
 
 @pytest.mark.parametrize("written,spoken", [

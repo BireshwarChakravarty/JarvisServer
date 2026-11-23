@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 
@@ -123,10 +123,10 @@ class PhoneVoice:
 
     async def _conversation(self) -> bool:
         """Listen, answer, listen again... Returns whether anything was said."""
+        import time
+
         from jarvis.core.orchestrator import DISMISS
         from jarvis.voice.stt import strip_wake_phrase
-
-        import time
 
         vad = VAD()
         follow_up = False
@@ -182,4 +182,4 @@ def pcm_to_float(pcm: bytes) -> np.ndarray:
     return np.frombuffer(pcm[: len(pcm) // 2 * 2], dtype="<i2").astype(np.float32) / 32768.0
 
 
-__all__ = ["PhoneVoice", "pcm_to_float", "SAMPLE_RATE"]
+__all__ = ["SAMPLE_RATE", "PhoneVoice", "pcm_to_float"]

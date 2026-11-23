@@ -22,7 +22,7 @@ log = logging.getLogger("jarvis.mini")
 W, H = 250, 48
 ACTIVE = {"listening", "transcribing", "thinking", "working", "speaking", "error"}
 LINGER = 3.5          # seconds it stays after he goes quiet
-_panel: "MiniPanel | None" = None
+_panel: MiniPanel | None = None
 
 
 def click_through(active: bool) -> None:

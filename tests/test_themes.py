@@ -94,7 +94,7 @@ def test_every_colour_token_used_is_defined():
     for page in PAGES:
         html = (STATIC / f"{page}.html").read_text()
         sheets = [(STATIC / name).read_text() for name in re.findall(r'href="[^"]*/([\w-]+\.css)"', html)]
-        text = "\n".join(sheets) + "\n" + "\n".join(re.findall(r"<style>(.*?)</style>", html, re.S))
+        text = "\n".join(sheets) + "\n" + "\n".join(re.findall(r"<style>(.*?)</style>", html, re.DOTALL))
         defined = set(re.findall(r"(--[\w-]+)\s*:", text)) | from_js
         used = set(re.findall(r"var\((--[\w-]+)", text))
         missing = sorted(u for u in used if u not in defined)
@@ -104,7 +104,7 @@ def test_every_colour_token_used_is_defined():
 def test_each_theme_overrides_the_core_palette():
     css = (STATIC / "theme.css").read_text()
     for key in ("dot", "glass", "stark"):
-        block = re.search(rf':root\[data-theme="{key}"\]\s*\{{(.*?)\}}', css, re.S).group(1)
+        block = re.search(rf':root\[data-theme="{key}"\]\s*\{{(.*?)\}}', css, re.DOTALL).group(1)
         for token in ("--ink", "--ice", "--gold", "--text", "--ice-rgb", "--gold-rgb", "--fg-rgb", "--ink-rgb"):
             assert re.search(rf"{token}\s*:", block), (key, token)
     js = (STATIC / "reactor.js").read_text()
@@ -125,7 +125,7 @@ def test_every_theme_is_dark():
         r, g, b = (int(bg[i:i + 2], 16) for i in (1, 3, 5))
         assert max(r, g, b) < 0x20, key
         if key != "arc":
-            ink = re.search(rf':root\[data-theme="{key}"\]\s*\{{.*?--ink:\s*(#[0-9a-f]+)', css, re.S).group(1)
+            ink = re.search(rf':root\[data-theme="{key}"\]\s*\{{.*?--ink:\s*(#[0-9a-f]+)', css, re.DOTALL).group(1)
             assert ink.lower().startswith("#0") or ink == "#000", (key, ink)
     assert "color-scheme: light" not in css
 

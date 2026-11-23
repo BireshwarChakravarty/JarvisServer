@@ -39,7 +39,7 @@ class Supervisor:
     async def boot(self) -> None:
         self.loop = asyncio.get_running_loop()
         bus.bind(self.loop)
-        asyncio.ensure_future(self._mini_follows_jarvis())
+        self._mini_task = asyncio.ensure_future(self._mini_follows_jarvis())   # kept: an unreferenced task can be collected
         if self.cfg.get("app.companion", False):
             await self.remote.start()
         if self.cfg.setup_complete:

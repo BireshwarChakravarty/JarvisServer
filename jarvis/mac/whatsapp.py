@@ -37,7 +37,7 @@ log = logging.getLogger("jarvis.whatsapp")
 BUNDLE_ID = "net.whatsapp.WhatsApp"
 APP_PATHS = ("/Applications/WhatsApp.app", str(Path("~/Applications/WhatsApp.app").expanduser()))
 DB_NAME = "ChatStorage.sqlite"
-EPOCH = dt.datetime(2001, 1, 1, tzinfo=dt.timezone.utc)
+EPOCH = dt.datetime(2001, 1, 1, tzinfo=dt.UTC)
 PERSON, GROUP, BROADCAST, STATUS = 0, 1, 2, 3
 
 NEED = {"ZWACHATSESSION": {"Z_PK", "ZPARTNERNAME", "ZCONTACTJID"},
@@ -433,7 +433,7 @@ def send(recipient: str, text: str, path: Path | None = None, wait: float = 8.0)
 
 
 def _same(box: str, text: str) -> bool:
-    norm = lambda t: re.sub(r"\s+", " ", t or "").strip()           # noqa: E731
+    norm = lambda t: re.sub(r"\s+", " ", t or "").strip()
     return bool(norm(text)) and norm(text) in norm(box)
 
 
@@ -463,7 +463,7 @@ def _composer_text() -> str | None:
 def make_sample(folder: Path, now: dt.datetime | None = None) -> Path:
     """A ChatStorage.sqlite shaped like WhatsApp's: Pepper (2 unread), a family group (3 unread,
     two senders), Happy (read), a status update row and an archived chat."""
-    now = now or dt.datetime.now(dt.timezone.utc)
+    now = now or dt.datetime.now(dt.UTC)
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / DB_NAME
     con = sqlite3.connect(str(path))
@@ -479,7 +479,7 @@ def make_sample(folder: Path, now: dt.datetime | None = None) -> Path:
             ZMEMBERJID VARCHAR);
         CREATE TABLE ZWAPROFILEPUSHNAME (Z_PK INTEGER PRIMARY KEY, ZJID VARCHAR, ZPUSHNAME VARCHAR);
     """)
-    t = lambda mins: (now - dt.timedelta(minutes=mins) - EPOCH).total_seconds()   # noqa: E731
+    t = lambda mins: (now - dt.timedelta(minutes=mins) - EPOCH).total_seconds()
     con.executemany("INSERT INTO ZWACHATSESSION VALUES (?,?,?,?,?,?,?,?,?,?)", [
         (1, 1, 0, 0, 0, PERSON, 2, t(5), "447700900123@s.whatsapp.net", "Pepper Potts"),
         (2, 1, 0, 0, 0, GROUP, 3, t(2), "120363000000@g.us", "Stark Family"),

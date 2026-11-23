@@ -16,8 +16,9 @@ import json
 import logging
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from jarvis.aio import spawn
 from jarvis.core.persona import build_system_prompt, context_line
@@ -361,23 +362,22 @@ class Brain:
         system += "\nYou are currently in offline mode: you cannot use tools, so answer from knowledge only."
         splitter, spoken = SentenceSplitter(), []
         bus.emit("state", state="thinking")
-        async with httpx.AsyncClient(timeout=120) as http:
-            async with http.stream("POST", f"{host}/api/chat", json={
-                "model": model, "stream": True,
-                "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
-            }) as r:
-                async for line in r.aiter_lines():
-                    if cancel is not None and cancel.is_set():
-                        break
-                    if not line.strip():
-                        continue
-                    chunk = json.loads(line)
-                    for s in splitter.feed(chunk.get("message", {}).get("content", "")):
-                        s = clean_for_speech(s)
-                        spoken.append(s)
-                        bus.emit("reply", text=s)
-                        if on_sentence:
-                            await on_sentence(s)
+        async with httpx.AsyncClient(timeout=120) as http, http.stream("POST", f"{host}/api/chat", json={
+            "model": model, "stream": True,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+        }) as r:
+            async for line in r.aiter_lines():
+                if cancel is not None and cancel.is_set():
+                    break
+                if not line.strip():
+                    continue
+                chunk = json.loads(line)
+                for s in splitter.feed(chunk.get("message", {}).get("content", "")):
+                    s = clean_for_speech(s)
+                    spoken.append(s)
+                    bus.emit("reply", text=s)
+                    if on_sentence:
+                        await on_sentence(s)
         for s in splitter.flush():
             s = clean_for_speech(s)
             spoken.append(s)

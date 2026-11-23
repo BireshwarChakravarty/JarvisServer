@@ -56,11 +56,11 @@ return out
 PRIORITY_WORDS = re.compile(
     r"\b(urgent|asap|action required|action needed|deadline|due|overdue|today|tomorrow|eod|invoice|payment|"
     r"pay|approve|approval|sign|signature|contract|offer|interview|meeting|reschedul\w*|confirm|"
-    r"question|help|issue|problem|fail\w*|declined|security|password|verify|expir\w*)\b", re.I)
+    r"question|help|issue|problem|fail\w*|declined|security|password|verify|expir\w*)\b", re.IGNORECASE)
 LOW_SENDERS = re.compile(r"(no-?reply|do-?not-?reply|newsletter|notifications?|news@|marketing|mailer|digest|"
-                         r"updates@|info@|hello@|team@)", re.I)
+                         r"updates@|info@|hello@|team@)", re.IGNORECASE)
 PROMO_WORDS = re.compile(r"\b(sale|% off|deal|offer ends|discount|webinar|unsubscribe|newsletter|digest|"
-                         r"weekly|promo\w*|limited time)\b", re.I)
+                         r"weekly|promo\w*|limited time)\b", re.IGNORECASE)
 
 
 def parse(raw: str) -> list[dict]:
@@ -95,11 +95,11 @@ def score(m: dict, now: dt.datetime | None = None) -> float:
     s += 1.5 * min(3, len(PRIORITY_WORDS.findall(text)))
     if "?" in m["subject"] or re.search(r"\?\s", m["excerpt"][:200]):
         s += 1.5
-    if re.match(r"^(re|fwd?):", m["subject"], re.I):
+    if re.match(r"^(re|fwd?):", m["subject"], re.IGNORECASE):
         s += 1          # a thread you're part of
     try:
-        age_h = ((now or dt.datetime.now(dt.timezone.utc)) - dt.datetime.fromisoformat(m["received"].replace("Z", "+00:00"))
-                 .astimezone(dt.timezone.utc)).total_seconds() / 3600
+        age_h = ((now or dt.datetime.now(dt.UTC)) - dt.datetime.fromisoformat(m["received"].replace("Z", "+00:00"))
+                 .astimezone(dt.UTC)).total_seconds() / 3600
         s += 1.0 if age_h < 12 else 0.5 if age_h < 36 else 0
     except (ValueError, TypeError, KeyError):
         pass

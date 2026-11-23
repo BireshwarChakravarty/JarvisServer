@@ -290,7 +290,7 @@ def make_router(sup) -> APIRouter:
         setattr(sup, key, sess)
         try:
             await asyncio.wait_for(sess.done.wait(), timeout=600 if action == "install" else 900)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             sess.cancel()
         st = await asyncio.to_thread(brain_setup.status, which)
         return {"ok": sess.code == 0, "code": sess.code, "status": st, "log": sess.lines[-20:]}
@@ -311,7 +311,7 @@ def make_router(sup) -> APIRouter:
             reply = await asyncio.wait_for(brain.respond(
                 "This is a connection test. Reply with one short, witty sentence confirming you're online.",
                 on_sentence=collect), timeout=120)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             reply = ""
         finally:
             stop = getattr(brain, "_stop", None)
@@ -458,9 +458,8 @@ def make_router(sup) -> APIRouter:
 
     @r.post("/api/setup/voice")
     async def set_voice(body: dict = Body(...)):
-        from jarvis.voice.tts import VOICE_PRESETS
-
         from jarvis.voice import qwen_tts
+        from jarvis.voice.tts import VOICE_PRESETS
 
         vid = str(body.get("voice") or "")
         if vid in qwen_tts.HUMAN_VOICES:
@@ -548,13 +547,13 @@ def make_router(sup) -> APIRouter:
     @r.post("/api/setup/open-unlock-settings")
     async def open_unlock_settings():
         # Touch ID & Password, where "Use Apple Watch to unlock" lives (Apple's secure auto-unlock)
-        subprocess.Popen(["open", "x-apple.systempreferences:com.apple.Touch-ID-Settings.extension"])
+        subprocess.Popen(["open", "x-apple.systempreferences:com.apple.Touch-ID-Settings.extension"])  # noqa: ASYNC220  (doesn't wait)
         return {"ok": True}
 
     @r.post("/api/setup/open-voice-settings")
     async def open_voice_settings():
         # Spoken Content, where Apple's Premium voices are downloaded (free)
-        subprocess.Popen(["open", "x-apple.systempreferences:com.apple.preference.universalaccess?SpokenContent"])
+        subprocess.Popen(["open", "x-apple.systempreferences:com.apple.preference.universalaccess?SpokenContent"])  # noqa: ASYNC220
         return {"ok": True}
 
     # ── voice & wake word test ────────────────────────────────────────────
@@ -592,7 +591,7 @@ def make_router(sup) -> APIRouter:
             while time.time() < end and not heard:
                 try:
                     frame = await asyncio.wait_for(q.get(), timeout=0.5)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
                 scores = ww._model.predict(frame)
                 s = max(scores.values()) if scores else 0.0

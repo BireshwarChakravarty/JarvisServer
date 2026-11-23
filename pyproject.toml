@@ -212,3 +212,33 @@ info."NSHighResolutionCapable" = true
 entitlement."com.apple.security.automation.apple-events" = true
 entitlement."com.apple.security.personal-information.calendars" = true
 entitlement."com.apple.security.personal-information.addressbook" = true
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Lint. JARVIS keeps running whatever a tool, device or service does, so broad
+#  `except Exception` (often with a log or a fallback) is deliberate, not an oversight.
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "ASYNC", "PIE", "FURB", "PLW"]
+ignore = [
+  "E501",            # long lines: the formatter's judgement, not a bug
+  "E731",            # small lambdas are used as callbacks on purpose
+  "B008",            # FastAPI's Body(...) defaults
+  "SIM105",          # try/except/pass reads plainer than contextlib.suppress here
+  "SIM108",          # ternaries are not always clearer
+  "RUF001", "RUF002", "RUF003",   # curly quotes and dashes in spoken text are intended
+  "RUF012",          # class-level tables are read-only by convention
+  "PLW0603",         # module-level caches use `global` deliberately
+  "PLW1510",         # subprocess.run without check: return codes are inspected where they matter
+  "PLW2901",         # loop variables are sometimes refined in place, deliberately
+  "PLW0642",         # PyObjC initialisers assign `self = objc.super(...).init()`, as PyObjC requires
+  "ASYNC109", "ASYNC110",          # explicit timeouts and short polling loops are deliberate
+  # style preferences, not defects
+  "E702", "E741", "RUF005", "RUF007", "RUF046", "RUF059", "FURB162", "FURB171", "B905", "SIM102",
+  "SIM103", "SIM115", "SIM118", "PIE810", "PLW0108", "PLW3301", "E402",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011", "PLW0108", "SIM117"]

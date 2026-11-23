@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 
@@ -118,7 +118,7 @@ def make_buffer(fmt, audio: np.ndarray):
     """An AVAudioPCMBuffer holding `audio` (mono float32) in format `fmt`."""
     import AVFoundation as AV
 
-    n = int(len(audio))
+    n = len(audio)
     buf = AV.AVAudioPCMBuffer.alloc().initWithPCMFormat_frameCapacity_(fmt, max(1, n))
     buf.setFrameLength_(n)
     if n:

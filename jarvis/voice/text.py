@@ -12,7 +12,7 @@ ABBREVIATIONS = {
 
 _URL = re.compile(r"https?://\S+|www\.\S+")
 _MD_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
-_MD_SYMBOLS = re.compile(r"(\*\*|__|\*|`{1,3}|^#{1,6}\s*|^\s*[-•]\s+|^\s*\d+\.\s+(?=\w))", re.M)
+_MD_SYMBOLS = re.compile(r"(\*\*|__|\*|`{1,3}|^#{1,6}\s*|^\s*[-•]\s+|^\s*\d+\.\s+(?=\w))", re.MULTILINE)
 _SPACES = re.compile(r"\s+")
 
 
@@ -97,9 +97,9 @@ _TIME = re.compile(r"(?<![\d:.])\b([01]?\d|2[0-3])(?::([0-5]\d)(?:\s*([AaPp])\.?
 _AMPM = re.compile(r"\b(1[0-2]|0?[1-9])\s*([AaPp])\.?\s?[Mm]\.?(?=\W|$)")
 _EMOJI = re.compile("[\U0001F000-\U0001FAFF☀-➿️‍]+")
 _SAY = [
-    (re.compile(r"\be\.g\.,?\s*", re.I), "for example, "), (re.compile(r"\bi\.e\.,?\s*", re.I), "that is, "),
-    (re.compile(r"\bvs\.?(?=\s)", re.I), "versus"), (re.compile(r"\betc\.", re.I), "et cetera."),
-    (re.compile(r"\bapprox\.\s*", re.I), "approximately "), (re.compile(r"(?<=\d)\s?GB\b"), " gigabytes"),
+    (re.compile(r"\be\.g\.,?\s*", re.IGNORECASE), "for example, "), (re.compile(r"\bi\.e\.,?\s*", re.IGNORECASE), "that is, "),
+    (re.compile(r"\bvs\.?(?=\s)", re.IGNORECASE), "versus"), (re.compile(r"\betc\.", re.IGNORECASE), "et cetera."),
+    (re.compile(r"\bapprox\.\s*", re.IGNORECASE), "approximately "), (re.compile(r"(?<=\d)\s?GB\b"), " gigabytes"),
     (re.compile(r"(?<=\d)\s?MB\b"), " megabytes"), (re.compile(r"(?<=\d)\s?TB\b"), " terabytes"),
     (re.compile(r"(?<=\d)\s?km/h\b"), " kilometres an hour"), (re.compile(r"(?<=\d)\s?mph\b"), " miles an hour"),
     (re.compile(r"(?<=\d)\s?km\b"), " kilometres"), (re.compile(r"(?<=\d)\s?ms\b"), " milliseconds"),
@@ -184,10 +184,10 @@ def _daypart(m: re.Match) -> str:
 # ── spoken style: the persona's rules, enforced on what is actually said ─────────────────────────────
 _OPENERS = re.compile(
     r"^(?:certainly|absolutely|of course|sure thing|sure|great question|good question|happy to help|"
-    r"i'd be happy to help|i would be happy to help|no problem)\s*[!.,]+\s+(?=\S)", re.I)
+    r"i'd be happy to help|i would be happy to help|no problem)\s*[!.,]+\s+(?=\S)", re.IGNORECASE)
 _SIGNOFF = re.compile(
     r"^(?:is there anything else (?:i can (?:help|do)(?: you)?(?: with)?|you need)|"
-    r"let me know if (?:you need|there's) anything else|i hope (?:this|that) helps)\b[^.?!]*[.?!]?$", re.I)
+    r"let me know if (?:you need|there's) anything else|i hope (?:this|that) helps)\b[^.?!]*[.?!]?$", re.IGNORECASE)
 
 
 def polish_spoken(sentence: str, state: dict, title: str = "sir") -> str:
@@ -205,9 +205,9 @@ def polish_spoken(sentence: str, state: dict, title: str = "sir") -> str:
         return ""
     t = re.escape(title.strip()) if title else ""
     if t:
-        pat = re.compile(rf"(,\s*{t}\b(?=[\s.,!?;:]|$))|(^{t},\s*)", re.I)
+        pat = re.compile(rf"(,\s*{t}\b(?=[\s.,!?;:]|$))|(^{t},\s*)", re.IGNORECASE)
         if state.get("titled"):
-            s = pat.sub(lambda m: "" if m.group(1) else "", s)
+            s = pat.sub("", s)
             s = s[:1].upper() + s[1:] if s else s
         elif pat.search(s):
             state["titled"] = True

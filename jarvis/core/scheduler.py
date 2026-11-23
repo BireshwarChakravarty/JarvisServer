@@ -7,7 +7,7 @@ import datetime as dt
 import logging
 import time
 import uuid
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 from jarvis.events import bus
 

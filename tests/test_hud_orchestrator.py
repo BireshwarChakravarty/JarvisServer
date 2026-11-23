@@ -99,7 +99,7 @@ def test_a_failing_hud_command_keeps_the_link(cfg):
         if msg.get("type") == "boom":
             raise RuntimeError("kaboom")
         got.append(msg["type"])
-    j = SimpleNamespace(hud_command=hud_command, capabilities={}, protocols=SimpleNamespace(list=lambda: []),
+    j = SimpleNamespace(hud_command=hud_command, capabilities={}, protocols=SimpleNamespace(list=list),
                         _refresh_panels=lambda: asyncio.sleep(0), cfg=cfg, camera=None)
     client = TestClient(create_app(j))
     with client.websocket_connect("/ws") as ws:

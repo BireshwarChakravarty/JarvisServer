@@ -99,7 +99,8 @@ class CLISession:
                 m = URL_RE.search(line)
                 if m:  # make sure the browser opens even if the CLI couldn't
                     self.opened_url = True
-                    subprocess.Popen(["/usr/bin/open", m.group(0)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    subprocess.Popen(["/usr/bin/open", m.group(0)], stdout=subprocess.DEVNULL,  # noqa: ASYNC220
+                                     stderr=subprocess.DEVNULL)
         self.code = await self.proc.wait()
         bus.emit("cli_log", which=self.which, kind=self.kind, done=True, code=self.code)
         self.done.set()

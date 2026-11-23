@@ -20,9 +20,9 @@ import os
 import re
 import time
 from pathlib import Path
+from typing import Any
 
 import numpy as np
-from typing import Any
 
 from jarvis.aio import spawn
 from jarvis.core.brain import Brain  # noqa: F401  (import registers the brain module)
@@ -38,10 +38,10 @@ from jarvis.tools.registry import registry
 log = logging.getLogger("jarvis")
 
 YES = re.compile(r"\b(yes|yeah|yep|yup|sure|do it|go ahead|confirm(ed)?|proceed|affirmative|please do|ok(ay)?|"
-                 r"absolutely|of course|send it|go for it|correct|right)\b", re.I)
-NO = re.compile(r"\b(no|nope|nah|cancel|don'?t|stop|negative|wait|hold on|never ?mind|abort)\b", re.I)
+                 r"absolutely|of course|send it|go for it|correct|right)\b", re.IGNORECASE)
+NO = re.compile(r"\b(no|nope|nah|cancel|don'?t|stop|negative|wait|hold on|never ?mind|abort)\b", re.IGNORECASE)
 DISMISS = re.compile(r"^(?:(?:that'?s (?:all|it)|that will be all|thanks?(?: you)?|cheers|never ?mind|nothing|"
-                     r"no thanks?|go to sleep|stand ?by|dismissed)[\s,.!]*)+$", re.I)
+                     r"no thanks?|go to sleep|stand ?by|dismissed)[\s,.!]*)+$", re.IGNORECASE)
 
 
 def _human_duration(seconds: float) -> str:
@@ -86,7 +86,6 @@ class Jarvis:
                                orchestrator=self, confirm=self.confirm,
                                require_confirmation=bool(cfg.get("safety.confirm_risky_actions", True)))
         import jarvis.tools.builtin  # noqa: F401  (registers tools)
-
         from jarvis.core.cli_brains import make_brain
 
         self.brain = make_brain(cfg, registry, self.memory, self.ctx)
@@ -472,10 +471,10 @@ class Jarvis:
 
     async def _wait_for_trigger(self, q: asyncio.Queue) -> str | None:
         """Block until the wake word / PTT / gesture / HUD. Returns any command already spoken."""
+        import collections
+
         from jarvis.voice.audio import record_utterance
         from jarvis.voice.stt import strip_wake_phrase
-
-        import collections
 
         recent: collections.deque = collections.deque(maxlen=8)     # the last ~0.64 s of audio
         self._wake_preroll = None
@@ -498,7 +497,7 @@ class Jarvis:
             if self.wake and self.wake.available:
                 try:
                     frame = await asyncio.wait_for(q.get(), timeout=0.2)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
                 recent.append(frame)
                 if self.vad is not None and self.vad.is_speech(frame):
@@ -536,10 +535,8 @@ class Jarvis:
                     return rest or None
 
     async def _converse(self, q: asyncio.Queue, first_text: str | None) -> None:
-        from jarvis.voice.audio import record_utterance
+        from jarvis.voice.audio import level, record_utterance
         from jarvis.voice.stt import strip_wake_phrase
-
-        from jarvis.voice.audio import level
 
         follow_up = False
         pending_text = first_text
@@ -870,7 +867,7 @@ class Jarvis:
                 return "stopped"
             try:
                 frame = await asyncio.wait_for(q.get(), timeout=0.1)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             guiding = self.guide is not None and getattr(self.guide, "_cancel", None) is not None
             if not (self.speaker.speaking or guiding):
@@ -1065,7 +1062,7 @@ class Jarvis:
         pool = self.STILL if slow else self.FILLERS
         if not slow:
             for pattern, lines in self.TOPICAL:
-                if re.search(pattern, text or "", re.I):
+                if re.search(pattern, text or "", re.IGNORECASE):
                     pool = lines
                     break
         recent = getattr(self, "_recent_fillers", [])
@@ -1076,13 +1073,13 @@ class Jarvis:
 
     async def _filler(self, first: asyncio.Event, cancel: asyncio.Event, text: str = "") -> None:
         # a lookup is obviously coming ("what's on my calendar"): say so sooner, as a person would
-        topical = any(re.search(p, text or "", re.I) for p, _ in self.TOPICAL)
+        topical = any(re.search(p, text or "", re.IGNORECASE) for p, _ in self.TOPICAL)
         # a lookup that's obviously coming gets a word sooner; otherwise only a real wait earns one
         for delay, slow in ((0.8 if topical else 1.8, False), (9.0, True)):
             try:
                 await asyncio.wait_for(first.wait(), delay)
                 return
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
             if cancel.is_set() or (self.speaker and self.speaker.speaking):
                 return
@@ -1245,7 +1242,7 @@ class Jarvis:
                 if answer is None and not fut.done():  # unclear speech: give the HUD/gesture a moment
                     try:
                         answer = await asyncio.wait_for(asyncio.shield(fut), timeout=6)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         answer = None
         finally:
             if voice_task and not voice_task.done():

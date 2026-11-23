@@ -7,7 +7,8 @@ import shlex
 import subprocess
 from pathlib import Path
 
-from jarvis.mac import pim, system as mac
+from jarvis.mac import pim
+from jarvis.mac import system as mac
 from jarvis.tools.registry import ImageResult, registry
 
 tool = registry.tool

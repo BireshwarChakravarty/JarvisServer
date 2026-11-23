@@ -3,7 +3,7 @@ import datetime as dt
 
 from jarvis.mac import mail
 
-NOW = dt.datetime(2026, 11, 16, 9, 0, tzinfo=dt.timezone.utc)
+NOW = dt.datetime(2026, 11, 16, 9, 0, tzinfo=dt.UTC)
 
 
 def rec(mid, sender, subject, when, flagged="false", lists="0", body=""):

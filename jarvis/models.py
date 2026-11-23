@@ -198,7 +198,7 @@ class ModelManager:
                                     last_emit = now
                                     bus.emit("download", group=key, done=state["done"], total=state["total"])
                     if length and part.stat().st_size < length:
-                        raise IOError("incomplete download")
+                        raise OSError("incomplete download")
                     part.rename(dest)
                     return
                 except Exception as exc:

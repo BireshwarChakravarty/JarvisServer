@@ -7,7 +7,7 @@ import pytest
 
 from jarvis.mac import mailspring as ms
 
-NOW = dt.datetime(2026, 11, 18, 9, 0, tzinfo=dt.timezone.utc)
+NOW = dt.datetime(2026, 11, 18, 9, 0, tzinfo=dt.UTC)
 
 
 @pytest.fixture

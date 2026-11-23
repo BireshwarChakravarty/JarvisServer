@@ -18,8 +18,8 @@ NUMBERS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5
            "twenty five": 25, "thirty": 30, "forty": 40, "forty five": 45, "fifty": 50, "sixty": 60, "ninety": 90}
 UNITS = {"second": 1, "sec": 1, "minute": 60, "min": 60, "hour": 3600, "hr": 3600}
 
-LEAD = re.compile(r"^(?:(?:hey|ok|okay|hi)\s+)?(?:jarvis[,\s]*)?(?:(?:can|could|would|will) you\s+)?(?:please\s+)?", re.I)
-TAIL = re.compile(r"[\s,]*(?:please|for me|jarvis|thanks|thank you)?[\s.!?]*$", re.I)
+LEAD = re.compile(r"^(?:(?:hey|ok|okay|hi)\s+)?(?:jarvis[,\s]*)?(?:(?:can|could|would|will) you\s+)?(?:please\s+)?", re.IGNORECASE)
+TAIL = re.compile(r"[\s,]*(?:please|for me|jarvis|thanks|thank you)?[\s.!?]*$", re.IGNORECASE)
 
 
 @dataclass

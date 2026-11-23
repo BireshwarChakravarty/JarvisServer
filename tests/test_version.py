@@ -22,6 +22,6 @@ def test_the_app_reports_its_stamped_version(tmp_path, monkeypatch):
 
 def test_package_and_app_versions_agree():
     text = (ROOT / "pyproject.toml").read_text()
-    versions = re.findall(r'^version = "([\d.]+)"', text, re.M)
+    versions = re.findall(r'^version = "([\d.]+)"', text, re.MULTILINE)
     assert len(versions) == 2 and versions[0] == versions[1] == jarvis.__version__
     assert jarvis.__version__.startswith((ROOT / "VERSION").read_text().strip() + ".")

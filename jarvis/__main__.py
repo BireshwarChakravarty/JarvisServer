@@ -145,7 +145,7 @@ def cmd_chat(args) -> None:
                 if e["type"] == "tool" and e.get("status") == "start":
                     print(f"{DIM}  ⚙ {e['name']} {e.get('args') or ''}{RESET}")
 
-        shower = asyncio.create_task(show_tools())  # noqa: F841  (kept: a dropped task can be garbage-collected)
+        shower = asyncio.create_task(show_tools())  # noqa: F841, RUF006  (kept: a dropped task can be garbage-collected)
         while True:
             try:
                 text = await asyncio.to_thread(input, f"{AMBER}you ›{RESET} ")

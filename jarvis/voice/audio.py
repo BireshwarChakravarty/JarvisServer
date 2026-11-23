@@ -11,7 +11,7 @@ import asyncio
 import collections
 import logging
 import time
-from typing import Callable, Optional
+from collections.abc import Callable
 
 import numpy as np
 
@@ -134,7 +134,7 @@ async def settle(q: asyncio.Queue, vad, quiet: float = 0.24, max_wait: float = 0
     while time.monotonic() < end:
         try:
             frame = await asyncio.wait_for(q.get(), timeout=max(0.01, end - time.monotonic()))
-        except asyncio.TimeoutError:
+        except TimeoutError:
             break
         frames.append(frame)
         speech = vad.is_speech(frame)
@@ -291,7 +291,7 @@ async def record_utterance(
     in_speech: bool = False,
     rel_floor: float = 0.2,
     min_level: float = 0.0,
-) -> Optional[np.ndarray]:
+) -> np.ndarray | None:
     """Collect frames until the speaker stops. Returns float32 audio or None if nobody spoke.
 
     With a `turn` detector (Smart Turn) the end isn't a fixed silence: after a short pause
@@ -326,7 +326,7 @@ async def record_utterance(
             break
         try:
             frame = await asyncio.wait_for(q.get(), timeout=1.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             if not started and time.monotonic() - t0 > start_timeout:
                 return None
             if started and stop_event is None:

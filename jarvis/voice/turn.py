@@ -135,12 +135,7 @@ class TurnDetector:
 # The voice can sound finished while the words plainly aren't: "remind me to… call the bank",
 # "send it to Pepper and…", "um". When what you've said so far ends like this, JARVIS keeps
 # listening for the rest instead of answering half a sentence.
-DANGLING = frozenset("""
-and or but so because cause to the a an of for with about from into onto at by than as whether
-um umm uh uhh er erm hmm uhm like then which who whose whom if when while until unless after before
-my your his her their our its this these those is are was were will would should could can
-also plus and then maybe
-""".split())
+DANGLING = frozenset(["and", "or", "but", "so", "because", "cause", "to", "the", "a", "an", "of", "for", "with", "about", "from", "into", "onto", "at", "by", "than", "as", "whether", "um", "umm", "uh", "uhh", "er", "erm", "hmm", "uhm", "like", "then", "which", "who", "whose", "whom", "if", "when", "while", "until", "unless", "after", "before", "my", "your", "his", "her", "their", "our", "its", "this", "these", "those", "is", "are", "was", "were", "will", "would", "should", "could", "can", "also", "plus", "and", "then", "maybe"])
 
 
 def sounds_unfinished(text: str) -> bool:

@@ -31,9 +31,9 @@ from fastapi import Body, FastAPI, WebSocket
 from fastapi.responses import JSONResponse, Response
 
 from jarvis.core import themes
+from jarvis.events import bus
 from jarvis.hud import assets
 from jarvis.hud.assets import RevalidatedStatic
-from jarvis.events import bus
 
 log = logging.getLogger("jarvis.remote")
 STATIC = Path(__file__).parent.parent / "hud" / "static"

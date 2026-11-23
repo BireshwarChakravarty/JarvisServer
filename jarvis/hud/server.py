@@ -15,10 +15,10 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 
 from jarvis.aio import spawn
-from jarvis.hud import assets
-from jarvis.hud.assets import RevalidatedStatic
 from jarvis.core import themes
 from jarvis.events import bus
+from jarvis.hud import assets
+from jarvis.hud.assets import RevalidatedStatic
 
 log = logging.getLogger("jarvis.hud")
 STATIC = Path(__file__).parent / "static"

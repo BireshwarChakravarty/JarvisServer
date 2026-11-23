@@ -15,7 +15,7 @@ def app(tmp_path, **caps):
 def test_all_fine_says_so(tmp_path, monkeypatch):
     from jarvis.mac import permissions
 
-    monkeypatch.setattr(permissions, "all_status", lambda: [])
+    monkeypatch.setattr(permissions, "all_status", list)
     res = health.check(app(tmp_path))
     assert not health.problems(res) and health.summary(res).startswith("All systems are fine")
 

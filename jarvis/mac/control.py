@@ -18,7 +18,7 @@ import time
 RISKY = re.compile(
     r"\b(send|delete|remove|erase|trash|bin|buy|purchase|pay|order|checkout|check out|subscribe|unsubscribe|"
     r"submit|transfer|confirm|sign ?out|log ?out|uninstall|format|empty|discard|reset|post|publish|share|"
-    r"invite|accept|decline|reply all|forward|install|allow|grant|approve|book|reserve|donate|withdraw)\b", re.I)
+    r"invite|accept|decline|reply all|forward|install|allow|grant|approve|book|reserve|donate|withdraw)\b", re.IGNORECASE)
 
 KEYCODES = {
     "return": 36, "enter": 76, "tab": 48, "space": 49, "delete": 51, "backspace": 51, "escape": 53, "esc": 53,
