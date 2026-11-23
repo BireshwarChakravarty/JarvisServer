@@ -176,13 +176,24 @@ def test_clock_leaves_durations_alone(said):
 def test_clock_setting_saves_and_tells_every_window(tmp_path, monkeypatch):
     cfg, seen = Cfg(tmp_path), []
     bus = SimpleNamespace(emit=lambda kind, **k: seen.append((kind, k)))
-    monkeypatch.setattr(themes, "mac_uses_24h", lambda: True)
-    assert themes.clock_setting(cfg) == "auto" and themes.clock_24h(cfg) is True      # follows the Mac
+    monkeypatch.setattr(themes, "mac_uses_24h", lambda: False)
+    assert themes.clock_setting(cfg) == "24" and themes.clock_24h(cfg) is True        # 24-hour by default
     assert themes.set_clock(cfg, "12", bus=bus) is False
     assert themes.clock_setting(cfg) == "12" and "clock_24h: false" in cfg.user_config_path.read_text()
     assert seen[-1] == ("prefs", {"clock24": False})
-    themes.set_clock(cfg, "auto", bus=bus)
-    assert themes.clock_24h(cfg) is True and seen[-1] == ("prefs", {"clock24": True})
+    themes.set_clock(cfg, "auto", bus=bus)                                            # follow the Mac
+    assert themes.clock_24h(cfg) is False and seen[-1] == ("prefs", {"clock24": False})
+    monkeypatch.setattr(themes, "mac_uses_24h", lambda: None)                          # can't ask the Mac
+    assert themes.clock_24h(cfg) is True
+
+
+def test_the_page_clock_is_24_hour_unless_told_otherwise():
+    js = (STATIC / "theme.js").read_text()
+    assert 'return v !== "0"; })();' in js                    # nothing stored yet: 24-hour
+    assert 'const cycle = () => (h24 ? { hourCycle: "h23" } : { hour12: true });' in js   # never the language default
+    from jarvis.config import load_config
+
+    assert load_config().get("app.clock_24h") is True
 
 
 def test_every_shown_time_goes_through_the_clock_setting():

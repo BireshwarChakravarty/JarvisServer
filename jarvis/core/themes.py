@@ -71,51 +71,51 @@ def apply(cfg, name: str, bus=None) -> str:
 
 
 # ── clock: 24-hour or 12-hour, everywhere a time is shown ─────────────────────────────────────────
-# app.clock_24h: true (13:05), false (1:05 PM) or unset to follow the Mac's own setting
-# (System Settings › General › Date & Time › 24-hour time).
-_mac_24h: bool | None = None
-
-
+# app.clock_24h: true (13:05, the default), false (1:05 PM) or null to follow the Mac's own setting
+# (System Settings › General › Date & Time › 24-hour time). If the Mac can't be asked, 24-hour.
 def mac_uses_24h() -> bool | None:
-    global _mac_24h
-    if _mac_24h is None:
-        try:
-            from jarvis.mac.system import IS_MAC
+    """The Mac's own choice (System Settings › General › Date & Time › 24-hour time), or None if it
+    can't be told. macOS stores an explicit choice as AppleICUForce24HourTime / AppleICUForce12HourTime;
+    without one, the region's time format decides. Asked fresh each time (it's cheap), so a change in
+    System Settings shows up without restarting JARVIS."""
+    try:
+        from jarvis.mac.system import IS_MAC
 
-            if not IS_MAC:
-                return None
-            import subprocess
-
-            out = subprocess.run(["defaults", "read", "-g", "AppleICUForce24HourTime"], capture_output=True,
-                                 text=True, timeout=3).stdout.strip()
-            if out in ("1", "true"):
-                _mac_24h = True
-            elif out in ("0", "false"):
-                _mac_24h = False
-            else:                                      # not set: the region decides (most of the world: 24 h)
-                from AppKit import NSDateFormatter, NSLocale
-
-                fmt = NSDateFormatter.dateFormatFromTemplate_options_locale_("j", 0, NSLocale.currentLocale())
-                _mac_24h = "a" not in str(fmt or "")
-        except Exception:
+        if not IS_MAC:
             return None
-    return _mac_24h
+        import subprocess
+
+        def flag(key: str) -> bool:
+            out = subprocess.run(["defaults", "read", "-g", key], capture_output=True, text=True, timeout=3)
+            return out.returncode == 0 and out.stdout.strip().lower() in ("1", "true", "yes")
+        if flag("AppleICUForce24HourTime"):
+            return True
+        if flag("AppleICUForce12HourTime"):
+            return False
+        from AppKit import NSDateFormatter, NSLocale
+
+        fmt = str(NSDateFormatter.dateFormatFromTemplate_options_locale_("j", 0, NSLocale.autoupdatingCurrentLocale())
+                  or "")
+        return ("H" in fmt or "k" in fmt) if fmt else None
+    except Exception:
+        return None
 
 
-def clock_24h(cfg) -> bool | None:
-    """True / False for the pages to use, or None to leave it to the browser's language."""
-    v = cfg.get("app.clock_24h", None) if cfg is not None else None
+def clock_24h(cfg) -> bool:
+    """True (24-hour) or False (12-hour), for every page. Never left to the browser's language."""
+    v = cfg.get("app.clock_24h", True) if cfg is not None else True
     if isinstance(v, bool):
         return v
-    return mac_uses_24h()
+    mac = mac_uses_24h()
+    return True if mac is None else mac
 
 
 def clock_setting(cfg) -> str:
-    v = cfg.get("app.clock_24h", None) if cfg is not None else None
+    v = cfg.get("app.clock_24h", True) if cfg is not None else True
     return "24" if v is True else "12" if v is False else "auto"
 
 
-def set_clock(cfg, mode: str, bus=None) -> bool | None:
+def set_clock(cfg, mode: str, bus=None) -> bool:
     """mode: '24', '12' or 'auto' (follow the Mac). Saves it and updates every window and phone."""
     value = {"24": True, "12": False, "auto": None}[mode]
     try:

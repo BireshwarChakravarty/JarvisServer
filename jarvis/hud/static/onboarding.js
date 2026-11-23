@@ -617,7 +617,7 @@
     $("hand-row").hidden = !settings;   // only meaningful while JARVIS is running
     if (S.theme && window.JarvisTheme) JarvisTheme.apply(S.theme);
     markTheme(S.theme || (window.JarvisTheme ? JarvisTheme.get() : "arc"));
-    markClock(S.clock || "auto");
+    markClock(S.clock || "24");
     if ("clock24" in S && window.JarvisClock) JarvisClock.set(S.clock24);
     if (settings) { $("launch").textContent = "Save & restart"; $("hello").textContent = "Settings"; }
     models = S.models; renderDownloads();
