@@ -779,6 +779,7 @@ class Jarvis:
         bus.emit("voice_id", phase="learning", step=0, total=len(phrases))
         self.speaker.enqueue(f"Of course, {t}. I'll ask you to say five short phrases, in your normal voice.")
         q = self.mic.subscribe()
+        self._asking += 1                  # your speech now answers him: not you carrying on (see below)
         try:
             i, tries = 0, 0
             while i < len(phrases):
@@ -808,6 +809,7 @@ class Jarvis:
                 prints.append(v)
                 i += 1
         finally:
+            self._asking -= 1
             self.mic.unsubscribe(q)
         vid.profile.enrol(prints)
         self.capabilities["voice_id"] = vid.active
@@ -955,7 +957,7 @@ class Jarvis:
                 # Thinking. A false "Hey Jarvis" here would throw your request away, but you carrying on
                 # (a pause for breath was taken for the end) must not be lost: drop the half-request
                 # and hear the whole of it.
-                if carry and not turn.done() and time.monotonic() - float(
+                if carry and not self._asking and not turn.done() and time.monotonic() - float(
                         getattr(self.speaker, "quiet_since", 0.0) or 0.0) > 0.5:
                     if self.vad.is_speech(frame) and frame_rms(frame) >= carry_floor:
                         crun.append(frame)
@@ -1006,6 +1008,10 @@ class Jarvis:
         if turn.done() and turn.exception():
             log.error("turn failed: %s", turn.exception())
         return "done"
+
+    # While he is listening for an answer of his own (a yes or no, the phrases for Voice ID) what you say
+    # is that answer, not you carrying on with your request.
+    _asking = 0
 
     async def _clearly_not_you(self, frames: list) -> bool:
         """True only when Voice ID is set up and sure this voice isn't yours (a guest, the TV)."""
@@ -1330,6 +1336,7 @@ class Jarvis:
                 from jarvis.voice.audio import settle
 
                 q = self.mic.subscribe()
+                self._asking += 1
                 try:
                     bus.emit("state", state="listening", confirm=True)
                     # the end of "Shall I …?" is still in the room: recording it would end the listen
@@ -1339,6 +1346,7 @@ class Jarvis:
                     audio = await record_utterance(q, self.vad, start_timeout=8, end_silence=0.6, max_seconds=6,
                                                    preroll=kept if live else None, in_speech=live)
                 finally:
+                    self._asking -= 1
                     self.mic.unsubscribe(q)
                 if audio is None:
                     return None
