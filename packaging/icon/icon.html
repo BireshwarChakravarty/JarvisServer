@@ -1,0 +1,38 @@
+<!doctype html>
+<!-- JARVIS app icon: the living core (jarvis/hud/static/reactor.js) on the macOS icon grid.
+     Regenerate with: node packaging/icon/make_icon.js  (needs Playwright), then python3 packaging/icon/to_icns.py --><html><head><meta charset="utf-8">
+<style>
+  html,body{margin:0;background:transparent}
+  .cell{width:1024px;height:1024px;position:relative;display:none}
+  .cell.on{display:block}
+  /* macOS icon grid: an 824px rounded square centred on a 1024px canvas */
+  .sq{position:absolute;left:100px;top:100px;width:824px;height:824px;border-radius:185px;overflow:hidden;
+      box-shadow:0 22px 40px rgba(0,0,0,.35),0 6px 12px rgba(0,0,0,.25)}
+  .rim{position:absolute;inset:0;border-radius:185px;pointer-events:none;
+       box-shadow:inset 0 2px 0 rgba(255,255,255,.22),inset 0 -2px 0 rgba(0,0,0,.4),inset 0 0 0 1.5px rgba(255,255,255,.07)}
+  /* A: the living core */
+  #a .sq{background:radial-gradient(70% 70% at 50% 42%,#0d2235 0%,#050a12 62%,#020408 100%)}
+  #a .core{position:absolute;left:-58px;top:-58px;width:940px;height:940px}
+  #a .halo{position:absolute;inset:0;background:radial-gradient(38% 38% at 50% 50%,rgba(60,170,255,.32),rgba(20,80,180,.10) 55%,transparent 72%)}
+  #a .core canvas{position:absolute}
+  #a .gloss{position:absolute;inset:0;border-radius:185px;background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,0) 38%)}
+  /* B: machined reactor */
+  #b .sq{background:radial-gradient(80% 80% at 50% 30%,#2a3038,#0b0d10 70%)}
+  /* C: monogram */
+  #c .sq{background:linear-gradient(160deg,#0b1424,#04070c 60%,#000)}
+</style></head><body>
+<div class="cell" id="a"><div class="sq"><div class="halo"></div><div class="core"><canvas id="gl"></canvas><canvas id="ui"></canvas></div><div class="gloss"></div><div class="rim"></div></div></div>
+<script src="../../jarvis/hud/static/reactor.js"></script>
+<script>
+const which = location.hash.slice(1) || "a";
+document.getElementById(which).classList.add("on");
+if (which === "a") {
+  const host = document.querySelector("#a .core");
+  const gl = document.getElementById("gl"), ui = document.getElementById("ui");
+  gl.style.width = gl.style.height = "940px";
+  ui.style.width = ui.style.height = "1504px"; ui.style.left = ui.style.top = "-282px";
+  const r = new Reactor(gl, ui, { compact: true });
+  r.setState("idle");
+  window.__ready = () => true;
+}
+</script></body></html>
