@@ -1080,7 +1080,7 @@ class Jarvis:
                 # a long first sentence: start on its first clause while the rest is voiced, as a person
                 # starts talking before the whole thought is formed
                 # (a streaming voice starts at once anyway, and keeps the sentence's intonation whole)
-                split = opening and not getattr(self.speaker.backend, "streams", False)
+                split = opening and not getattr(getattr(self.speaker, "backend", None), "streams", False)
                 for part in (first_clause(sentence, title=self.cfg.get("owner.title", "sir")) if split
                              else [sentence]):
                     self.speaker.enqueue(part)
