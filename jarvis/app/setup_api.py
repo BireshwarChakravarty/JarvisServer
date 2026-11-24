@@ -471,6 +471,90 @@ def make_router(sup) -> APIRouter:
         _write_user_config(sup.cfg, {"voice": {"tts": tts}})
         return {"ok": True, "current": _current_voice(sup.cfg)}
 
+    # ── natural conversation: Gemini Live ─────────────────────────────────
+    @r.get("/api/setup/live")
+    async def live_state():
+        from jarvis.voice import live
+
+        j = sup.jarvis
+        return {
+            "installed": live.installed(),
+            "has_key": bool(await asyncio.to_thread(live.api_key)),
+            "enabled": bool(sup.cfg.get("voice.live.enabled", True)),
+            "voice": sup.cfg.get("voice.live.voice", live.DEFAULT_VOICE),
+            "accent": sup.cfg.get("voice.live.accent", "british"),
+            "voices": [{"id": k, "about": v, "sample": f"/static/voices/gemini/{k}.mp3"} for k, v in live.VOICES.items()],
+            "status": (getattr(j, "capabilities", {}) or {}).get("live_voice") if j else None,
+        }
+
+    @r.post("/api/setup/live-key")
+    async def live_key(body: dict = Body(...)):
+        """Check a Gemini key with Google, then keep it in the Keychain (or the private .env file)."""
+        from jarvis.voice import live
+
+        k = (body.get("key") or "").strip()
+        if len(k) < 20 or " " in k:
+            return JSONResponse({"ok": False, "error": "That doesn't look like a Gemini API key."}, status_code=400)
+
+        def check() -> tuple[bool, str]:
+            import httpx
+
+            try:
+                res = httpx.get("https://generativelanguage.googleapis.com/v1beta/models", params={"pageSize": 200},
+                                headers={"x-goog-api-key": k}, timeout=20)
+            except httpx.HTTPError:
+                return False, "I couldn't reach Google. Check your internet connection."
+            if res.status_code in (400, 401, 403):
+                return False, "Google rejected that key. Copy it again from AI Studio."
+            if res.status_code != 200:
+                return False, f"Google returned an error ({res.status_code})."
+            names = {m.get("name", "").split("/")[-1] for m in res.json().get("models", [])}
+            if not names & set(live.MODELS):
+                return False, "The key works, but Gemini Live isn't available to it yet."
+            return True, ""
+
+        ok, err = await asyncio.to_thread(check)
+        if not ok:
+            return JSONResponse({"ok": False, "error": err}, status_code=400)
+        try:
+            from jarvis.mac.keychain import set_api_key
+
+            await asyncio.to_thread(set_api_key, k, "JARVIS Gemini API Key")
+            where = "Keychain"
+        except Exception:
+            env = sup.cfg.home / ".env"
+            lines = [x for x in (env.read_text().splitlines() if env.exists() else []) if not x.startswith(f"{live.KEY_ENV}=")]
+            env.write_text("\n".join([*lines, f"{live.KEY_ENV}={k}"]) + "\n")
+            env.chmod(0o600)
+            where = "file"
+        os.environ[live.KEY_ENV] = k
+        j = sup.jarvis
+        if j is not None and getattr(j, "live", None) is not None:
+            j.live.down_until = 0.0
+            j.capabilities["live_voice"] = "on"
+        return {"ok": True, "stored_in": where}
+
+    @r.post("/api/setup/live")
+    async def live_settings(body: dict = Body(...)):
+        from jarvis.voice import live
+
+        patch: dict = {}
+        if "enabled" in body:
+            patch["enabled"] = bool(body["enabled"])
+        if body.get("voice") in live.VOICES:
+            patch["voice"] = body["voice"]
+        if body.get("accent") in live.ACCENTS:
+            patch["accent"] = body["accent"]
+        if not patch:
+            return JSONResponse({"ok": False, "error": "nothing to change"}, status_code=400)
+        _write_user_config(sup.cfg, {"voice": {"live": patch}})
+        j = sup.jarvis
+        if j is not None:
+            j.cfg.data.setdefault("voice", {}).setdefault("live", {}).update(patch)
+            if j.live is not None:
+                j.live.resume_handle = None        # a new voice or accent starts a fresh conversation
+        return {"ok": True, **patch}
+
     @r.post("/api/setup/natural-force")
     async def natural_force(body: dict = Body(...)):
         """Use the natural voice even if this Mac runs it a little slower than real time."""

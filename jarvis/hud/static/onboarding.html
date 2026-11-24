@@ -146,7 +146,33 @@
     <section class="step" data-step="speech" hidden>
       <p class="eyebrow">Step 6 · Voice &amp; look</p>
       <h1>Choose how I sound, and how I look.</h1>
-      <p class="lede">Tap a voice to hear it. Every one runs entirely on this Mac.</p>
+      <p class="lede">For the most natural conversation I can talk through Google's Gemini Live; my on-device voices
+        speak whenever it isn't available.</p>
+
+      <div class="live-panel" id="live-panel" hidden>
+        <div class="toggles"><label class="tg"><input type="checkbox" id="opt-live"><span class="sw"></span><div>
+          <b>Natural conversation (Gemini Live)</b>
+          <span id="live-status">Talk to me as you would to a person: I answer in a natural voice, hear your tone, and you can interrupt me.</span></div></label></div>
+        <div class="keybox" id="live-connected" hidden><span class="tick">✓</span><div><b>Gemini key saved</b><span>In this Mac's Keychain</span></div><button class="btn ghost small" id="live-replace" type="button">Replace key</button></div>
+        <div id="live-key-form">
+          <label class="field"><span>Gemini API key <em>free, from Google AI Studio</em></span>
+            <div class="inline"><input id="live-key" type="password" placeholder="AIza…" autocomplete="off" spellcheck="false"><button class="btn ghost small" id="live-key-save" type="button">Save</button></div>
+          </label>
+          <p class="hint">At <a href="#" id="get-gemini-key">aistudio.google.com</a>, choose Get API key, then Create API key. No card needed.</p>
+        </div>
+        <div class="live-row">
+          <label class="field compact"><span>Voice</span><select id="live-voice"></select></label>
+          <label class="field compact"><span>Accent</span><select id="live-accent">
+            <option value="british">British</option><option value="irish">Irish</option><option value="american">American</option><option value="neutral">As the voice speaks</option></select></label>
+          <button class="btn ghost small" id="live-hear" type="button">Hear it</button>
+        </div>
+        <p class="hint">Only what you say after “Hey Jarvis” goes to Google, and only while we're talking. On Google's free tier
+          they may use it to improve their products, so don't share anything confidential by voice. Turn this off any time
+          and I'll keep everything on this Mac.</p>
+        <p class="err" id="live-err"></p>
+      </div>
+
+      <p class="hint" id="local-voices-title"><b>On-device voices</b> (used offline, and when natural conversation is off). Tap one to hear it.</p>
       <div class="voices" id="voices" role="radiogroup" aria-label="Voice"></div>
       <p class="hint" id="voice-hint"></p>
       <div class="toggles natural-row" id="natural-row" hidden>

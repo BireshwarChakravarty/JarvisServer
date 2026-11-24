@@ -364,6 +364,20 @@ class Speaker:
             return False
         return True
 
+    def stream_external(self, sr: int) -> _Feed:
+        """A passage whose audio comes from elsewhere (Gemini Live), played like his own: through the echo
+        canceller, stoppable, with the reactor following it. Put float chunks in; close() when done."""
+        feed = _Feed()
+        with self._pending_lock:
+            self._pending += 1
+            self._idle.clear()
+            gen = self._gen
+        try:
+            self._audio_q.put_nowait((gen, "", feed, sr, 1))
+        except queue.Full:
+            self._done_one(gen)
+        return feed
+
     def saying(self, word: str) -> bool:
         """Is the phrase playing right now saying `word`? (Used to ignore his own voice.)"""
         return word.lower() in (self.current_text or "").lower()
@@ -616,8 +630,8 @@ class Speaker:
                         f = min(fade, len(c) // 2)
                         if f > 0:
                             c[:f] *= np.linspace(0, 1, f, dtype=np.float32)
-                        # subtitles are paced from an estimate (about fifteen characters a second)
-                        bus.emit("speaking", text=text, duration=round(max(1.0, len(text) / 15.0), 2))
+                        if text:      # subtitles are paced from an estimate (about fifteen characters a second)
+                            bus.emit("speaking", text=text, duration=round(max(1.0, len(text) / 15.0), 2))
                         self._note_first_word()
                 yield c
 

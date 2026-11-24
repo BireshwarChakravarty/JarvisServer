@@ -105,6 +105,7 @@ class Jarvis:
         self.ptt = None
         self.voiceio = None
         self.voice_id = None
+        self.live = None          # Gemini Live: natural speech-to-speech conversation (jarvis/voice/live.py)
         # state
         self.standby = False          # mic muted by voice command
         self.capabilities: dict[str, Any] = {}
@@ -212,6 +213,15 @@ class Jarvis:
                 self.boot("Voice ID: answers only you" if self.voice_id.profile.ready else
                           "Voice ID: say “learn my voice” so he answers only you", self.voice_id.profile.ready or None)
             self.capabilities["voice_id"] = self.voice_id.active
+        from jarvis.voice import live as live_voice
+
+        if live_voice.installed():
+            self.live = live_voice.LiveVoice(self)
+            if live_voice.wanted(cfg):
+                self.boot(f"Natural conversation: Gemini Live ({cfg.get('voice.live.voice', live_voice.DEFAULT_VOICE)})", True)
+                self.capabilities["live_voice"] = "on"
+            else:
+                self.capabilities["live_voice"] = "off (add a Gemini key in Settings)"
         try:
             self.mic = Microphone(cfg.get("voice.input_device"), voiceio=self.voiceio)
             self.mic.start(self.loop)
@@ -459,6 +469,13 @@ class Jarvis:
                     continue
                 bus.emit("state", state="idle")
                 first_text = await self._wait_for_trigger(q)
+                if self.live is not None and self.live.ready() and not (self.ptt and self.ptt.down):
+                    preroll, live = self._take_preroll()
+                    if not live:
+                        self.speaker.play_tone("wake")       # he's listening (Gemini answers in his own voice)
+                    if await self.live.converse(q, preroll):
+                        continue
+                    self._wake_preroll, self._preroll_live = preroll, live   # couldn't reach Gemini: on-device
                 await self._converse(q, first_text)
             except asyncio.CancelledError:
                 raise
@@ -1387,6 +1404,8 @@ class Jarvis:
     def resolve_confirmation(self, approved: bool) -> None:
         if self._pending_confirm is not None and not self._pending_confirm.done():
             self._pending_confirm.set_result(approved)
+        elif self.live is not None:
+            self.live.approve_on_screen(approved)       # an action Gemini is waiting on
 
     # ═════════════════════════════ greetings & presence ══════════════════
     async def greet(self, kind: str = "login", away_for: float | None = None) -> None:

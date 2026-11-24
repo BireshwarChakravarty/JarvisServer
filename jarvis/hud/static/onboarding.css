@@ -245,3 +245,12 @@ body.settings .ob-steps i { cursor: pointer; }
   box-shadow: 0 0 18px #ff4a3d88, 0 0 0 5px #070203, 0 0 0 6px #ffcf7a55; }
 .build-tag { margin-top: 18px; font: 500 11px/1 var(--mono); letter-spacing: 0.08em; color: var(--faint); text-transform: uppercase; }
 .voice .ptag.nat { color: var(--ice); border-color: rgb(var(--ice-rgb) / 0.4); }
+
+/* natural conversation (Gemini Live) */
+.live-panel { display: grid; gap: 10px; margin: 0 0 18px; padding: 14px; border: 1px solid var(--hair-2); border-radius: 14px;
+  background: rgb(var(--ice-rgb) / 0.035); }
+.live-panel .toggles { margin: 0; }
+.live-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.live-row .field { flex: 1 1 160px; margin: 0; }
+.live-panel .hint { margin: 0; }
+#local-voices-title { margin: 6px 0 8px; }

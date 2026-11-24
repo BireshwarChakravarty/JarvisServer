@@ -110,7 +110,7 @@
     if (s === "face" || s === "voice") loadDevices();
     if (s === "face") startCamera();
     if (s === "brain") loadBrain();
-    if (s === "speech") loadVoices();
+    if (s === "speech") { loadVoices(); loadLive(); }
   }
   function leave(s) {
     if (s === "senses") clearInterval(pollTimer);
@@ -509,6 +509,59 @@
     } catch (e) { $("speech-err").textContent = e.message; }
   }
   $("speech-next").onclick = nextStep;
+
+  /* natural conversation: Gemini Live */
+  async function loadLive() {
+    const v = await api("/api/setup/live").catch(() => null);
+    $("live-panel").hidden = !(v && v.installed);
+    if (!v || !v.installed) return;
+    $("opt-live").checked = !!(v.enabled && v.has_key);
+    $("live-connected").hidden = !v.has_key;
+    $("live-key-form").hidden = !!v.has_key;
+    const sel = $("live-voice");
+    sel.innerHTML = "";
+    v.voices.forEach((o) => {
+      const op = document.createElement("option");
+      op.value = o.id; op.textContent = `${o.id} · ${o.about}`;
+      sel.appendChild(op);
+    });
+    sel.value = v.voice;
+    $("live-accent").value = v.accent;
+    $("live-status").textContent = v.status && v.has_key ? `Now: ${v.status}.`
+      : "Talk to me as you would to a person: I answer in a natural voice, hear your tone, and you can interrupt me.";
+  }
+  const liveSet = (patch) => api("/api/setup/live", patch).then(loadLive).catch((e) => { $("live-err").textContent = e.message; });
+  $("opt-live").onchange = () => {
+    $("live-err").textContent = "";
+    if ($("opt-live").checked && $("live-connected").hidden) {          // no key saved yet
+      $("live-err").textContent = "Add your free Gemini key first.";
+      $("opt-live").checked = false;
+      return;
+    }
+    liveSet({ enabled: $("opt-live").checked });
+  };
+  $("live-key-save").onclick = async () => {
+    $("live-err").textContent = "";
+    const key = $("live-key").value.trim();
+    if (!key) { $("live-err").textContent = "Paste the key from AI Studio first."; return; }
+    busy($("live-key-save"), true);
+    try {
+      await api("/api/setup/live-key", { key });
+      $("live-key").value = "";
+      await liveSet({ enabled: true });
+    } catch (e) { $("live-err").textContent = e.message; }
+    busy($("live-key-save"), false);
+  };
+  $("live-replace").onclick = () => { $("live-connected").hidden = true; $("live-key-form").hidden = false; $("live-key").focus(); };
+  $("live-voice").onchange = () => liveSet({ voice: $("live-voice").value });
+  $("live-accent").onchange = () => liveSet({ accent: $("live-accent").value });
+  $("live-hear").onclick = () => {
+    preview.pause();
+    preview.src = `/static/voices/gemini/${encodeURIComponent($("live-voice").value)}.mp3`;
+    preview.onerror = () => { $("live-err").textContent = "No sample for this voice yet: turn it on and say “Hey Jarvis” to hear it."; };
+    preview.play().catch(() => {});
+  };
+  $("get-gemini-key").onclick = (e) => { e.preventDefault(); api("/api/setup/open-url", { url: "https://aistudio.google.com/apikey" }).catch(() => {}); };
   $("opt-natural-force").onchange = async () => {
     try { await api("/api/setup/natural-force", { enabled: $("opt-natural-force").checked }); } catch (e) {}
     setTimeout(loadVoices, 1500);
