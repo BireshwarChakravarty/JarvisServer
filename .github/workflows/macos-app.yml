@@ -5,8 +5,14 @@ name: macOS app
 on:
   push:
     branches: [claude/eager-newton-yifemd, main]
-    paths-ignore: ["**.md", "docs/**", "scripts/voice_lab.py", ".github/workflows/voice-lab.yml", "scripts/ears_lab.py", ".github/workflows/ears-lab.yml"]
+    paths-ignore: ["**.md", "docs/**", "scripts/voice_lab.py", ".github/workflows/voice-lab.yml", "scripts/ears_lab.py",
+                   ".github/workflows/ears-lab.yml", "scripts/speed_lab.py", ".github/workflows/speed-lab.yml"]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish this build as the release people install"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -169,8 +175,12 @@ jobs:
             ${{ runner.temp }}/selftest.log
           if-no-files-found: ignore
 
+      # Every push is built and tested; only a commit that says [release] (or a manual run that asks)
+      # replaces the release people install.
       - name: Publish release
-        if: github.event_name != 'pull_request'
+        if: >-
+          github.event_name != 'pull_request' &&
+          (contains(github.event.head_commit.message, '[release]') || inputs.publish)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -189,6 +199,7 @@ jobs:
   # A brand-new Mac runs the exact one-line install a user would, from the published release.
   verify-install:
     needs: build
+    if: contains(github.event.head_commit.message, '[release]') || inputs.publish
     runs-on: macos-15
     timeout-minutes: 20
     steps:
