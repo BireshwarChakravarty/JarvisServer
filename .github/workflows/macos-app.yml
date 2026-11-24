@@ -5,7 +5,7 @@ name: macOS app
 on:
   push:
     branches: [claude/eager-newton-yifemd, main]
-    paths-ignore: ["**.md", "docs/**", "scripts/voice_lab.py", ".github/workflows/voice-lab.yml"]
+    paths-ignore: ["**.md", "docs/**", "scripts/voice_lab.py", ".github/workflows/voice-lab.yml", "scripts/ears_lab.py", ".github/workflows/ears-lab.yml"]
   workflow_dispatch:
 
 permissions:
