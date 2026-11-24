@@ -1497,8 +1497,7 @@ class Jarvis:
     async def upgrade_voice(self) -> None:
         """Switch to the natural voice (Qwen3-TTS) when it's chosen and can keep up on this Mac.
 
-        Tried in order: the larger model, then the lighter one (downloaded only if needed), each timed
-        once per version after start-up has settled. "Use the natural voice even if it's a little slow"
+        Timed once per version, after start-up has settled. "Use the natural voice even if it's a little slow"
         (voice.tts.natural_force) skips the speed check. Until one passes, and if none can, the Classic
         voice speaks, and Settings says which voice is on and why."""
         from jarvis.voice import qwen_tts as q
@@ -1532,7 +1531,7 @@ class Jarvis:
             if known.get("rtf") is not None and known["rtf"] > max_rtf and not force:
                 tried.append((tier, known["rtf"]))
                 continue                                  # measured before: too slow here
-            self.capabilities["natural_voice"] = f"getting the {tier} model ready"
+            self.capabilities["natural_voice"] = "getting the natural voice ready"
             if tier == tiers[0]:
                 while not q.model_ready(self.cfg.models_dir, tier):
                     await asyncio.sleep(30)               # downloading with everything else (Settings shows it)
@@ -1582,10 +1581,10 @@ class Jarvis:
                 old.close()
             label = q.HUMAN_VOICES[voice]["label"]
             how = "forced on" if force and rtf > max_rtf else f"{rtf:.2f}x real time"
-            self.capabilities.update(tts="qwen3", natural_voice=f"{label} on the {tier} model ({how})")
-            self.boot(f"Voice: {label} (natural, {tier} model)", True)
+            self.capabilities.update(tts="qwen3", natural_voice=f"{label} ({how})")
+            self.boot(f"Voice: {label} (natural)", True)
             return
-        speeds = ", ".join(f"{t} model {r:.2f}x" for t, r in tried if r) or "not measured"
+        speeds = ", ".join(f"{r:.2f}x" for _, r in tried if r) or "not measured"
         self.capabilities["natural_voice"] = f"too slow on this Mac ({speeds} real time); using Classic"
         if not self.memory.get(f"natural_voice_told:{version()}"):
             self.memory.set(f"natural_voice_told:{version()}", True)

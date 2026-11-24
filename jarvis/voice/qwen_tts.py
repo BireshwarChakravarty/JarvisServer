@@ -1,10 +1,11 @@
 """JARVIS's natural voice: Qwen3-TTS (Apache-2.0) on Apple Silicon, speaking in a voice designed for him.
 
 The voices are original: each was made once with Qwen3-TTS VoiceDesign from a written description (a
-refined English butler, an Oxford-educated man in his forties…; see scripts/voice_lab.py) and is shipped
-as a ten-second reference recording. At run time the Qwen3-TTS Base model (1.7B, 4-bit, about 2.3 GB,
-downloaded once; it ran no slower than the 0.6B model and sounded better) speaks every reply in that
-voice, on this Mac, free and offline.
+refined English butler, a warm Irish woman…; see scripts/voice_lab.py) and is shipped as a ten-second
+reference recording. At run time the Qwen3-TTS Base model (0.6B, 4-bit, about 1.7 GB, downloaded once)
+speaks every reply in that voice, on this Mac, free and offline. The larger 1.7B model sounded a touch
+richer but couldn't keep up with real-time speech on a Mac mini and more than doubled the download, so
+JARVIS uses the lighter one only.
 
 It's heavier than the Classic voice (Kokoro), so JARVIS starts with Classic, loads this in the
 background, times it on this Mac and switches only if it keeps up with real-time speech. If it can't,
@@ -28,17 +29,13 @@ _COMMON = {
     "speech_tokenizer/config.json": 2_336, "speech_tokenizer/configuration.json": 76,
     "speech_tokenizer/model.safetensors": 682_293_092, "speech_tokenizer/preprocessor_config.json": 234,
 }
-# Two sizes of the same model, both speaking the same designed voices. The larger sounds a touch better;
-# the smaller is about 40% lighter, for a Mac where the larger can't keep up with real-time speech.
+# The model the natural voices run on (one size only, to keep JARVIS light).
 TIERS = {
-    "large": {"repo": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit", "dir": "qwen3-tts-1.7b-base-4bit",
-              "group": "human", "files": {**_COMMON, "model.safetensors": 1_649_238_423,
-                                         "model.safetensors.index.json": 78_070}},
     "small": {"repo": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-4bit", "dir": "qwen3-tts-0.6b-base-4bit",
-              "group": "human_small", "files": {**_COMMON, "model.safetensors": 1_024_490_700,
-                                               "model.safetensors.index.json": 77_731}},
+              "group": "human", "files": {**_COMMON, "model.safetensors": 1_024_490_700,
+                                         "model.safetensors.index.json": 77_731}},
 }
-REPO, DIRNAME, FILES = TIERS["large"]["repo"], TIERS["large"]["dir"], TIERS["large"]["files"]
+STALE_DIRS = ["qwen3-tts-1.7b-base-4bit"]       # models earlier versions downloaded: removed if found
 
 # The words every reference recording says (the model is given them alongside the audio).
 REF_TEXT = ("Good evening, sir. I've taken the liberty of moving your three o'clock to tomorrow morning. "
@@ -49,8 +46,7 @@ HUMAN_VOICES = {                # chosen by ear from the voice lab's candidates
     "butler": {"label": "Butler", "about": "Refined English butler: calm, dry, quietly witty"},
     "gentleman": {"label": "Gentleman", "about": "Deep, warm, unflappable English gentleman"},
     # FRIDAY-style: original Irish voices designed from descriptions (scripts/voice_lab.py, round 2).
-    # "Friday" was chosen as the lighter model speaks it, so that's the only model it uses.
-    "friday": {"label": "Friday", "about": "Soft Irish accent: warm, quick, a light playful edge", "tiers": ["small"]},
+    "friday": {"label": "Friday", "about": "Soft Irish accent: warm, quick, a light playful edge"},
     "friday_calm": {"label": "Friday Calm", "about": "Composed Irish voice: smooth, unflappable, dry humour"},
 }
 DEFAULT_VOICE = "butler"
@@ -60,7 +56,7 @@ MAX_RTF = 0.9                   # it must speak faster than this fraction of rea
 
 def tiers_for(voice: str) -> list[str]:
     """The models a voice may use, in the order to try them."""
-    return list(HUMAN_VOICES.get(voice, {}).get("tiers", ["large", "small"]))
+    return list(HUMAN_VOICES.get(voice, {}).get("tiers", list(TIERS)))
 
 
 def group_for(voice: str) -> str:
@@ -68,11 +64,11 @@ def group_for(voice: str) -> str:
     return TIERS[tiers_for(voice)[0]]["group"]
 
 
-def model_dir(models_dir: Path, tier: str = "large") -> Path:
+def model_dir(models_dir: Path, tier: str = "small") -> Path:
     return Path(models_dir) / TIERS[tier]["dir"]
 
 
-def model_ready(models_dir: Path, tier: str = "large") -> bool:
+def model_ready(models_dir: Path, tier: str = "small") -> bool:
     d = model_dir(models_dir, tier)
     return all((d / f).exists() for f in TIERS[tier]["files"])
 
@@ -102,7 +98,7 @@ class QwenVoice:
     name = "qwen3"
     sample_rate = 24000
 
-    def __init__(self, voice: str, models_dir: Path, max_rtf: float = MAX_RTF, tier: str = "large") -> None:
+    def __init__(self, voice: str, models_dir: Path, max_rtf: float = MAX_RTF, tier: str = "small") -> None:
         if voice not in HUMAN_VOICES:
             raise ValueError(f"unknown voice {voice!r}")
         self.voice = voice

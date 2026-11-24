@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from typing import Any
 
 from jarvis.events import bus
@@ -80,7 +81,9 @@ class Supervisor:
 
         order = ["wake", "ears", "voice", "eyes"]
         voice = self.cfg.get("voice.tts.voice")
-        if voice in qwen_tts.HUMAN_VOICES and qwen_tts.supported():
+        natural = voice in qwen_tts.HUMAN_VOICES
+        threading.Thread(target=self.models.prune, args=(natural,), daemon=True, name="prune-models").start()
+        if natural and qwen_tts.supported():
             group = qwen_tts.group_for(voice)
             self.models.want(group)
             order.append(group)                # the natural voice last: everything else works without it

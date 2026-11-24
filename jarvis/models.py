@@ -74,11 +74,7 @@ def groups(stt_model: str = "small.en") -> list[Group]:
             Asset("kokoro-v1.0.onnx", [f"{KOKORO}/kokoro-v1.0.onnx"], 325_532_387),
             Asset("voices-v1.0.bin", [f"{KOKORO}/voices-v1.0.bin"], 28_214_398),
         ]),
-        Group("human", "Natural voice", "His natural, human-sounding voice (Qwen3-TTS, about 2.3 GB)", [
-            Asset(f"{qwen.TIERS['large']['dir']}/{f}", [f"{HF}/{qwen.TIERS['large']['repo']}/resolve/main/{f}"], size)
-            for f, size in qwen.TIERS["large"]["files"].items()], optional=True),
-        Group("human_small", "Natural voice (lighter)",
-              "The same voice on a lighter model, for a Mac the larger one is too slow on (about 1.7 GB)", [
+        Group("human", "Natural voice", "His natural, human-sounding voice (Qwen3-TTS, about 1.7 GB)", [
             Asset(f"{qwen.TIERS['small']['dir']}/{f}", [f"{HF}/{qwen.TIERS['small']['repo']}/resolve/main/{f}"], size)
             for f, size in qwen.TIERS["small"]["files"].items()], optional=True),
         Group("ears", "Speech recognition",
@@ -146,6 +142,28 @@ class ModelManager:
                 "error": p.get("error"), "running": self._running.get(g.key, False),
             })
         return out
+
+    def prune(self, keep_natural: bool) -> list[str]:
+        """Delete downloaded models JARVIS no longer uses, so he takes only the room he needs: the larger
+        natural-voice model earlier versions fetched, speech models other than the one in use, and the
+        natural voice itself while a Classic voice is chosen (it downloads again if you pick one)."""
+        import shutil
+
+        from jarvis.voice import qwen_tts as qwen
+
+        stale = list(qwen.STALE_DIRS)
+        stale += [p.name for p in self.dir.glob("whisper-*") if p.name != f"whisper-{self.stt_model}"]
+        if not keep_natural and not self._running.get("human"):
+            stale += [t["dir"] for t in qwen.TIERS.values()]
+        removed = []
+        for name in stale:
+            p = self.dir / name
+            if p.is_dir():
+                size = sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
+                shutil.rmtree(p, ignore_errors=True)
+                removed.append(name)
+                log.info("removed %s (%.1f GB): no longer used", name, size / 1e9)
+        return removed
 
     def all_ready(self) -> bool:
         return all(self.ready(g.key) for g in self.groups if self._shown(g))

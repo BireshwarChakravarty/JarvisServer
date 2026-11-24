@@ -21,7 +21,7 @@ def test_the_download_is_optional_until_chosen(tmp_path):
     assert "human" not in [s["key"] for s in mm.status()]
     mm.want("human")
     row = next(s for s in mm.status() if s["key"] == "human")
-    assert row["total"] > 1_900_000_000 and not row["ready"]
+    assert 1_600_000_000 < row["total"] < 1_800_000_000 and not row["ready"]      # the lighter model only
 
 
 def test_a_natural_voice_starts_on_classic(tmp_path, monkeypatch):
@@ -104,42 +104,49 @@ def _app(cfg, monkeypatch, speeds, force=False, voice="butler"):
     return app, said, loads
 
 
-def test_the_lighter_model_takes_over_when_the_larger_is_too_slow(cfg, monkeypatch):
-    app, said, loads = _app(cfg, monkeypatch, {"large": 0.94, "small": 0.62})     # the real Mac's numbers
+def test_every_natural_voice_runs_on_the_lighter_model(cfg, monkeypatch):
+    for voice in q.HUMAN_VOICES:
+        assert q.tiers_for(voice) == ["small"] and q.group_for(voice) == "human"
+        assert (q.VOICES_DIR / f"{voice}.wav").exists()
+    app, said, loads = _app(cfg, monkeypatch, {"small": 0.62}, voice="friday")
     asyncio.run(app.upgrade_voice())
-    assert app.speaker.backend.name == "qwen3" and app.speaker.backend.tier == "small"
-    assert "small model" in app.capabilities["natural_voice"] and not said
+    assert app.speaker.backend.name == "qwen3" and app.speaker.backend.voice == "friday" and not said
+    assert app.capabilities["natural_voice"].startswith("Friday (")
     app.speaker.backend.close()
     app.speaker.backend = SimpleNamespace(name="kokoro-onnx")
-    asyncio.run(app.upgrade_voice())                   # next start: no re-timing, straight to the small one
-    assert loads[-1] == ("small", False) and app.speaker.backend.tier == "small"
+    asyncio.run(app.upgrade_voice())                   # next start: no re-timing
+    assert loads == [("small", True), ("small", False)]
     app.speaker.backend.close()
 
 
-def test_friday_speaks_only_through_the_lighter_model(cfg, monkeypatch):
-    app, said, loads = _app(cfg, monkeypatch, {"small": 0.62}, voice="friday")    # as it was chosen
-    asyncio.run(app.upgrade_voice())
-    assert [t for t, _ in loads] == ["small"] and app.speaker.backend.voice == "friday"
-    assert q.group_for("friday") == "human_small" and q.group_for("friday_calm") == "human"
-    assert (q.VOICES_DIR / "friday.wav").exists() and (q.VOICES_DIR / "friday_calm.wav").exists()
-    app.speaker.backend.close()
-
-
-def test_both_too_slow_means_classic_said_once(cfg, monkeypatch):
-    app, said, loads = _app(cfg, monkeypatch, {"large": 1.3, "small": 1.1})
+def test_too_slow_means_classic_said_once(cfg, monkeypatch):
+    app, said, loads = _app(cfg, monkeypatch, {"small": 1.1})
     asyncio.run(app.upgrade_voice())
     assert app.speaker.backend.name == "kokoro-onnx" and len(said) == 1 and "Settings" in said[0]
     assert "too slow" in app.capabilities["natural_voice"]
     asyncio.run(app.upgrade_voice())
-    assert len(said) == 1 and len(loads) == 2           # remembered: not timed or said again
+    assert len(said) == 1 and len(loads) == 1           # remembered: not timed or said again
 
 
 def test_you_can_have_it_anyway(cfg, monkeypatch):
-    app, said, loads = _app(cfg, monkeypatch, {"large": 0.95, "small": 0.95}, force=True)
+    app, said, loads = _app(cfg, monkeypatch, {"small": 0.95}, force=True)
     asyncio.run(app.upgrade_voice())
-    assert app.speaker.backend.name == "qwen3" and app.speaker.backend.tier == "large"
-    assert "forced on" in app.capabilities["natural_voice"] and not said
+    assert app.speaker.backend.name == "qwen3" and "forced on" in app.capabilities["natural_voice"] and not said
     app.speaker.backend.close()
+
+
+def test_models_no_longer_used_are_deleted(tmp_path):
+    from jarvis.models import ModelManager
+
+    mm = ModelManager(tmp_path)
+    for d in ("qwen3-tts-1.7b-base-4bit", "qwen3-tts-0.6b-base-4bit", "whisper-large-v3-turbo", "whisper-small.en",
+              "kokoro-keep"):
+        (tmp_path / d).mkdir()
+        (tmp_path / d / "model.bin").write_bytes(b"x" * 10)
+    assert sorted(mm.prune(keep_natural=True)) == ["qwen3-tts-1.7b-base-4bit", "whisper-large-v3-turbo"]
+    assert (tmp_path / "qwen3-tts-0.6b-base-4bit").exists() and (tmp_path / "whisper-small.en").exists()
+    assert mm.prune(keep_natural=False) == ["qwen3-tts-0.6b-base-4bit"]       # a Classic voice is chosen
+    assert (tmp_path / "whisper-small.en").exists() and (tmp_path / "kokoro-keep").exists()
 
 
 def test_live_speech_goes_before_pre_rendering(tmp_path):
