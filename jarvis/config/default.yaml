@@ -40,8 +40,8 @@ voice:
   wake_threshold: 0.5
   input_device: null       # null = system default; or a name fragment, e.g. "MacBook Pro Microphone"
   output_device: null
-  follow_up_seconds: 7     # after he asks you something, keep listening this long (no wake word needed)
-  follow_up_after_answer: 4  # after a plain answer, a shorter window, so the room isn't taken for you
+  follow_up_seconds: 8     # after he asks you something, keep listening this long (no wake word needed)
+  follow_up_after_answer: 6  # after a plain answer, a shorter window, so the room isn't taken for you
   follow_up_level: 0.3     # a follow-up must be at least this loud relative to you (else it's background)
   barge_in: true           # say "Jarvis" / raise your palm while he talks to interrupt
   echo_cancellation: true  # Apple voice processing (as FaceTime uses): the mic never hears his own voice

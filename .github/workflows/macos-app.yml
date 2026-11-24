@@ -94,6 +94,14 @@ jobs:
           fi
           python3 -c "import json,sys; r=json.load(open('$JARVIS_SELFTEST_OUT')); sys.exit(0 if r['ok'] else 1)"
 
+      - name: Size report (what the app is made of)
+        run: |
+          echo "app: $(du -sh "$APP" | cut -f1)"
+          PKGS="$APP/Contents/Resources/app_packages"
+          echo "── largest bundled packages (MB)"; du -sm "$PKGS"/* | sort -rn | head -45
+          echo "── packages the self-test loaded"
+          python3 -c "import json; print(' '.join(json.load(open('${{ runner.temp }}/selftest.json'))['modules']))"
+
       - name: Launch JARVIS.app like a user (window, server, onboarding, then full boot)
         timeout-minutes: 10
         env:

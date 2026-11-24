@@ -205,7 +205,7 @@ async def run_script(app, script, echo=True, extra=None):
         await asyncio.sleep(FRAME_S)
 
 
-def make_app(cfg, script, replies=None, turn=True):
+def make_app(cfg, script, replies=None, turn=True, think=0.4):
     from jarvis.core.orchestrator import Jarvis
 
     cfg.data["voice"]["follow_up_seconds"] = 3
@@ -222,7 +222,7 @@ def make_app(cfg, script, replies=None, turn=True):
 
     async def respond(text, on_sentence=None, **k):
         asked.append(text)
-        await asyncio.sleep(0.4)
+        await asyncio.sleep(think)
         reply = (replies or {}).get(text, "Certainly not a problem, sir.")
         if on_sentence:
             await on_sentence(reply)
@@ -230,9 +230,9 @@ def make_app(cfg, script, replies=None, turn=True):
     return app, asked, respond
 
 
-async def simulate(cfg, parts, replies=None, echo=True, turn=True, extra=None, setup=None):
+async def simulate(cfg, parts, replies=None, echo=True, turn=True, extra=None, setup=None, think=0.4):
     script = Script(parts)
-    app, asked, respond = make_app(cfg, script, replies, turn)
+    app, asked, respond = make_app(cfg, script, replies, turn, think)
     await app.start()
     app.speaker, app.mic = app.speaker if isinstance(app.speaker, FakeSpeaker) else FakeSpeaker(), app.mic
     app.stt.speaker = app.speaker               # his echo transcribes as his own last words
@@ -521,8 +521,15 @@ def test_background_speech_after_his_answer_isnt_taken_for_you(cfg):
 def test_after_a_plain_answer_he_stops_listening_sooner(cfg):
     """A statement gets a short follow-up window; you can still answer a question at leisure."""
     app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.0, "dim the lights"),
-                           ("silence", 7.5, ""), ("say", 1.0, "and lock the door"), ("silence", 3.0, "")])
+                           ("silence", 9.5, ""), ("say", 1.0, "and lock the door"), ("silence", 3.0, "")])
     assert asked == ["dim the lights"], (asked, app.stt.heard)
+
+
+def test_a_conversation_has_room_to_think(cfg):
+    """After a plain answer you have a few seconds to think before carrying on, no wake word needed."""
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.0, "dim the lights"),
+                           ("silence", 5.5, ""), ("say", 1.0, "and lock the door"), ("silence", 4.0, "")])
+    assert asked == ["dim the lights", "and lock the door"], (asked, app.stt.heard)
 
 
 
@@ -755,3 +762,25 @@ def test_a_near_miss_on_other_words_stays_asleep(cfg):
                            ("say", 1.0, "pass the salt"), ("silence", 3.0, "")], setup=setup)
     assert checked, "the near-miss was checked"
     assert asked == [], (asked, app.stt.heard)
+
+
+# ── long requests and carrying on (2.0.24) ────────────────────────────────
+def test_you_carry_on_while_he_is_still_thinking(cfg):
+    """You pause for breath, he starts working on the first half, you carry on: one request, the whole of
+    it, answered once."""
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.4, "remind me to call the bank"),
+                           ("silence", 1.2, ""), ("say", 1.6, "and tell Pepper I'll be late"),
+                           ("silence", 7.0, "")], think=3.0)
+    assert asked[-1] == "remind me to call the bank and tell Pepper I'll be late", (asked, app.stt.heard)
+    assert app.speaker.said.count("Certainly not a problem, sir.") == 1, app.speaker.said   # answered once
+
+
+def test_a_long_request_with_pauses_between_sentences_is_one_request(cfg):
+    """Several sentences with the ordinary pauses people leave between them."""
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 2.5, "I need you to plan my day"),
+                           ("silence", 0.75, ""), ("say", 2.5, "start with the board call"),
+                           ("silence", 0.75, ""), ("say", 2.5, "then lunch with Rhodey"),
+                           ("silence", 0.75, ""), ("say", 2.0, "and keep the evening free"),
+                           ("silence", 6.0, "")])
+    assert asked == ["I need you to plan my day start with the board call then lunch with Rhodey "
+                     "and keep the evening free"], (asked, app.stt.heard)

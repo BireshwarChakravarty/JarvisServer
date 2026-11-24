@@ -719,7 +719,10 @@ def run() -> int:
         return _claude_code_roundtrip(state["cfg"], claude)
 
     failed = [r for r in RESULTS if not r["ok"] and r["required"]]
-    report = {"ok": not failed, "results": RESULTS, "python": sys.version, "executable": sys.executable}
+    # every top-level package the checks loaded: what the app really uses (for keeping the bundle lean)
+    loaded = sorted({m.split(".")[0] for m in list(sys.modules)})
+    report = {"ok": not failed, "results": RESULTS, "python": sys.version, "executable": sys.executable,
+              "modules": loaded}
     out = os.environ.get("JARVIS_SELFTEST_OUT")
     if out:
         Path(out).write_text(json.dumps(report, indent=2, default=str))

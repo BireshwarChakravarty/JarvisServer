@@ -373,7 +373,9 @@ async def record_utterance(
         # before asking whether you've finished, and only stop early when the model is surer.
         spoken = last_voice * frame_s
         long_turn = spoken > 4.0
-        quick = max(turn_quick, 0.6) if long_turn else turn_quick
+        # The longer you've been talking, the more likely a pause is between sentences, not the end:
+        # people leave 0.5–0.9 s there. Only a short request ends on a quick pause.
+        quick = max(turn_quick, 1.0) if long_turn else (max(turn_quick, 0.8) if spoken > 2.0 else turn_quick)
         sure = max(turn_threshold, 0.9) if long_turn else turn_threshold
         if use_turn and not asked and silence >= quick:
             asked = True

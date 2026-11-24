@@ -574,6 +574,7 @@ class Jarvis:
 
         follow_up = False
         pending_text = first_text
+        carried = ""                               # what you'd said before carrying on (see _monitor_barge_in)
         your_level = 0.0                           # how loud you were when you asked: follow-ups must match it
         ack_if_pause, self._ack_if_pause = getattr(self, "_ack_if_pause", False), False
         first_window = time.monotonic() + 6.0      # how long the first listen waits for you in all
@@ -647,6 +648,8 @@ class Jarvis:
                 _, text = strip_wake_phrase(self._without_echo(text, _began(audio)))
                 if text and not follow_up:
                     your_level = lvl
+            if carried:
+                text, carried = f"{carried} {text or ''}".strip(), ""     # the whole request, as one
             if not text:
                 if time.monotonic() < window - 0.5:
                     continue                # a cough, a click or his own echo, not your words: keep listening
@@ -662,6 +665,15 @@ class Jarvis:
             outcome = await self._monitor_barge_in(q, turn, your_level)
             if outcome == "stopped":
                 return
+            if outcome == "carry_on":
+                # you hadn't finished: he dropped what he'd started and listens for the rest
+                carried = text
+                notes = getattr(self, "_quick_notes", [])
+                self._quick_notes = (notes + [f"they hadn't finished speaking when you started on “{text[:120]}”; "
+                                              "the next message is their whole request: treat it as one, and "
+                                              "don't repeat anything you already did for the first part"])[-4:]
+                window = time.monotonic() + 6.0
+                continue
             follow_up = True
             if outcome == "barge":
                 window = time.monotonic() + 6.0
@@ -796,8 +808,8 @@ class Jarvis:
         except Exception:
             reply = ""
         if reply.rstrip().rstrip("\"')").endswith("?"):
-            return float(self.cfg.get("voice.follow_up_seconds", 7))
-        return float(self.cfg.get("voice.follow_up_after_answer", 4))
+            return float(self.cfg.get("voice.follow_up_seconds", 8))
+        return float(self.cfg.get("voice.follow_up_after_answer", 6))
 
     def _take_preroll(self):
         """Audio heard before this listen began (once; then it's spent): what was said around the
@@ -897,6 +909,11 @@ class Jarvis:
         frame_s = FRAME / SAMPLE_RATE
         run: list = []                      # your speech so far while he talks (with short gaps)
         spoken, gap = 0.0, 0.0
+        carry = bool(self.cfg.get("voice.carry_on", True)) and self.vad is not None
+        carry_floor = max(0.015, your_level * 0.4) if your_level else 0.02
+        carry_need = float(self.cfg.get("voice.carry_on_seconds", 0.35))
+        crun: list = []                     # you, carrying on while he thinks
+        cspoken, cgap = 0.0, 0.0
         if self.wake:
             self.wake.reset()
         while not (turn.done() and not self.speaker.speaking):
@@ -910,7 +927,27 @@ class Jarvis:
             guiding = self.guide is not None and getattr(self.guide, "_cancel", None) is not None
             if not (self.speaker.speaking or guiding):
                 run, spoken, gap = [], 0.0, 0.0
-                continue                # thinking: a false "Hey Jarvis" here would throw your request away
+                # Thinking. A false "Hey Jarvis" here would throw your request away, but you carrying on
+                # (a pause for breath was taken for the end) must not be lost: drop the half-request
+                # and hear the whole of it.
+                if carry and not turn.done() and time.monotonic() - float(
+                        getattr(self.speaker, "quiet_since", 0.0) or 0.0) > 0.5:
+                    if self.vad.is_speech(frame) and frame_rms(frame) >= carry_floor:
+                        crun.append(frame)
+                        cspoken, cgap = cspoken + frame_s, 0.0
+                    elif crun:
+                        crun.append(frame)
+                        cgap += frame_s
+                        if cgap > 0.4:              # a cough, a click: not you carrying on
+                            crun, cspoken, cgap = [], 0.0, 0.0
+                    if cspoken >= carry_need and not await self._clearly_not_you(crun):
+                        self._wake_preroll, self._preroll_live = list(crun), True
+                        self.interrupt()
+                        log.info("you carried on while he was thinking (%.1fs): hearing the rest", cspoken)
+                        return "carry_on"
+                    if cspoken >= carry_need:
+                        crun, cspoken, cgap = [], 0.0, 0.0
+                continue
             if talk and self.speaker.speaking and getattr(self.speaker, "route", None) is None:
                 if self.vad.is_speech(frame) and frame_rms(frame) >= floor:
                     run.append(frame)
@@ -944,6 +981,18 @@ class Jarvis:
         if turn.done() and turn.exception():
             log.error("turn failed: %s", turn.exception())
         return "done"
+
+    async def _clearly_not_you(self, frames: list) -> bool:
+        """True only when Voice ID is set up and sure this voice isn't yours (a guest, the TV)."""
+        vid = self.voice_id
+        if vid is None or not vid.active:
+            return False
+        audio = np.concatenate(frames).astype(np.float32) / 32768.0
+        try:
+            kind, _ = await asyncio.to_thread(vid.check, audio, False)
+        except Exception:
+            return False
+        return kind == "not_you"
 
     async def _interrupting_is_you(self, frames: list) -> bool:
         """Only your voice, recognised by Voice ID, may talk over him (not the TV, a guest or his echo)."""
@@ -994,6 +1043,8 @@ class Jarvis:
         from jarvis.voice.text import first_clause, polish_spoken
 
         async def on_sentence(sentence: str) -> None:
+            if cancel.is_set():
+                return                          # dropped (you carried on, or interrupted): say nothing more
             sentence = polish_spoken(sentence, style, self.cfg.get("owner.title", "sir"))
             if not sentence:
                 return
