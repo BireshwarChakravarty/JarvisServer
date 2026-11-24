@@ -73,7 +73,8 @@ def test_voice_setup_endpoints(cfg):
     r = client.get("/api/setup/voices").json()
     assert r["current"] == "butler" and any(p["id"] == "jarvis" for p in r["presets"])     # natural voice by default
     assert client.post("/api/setup/voice", json={"voice": "lewis"}).json()["current"] == "lewis"
-    assert client.post("/api/setup/voice", json={"voice": "mac:Jamie (Premium)"}).json()["current"] == "mac:Jamie (Premium)"
+    assert client.post("/api/setup/voice", json={"voice": "mac:Jamie (Premium)"}).status_code == 400   # retired
+    assert {p["id"] for p in r["presets"]} == {"jarvis", "lewis"} and "mac" not in r
     assert client.post("/api/setup/voice", json={"voice": "nope"}).status_code == 400
 
 
@@ -169,14 +170,14 @@ def test_switching_voices_reuses_the_loaded_model(cfg, monkeypatch):
             return np.zeros(10, dtype="float32")
 
     monkeypatch.setattr("jarvis.voice.tts.make_backend", lambda *a, **k: FakeKokoro())
-    for v in ("jarvis", "george", "lewis", "emma"):
+    for v in ("jarvis", "lewis"):
         cfg.data["voice"]["tts"]["voice"] = v
         sp = sup.setup_speaker()
-    assert len(loads) == 1 and sp.backend.voice == "emma"            # one model, re-pointed
+    assert len(loads) == 1 and sp.backend.voice == "lewis"           # one model, re-pointed
     live = SimpleNamespace(speaker=SimpleNamespace(backend=FakeKokoro()))
     sup.jarvis = live
-    cfg.data["voice"]["tts"]["voice"] = "fable"
-    assert sup.setup_speaker() is live.speaker and live.speaker.backend.voice == "fable"   # applies to JARVIS now
+    cfg.data["voice"]["tts"]["voice"] = "jarvis"
+    assert sup.setup_speaker() is live.speaker and live.speaker.backend.voice == "jarvis"  # applies to JARVIS now
 
 
 def test_first_words_start_at_the_first_natural_pause():
@@ -215,3 +216,18 @@ def test_say_now_never_blocks_when_the_player_is_busy():
     assert sp.say_now("Sir?") is False and not sp.speaking
     with pytest.raises(_q.Empty):
         sp._text_q.get_nowait()
+
+
+def test_only_the_chosen_voices_are_offered_and_old_choices_carry_over(tmp_path, monkeypatch):
+    from jarvis.config import load_config
+    from jarvis.voice.qwen_tts import HUMAN_VOICES
+    from jarvis.voice.tts import VOICE_PRESETS
+
+    assert set(HUMAN_VOICES) >= {"butler", "gentleman"} and "assistant" not in HUMAN_VOICES
+    assert set(VOICE_PRESETS) == {"jarvis", "lewis"}
+    monkeypatch.setenv("JARVIS_HOME", str(tmp_path))
+    for old, new in (("george", "jarvis"), ("emma", "jarvis"), ("assistant", "butler"), ("lewis", "lewis")):
+        (tmp_path / "config.yaml").write_text(f"voice:\n  tts:\n    voice: {old}\n")
+        assert load_config().get("voice.tts.voice") == new
+    (tmp_path / "config.yaml").write_text("voice:\n  tts:\n    backend: say\n    say_voice: Daniel\n")
+    assert load_config().get("voice.tts.backend") == "auto"           # Apple voices aren't offered now

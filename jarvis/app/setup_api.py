@@ -66,8 +66,6 @@ def recommended_model(subscription: str) -> str:
 
 
 def _current_voice(cfg) -> str:
-    if cfg.get("voice.tts.backend") == "say":
-        return f"mac:{cfg.get('voice.tts.say_voice') or 'auto'}"
     return str(cfg.get("voice.tts.voice") or "jarvis")
 
 
@@ -433,12 +431,8 @@ def make_router(sup) -> APIRouter:
     # ── voice choice ──────────────────────────────────────────────────────
     @r.get("/api/setup/voices")
     async def voices():
-        from jarvis.voice.tts import VOICE_PRESETS, best_mac_voice, mac_voices
-
-        installed = await asyncio.to_thread(mac_voices)
-        british = [v["name"] for v in installed if v["lang"] in ("en_GB", "en_IE", "en_AU", "en_IN", "en_ZA")]
-        good = [n for n in british if "(Premium)" in n or "(Enhanced)" in n]
         from jarvis.voice import qwen_tts
+        from jarvis.voice.tts import VOICE_PRESETS
 
         natural_ok = await asyncio.to_thread(qwen_tts.supported)
         j = sup.jarvis
@@ -452,9 +446,6 @@ def make_router(sup) -> APIRouter:
             "natural_status": (getattr(j, "capabilities", {}) or {}).get("natural_voice") if j else None,
             "natural_force": bool(sup.cfg.get("voice.tts.natural_force", False)),
             "presets": [{"id": k, "label": v["label"], "about": v["about"]} for k, v in VOICE_PRESETS.items()],
-            "mac": [{"id": f"mac:{n}", "label": n, "about": "Apple voice, built into macOS"} for n in good or british[:4]],
-            "mac_best": best_mac_voice(installed) if installed else None,
-            "mac_has_premium": bool(good),
         }
 
     @r.post("/api/setup/voice")
@@ -472,9 +463,7 @@ def make_router(sup) -> APIRouter:
                 j.cfg.data.setdefault("voice", {}).setdefault("tts", {})["voice"] = vid
                 spawn(j.upgrade_voice())                  # switches as soon as it's ready
             return {"ok": True, "current": vid, "natural": True, "ready": sup.models.ready("human")}
-        if vid.startswith("mac:"):
-            tts = {"backend": "say", "say_voice": vid[4:]}
-        elif vid in VOICE_PRESETS:
+        if vid in VOICE_PRESETS:
             tts = {"backend": "auto", "voice": vid}
         else:
             return JSONResponse({"ok": False, "error": "unknown voice"}, status_code=400)
@@ -561,12 +550,6 @@ def make_router(sup) -> APIRouter:
     async def open_unlock_settings():
         # Touch ID & Password, where "Use Apple Watch to unlock" lives (Apple's secure auto-unlock)
         subprocess.Popen(["open", "x-apple.systempreferences:com.apple.Touch-ID-Settings.extension"])  # noqa: ASYNC220  (doesn't wait)
-        return {"ok": True}
-
-    @r.post("/api/setup/open-voice-settings")
-    async def open_voice_settings():
-        # Spoken Content, where Apple's Premium voices are downloaded (free)
-        subprocess.Popen(["open", "x-apple.systempreferences:com.apple.preference.universalaccess?SpokenContent"])  # noqa: ASYNC220
         return {"ok": True}
 
     # ── voice & wake word test ────────────────────────────────────────────

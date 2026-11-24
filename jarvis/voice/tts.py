@@ -39,11 +39,8 @@ KOKORO_ONNX_URLS = {
 # ("bm_george:0.55,bm_fable:0.45"); blending averages the voices' timbre and delivery.
 VOICE_PRESETS = {
     "jarvis": {"spec": "bm_george:0.5,bm_fable:0.5", "speed": 0.94,
-               "label": "JARVIS", "about": "Calm, dry British butler (a blend of George and Fable)"},
-    "george": {"spec": "bm_george", "speed": 1.0, "label": "George", "about": "Warm, steady British male"},
-    "fable": {"spec": "bm_fable", "speed": 1.0, "label": "Fable", "about": "Brighter, more expressive British male"},
+               "label": "JARVIS", "about": "Calm, dry British butler"},
     "lewis": {"spec": "bm_lewis", "speed": 1.0, "label": "Lewis", "about": "Deeper British male"},
-    "emma": {"spec": "bf_emma", "speed": 1.0, "label": "Emma", "about": "British female (a FRIDAY alternative)"},
 }
 
 

@@ -133,6 +133,22 @@ def _load_env(home: Path) -> None:
             pass
 
 
+# Voices offered once and since retired → the nearest one that's left.
+RETIRED_VOICES = {"george": "jarvis", "fable": "jarvis", "emma": "jarvis", "assistant": "butler"}
+
+
+def _retire_voices(data: dict) -> None:
+    """A voice that's no longer offered (an Apple voice, George, Fable, Emma, Assistant) becomes the
+    nearest one that is, so an old config.yaml keeps working."""
+    tts = (data.get("voice") or {}).get("tts")
+    if not isinstance(tts, dict):
+        return
+    if tts.get("voice") in RETIRED_VOICES:
+        tts["voice"] = RETIRED_VOICES[tts["voice"]]
+    if tts.get("backend") == "say":            # Apple voices aren't offered any more: the voices JARVIS ships
+        tts["backend"] = "auto"
+
+
 def load_config(path: str | Path | None = None, overrides: dict | None = None) -> Config:
     home = jarvis_home()
     _load_env(home)
@@ -158,6 +174,8 @@ def load_config(path: str | Path | None = None, overrides: dict | None = None) -
             shutil.copy2(user_path, bad)
             logging.getLogger("jarvis.config").error("couldn't read %s (%s); using defaults. A copy is in %s",
                                                      user_path, exc, bad)
+
+    _retire_voices(data)
 
     # A couple of handy env overrides
     # The app bundle on macOS uses the bundle-friendly engines (see packaging/)

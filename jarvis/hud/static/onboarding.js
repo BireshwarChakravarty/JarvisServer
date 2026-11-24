@@ -472,18 +472,16 @@
     };
     (v.natural || []).forEach((o) => add({ ...o, about: o.about }, "natural"));
     v.presets.forEach((o) => add(o, "neural"));
-    v.mac.forEach((o) => add(o, "mac"));
     markVoice();
     $("voice-hint").innerHTML = (v.natural || []).length && v.natural.some((o) => o.id === v.current) && !v.natural_ready
       ? "Downloading the natural voice (about 2.3 GB). I'll use the Classic voice until it's ready, then switch by myself."
       : v.natural_status && /slow/.test(v.natural_status) && !v.natural_force ? "The natural voice can't quite keep up on this Mac, so I'm using Classic. Switch it on anyway below."
-      : !v.neural_ready ? "My neural voices are still downloading; the Apple voices work right away."
-      : v.mac_has_premium ? "" : 'Prefer an Apple voice? Download a free Premium one (Jamie is excellent) in <a href="#" id="get-voices">Spoken Content settings</a>, then come back.';
+      : !v.neural_ready ? "The Classic voices are still downloading; they'll be ready in a minute."
+      : "";
     const nat = (v.natural || []).length > 0;
     $("natural-row").hidden = !nat;
     $("opt-natural-force").checked = !!v.natural_force;
     if (v.natural_status) $("natural-status").textContent = `Now: ${v.natural_status}.`;
-    const gv = $("get-voices"); if (gv) gv.onclick = (e) => { e.preventDefault(); api("/api/setup/open-voice-settings", {}).catch(() => {}); };
   }
   function markVoice() {
     document.querySelectorAll("#voices .voice").forEach((b) => { const on = b.dataset.v === voiceSel; b.classList.toggle("on", on); b.setAttribute("aria-checked", on); });
@@ -677,14 +675,12 @@
       claude: { installed: true, version: "2.1.325 (Claude Code)", logged_in: false }, codex: { installed: false } });
     if (path === "/api/setup/devices") return Promise.resolve({ microphones: [{ name: "Studio Display Microphone", default: true }, { name: "Logitech BRIO" }],
       cameras: [{ index: 0, name: "Logitech BRIO" }, { index: 1, name: "iPhone Camera" }], input_device: null, camera_index: 0 });
-    if (path === "/api/setup/voices") return Promise.resolve({ current: "butler", neural_ready: true, mac_has_premium: true,
+    if (path === "/api/setup/voices") return Promise.resolve({ current: "butler", neural_ready: true,
       natural_ready: true, natural: [["butler", "Butler", "Refined English butler: calm, dry, quietly witty"],
-        ["assistant", "Assistant", "Articulate and warm, with a hint of amusement"], ["gentleman", "Gentleman", "Deep, warm, unflappable English gentleman"]]
+        ["gentleman", "Gentleman", "Deep, warm, unflappable English gentleman"]]
         .map(([id, label, about]) => ({ id, label, about, sample: `/static/voices/${id}.mp3` })),
-      presets: [["jarvis", "JARVIS", "Calm, dry British butler (a blend of George and Fable)"], ["george", "George", "Warm, steady British male"],
-        ["fable", "Fable", "Brighter, more expressive British male"], ["lewis", "Lewis", "Deeper British male"], ["emma", "Emma", "British female (a FRIDAY alternative)"]]
-        .map(([id, label, about]) => ({ id, label, about })),
-      mac: [{ id: "mac:Jamie (Premium)", label: "Jamie (Premium)", about: "Apple voice, built into macOS" }] });
+      presets: [["jarvis", "JARVIS", "Calm, dry British butler"], ["lewis", "Lewis", "Deeper British male"]]
+        .map(([id, label, about]) => ({ id, label, about })) });
     if (path.startsWith("/api/setup/geocode")) return Promise.resolve([{ name: "London", region: "England", country: "United Kingdom", country_code: "GB" }]);
     return new Promise((res) => setTimeout(() => res({ ok: true, model: "claude-opus-5-5", best: 0.93 }), 900));
   }

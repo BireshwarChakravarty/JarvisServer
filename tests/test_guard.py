@@ -14,16 +14,16 @@ def client(cfg):
 
 def test_own_pages_and_native_clients_work(client):
     assert client.get("/setup").status_code == 200
-    assert client.post("/api/setup/voice", json={"voice": "george"},
+    assert client.post("/api/setup/voice", json={"voice": "lewis"},
                        headers={"Origin": "http://127.0.0.1:7777"}).status_code == 200
-    assert client.post("/api/setup/voice", json={"voice": "george"}).status_code == 200   # no Origin: native
+    assert client.post("/api/setup/voice", json={"voice": "lewis"}).status_code == 200   # no Origin: native
     with client.websocket_connect("/ws", headers={"Origin": "http://127.0.0.1:7777", "Host": "127.0.0.1:7777"}) as ws:
         assert ws.receive_json()["type"] == "hello"
 
 
 def test_other_websites_are_refused(client):
     evil = {"Origin": "https://evil.example"}
-    assert client.post("/api/setup/voice", json={"voice": "george"}, headers=evil).status_code == 403
+    assert client.post("/api/setup/voice", json={"voice": "lewis"}, headers=evil).status_code == 403
     assert client.post("/api/app/show", headers={"Origin": "http://127.0.0.1:9999"}).status_code == 403
     with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect("/ws", headers=evil) as ws:

@@ -47,7 +47,6 @@ REF_TEXT = ("Good evening, sir. I've taken the liberty of moving your three o'cl
 VOICES_DIR = Path(__file__).with_name("voices")
 HUMAN_VOICES = {                # chosen by ear from the voice lab's candidates
     "butler": {"label": "Butler", "about": "Refined English butler: calm, dry, quietly witty"},
-    "assistant": {"label": "Assistant", "about": "Articulate and warm, with a hint of amusement"},
     "gentleman": {"label": "Gentleman", "about": "Deep, warm, unflappable English gentleman"},
 }
 DEFAULT_VOICE = "butler"
