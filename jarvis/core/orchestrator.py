@@ -575,6 +575,7 @@ class Jarvis:
         follow_up = False
         pending_text = first_text
         carried = ""                               # what you'd said before carrying on (see _monitor_barge_in)
+        heard = None                               # the audio of what you said (for reading your tone)
         your_level = 0.0                           # how loud you were when you asked: follow-ups must match it
         ack_if_pause, self._ack_if_pause = getattr(self, "_ack_if_pause", False), False
         first_window = time.monotonic() + 6.0      # how long the first listen waits for you in all
@@ -601,6 +602,7 @@ class Jarvis:
                     else:
                         bus.emit("state", state="transcribing")
                         head, text, verdict = await self._hear_whole(q, head, self._endpointing())
+                        heard = head
                         if self._not_you(verdict, follow_up=False):
                             bus.emit("state", state="idle")
                             return              # someone else said "Hey Jarvis": stay quiet
@@ -638,6 +640,7 @@ class Jarvis:
                 bus.emit("state", state="transcribing")
                 if stop_evt is None:
                     audio, text, verdict = await self._hear_whole(q, audio, ep)
+                    heard = audio
                 else:
                     text, verdict = await self._hear(audio)      # push-to-talk: you said when you'd finished
                 if self._not_you(verdict, follow_up):
@@ -661,6 +664,9 @@ class Jarvis:
                 return
             if self.speaker is not None:
                 self.speaker.turn_mark = getattr(self, "_heard_at", None) or time.monotonic()
+            if heard is not None:
+                await self._read_tone(heard, text)
+                heard = None
             turn = asyncio.create_task(self.handle_text(text, source="voice"))
             outcome = await self._monitor_barge_in(q, turn, your_level)
             if outcome == "stopped":
@@ -680,6 +686,25 @@ class Jarvis:
                 continue  # you interrupted (by voice or the wake word): listen right away
             await self._settle_keep(q)  # his voice lingers in the room for a moment: let it fade first
             window = time.monotonic() + self._follow_up_for(turn)
+
+    async def _read_tone(self, audio, text: str) -> None:
+        """How you sounded, compared with your usual voice (jarvis/voice/tone.py), for the brain."""
+        if not self.cfg.get("voice.read_tone", True):
+            return
+        from jarvis.voice.tone import ToneReader
+
+        if getattr(self, "_tone", None) is None:
+            self._tone = ToneReader(self.memory.get("voice_tone_baseline") or None)
+        try:
+            how = await asyncio.to_thread(self._tone.read, audio, text)
+        except Exception as exc:
+            log.debug("tone reading failed: %s", exc)
+            return
+        self._your_tone = (how, time.monotonic()) if how else None
+        if how:
+            log.info("you sound %s", how)
+        if self._tone.count % 3 == 0:
+            self.memory.set("voice_tone_baseline", self._tone.snapshot())
 
     async def _hear_whole(self, q, audio, ep: dict):
         """Transcribe what you said; if the words plainly stop mid-thought ("remind me to…", "and…",
@@ -1227,6 +1252,9 @@ class Jarvis:
             self.speaker.gain = float(self.cfg.get("voice.night_volume", 0.6)) if late else 1.0
         if late:
             ctx["mood"] = "late at night: speak softly and briefly, no jokes unless they start it"
+        tone = getattr(self, "_your_tone", None)
+        if tone and time.monotonic() - tone[1] < 30:
+            ctx["how they sound"] = f"{tone[0]} (compared with their usual voice)"
         try:
             from jarvis.mac import system as mac
 
