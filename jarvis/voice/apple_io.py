@@ -264,3 +264,68 @@ class VoiceIO:
                 if time.monotonic() - t0 > dur + 3.0:    # a completion that never came: don't hang
                     log.warning("voice-processing playback didn't report completion")
                     break
+
+    def play_stream(self, chunks, sr: int, should_stop: Callable[[], bool],
+                    on_level: Callable[[float], None] | None = None, tail: float = 0.0,
+                    prebuffer: float = 0.35) -> None:
+        """Play speech while it is still being generated: buffers are scheduled as chunks arrive, so the
+        voice plays as one continuous stream. `chunks` yields mono float arrays, or None as a heartbeat
+        while it waits (so a stop is never missed). Returns when it has been heard or should_stop()."""
+        player, fmt = self.player, self.play_format
+        if player is None or fmt is None:
+            raise RuntimeError("voice engine not running")
+        step = int(PLAY_RATE * CHUNK_S)
+        done = threading.Event()
+        heard = np.zeros(0, dtype=np.float32)       # everything scheduled so far, for the level meter
+        pending = np.zeros(0, dtype=np.float32)
+        started: float | None = None
+
+        def schedule(a: np.ndarray, last: bool = False) -> None:
+            nonlocal heard
+            starts = list(range(0, len(a), step)) or [0]
+            for i, s in enumerate(starts):
+                buf = make_buffer(fmt, a[s:s + step] if len(a) else np.zeros(1, np.float32))
+                player.scheduleBuffer_completionHandler_(buf, done.set if (last and i == len(starts) - 1) else None)
+            heard = np.concatenate([heard, a])
+
+        def meter() -> None:
+            if on_level is not None and started is not None and len(heard):
+                i = min(len(heard) - 1, int((time.monotonic() - started) * PLAY_RATE))
+                seg = heard[i:i + int(PLAY_RATE * 0.04)]
+                on_level(float(np.sqrt(np.mean(seg ** 2))) if len(seg) else 0.0)
+
+        with self._play_lock:
+            self._gen += 1
+            for c in chunks:
+                if should_stop():
+                    player.stop()
+                    player.play()
+                    return
+                if c is not None and len(c):
+                    pending = np.concatenate([pending, to_play_rate(c, sr)])
+                    # a little in hand before the first sound, so a slow chunk doesn't leave a gap
+                    if started is None and len(pending) < PLAY_RATE * prebuffer:
+                        continue
+                    schedule(pending)
+                    pending = np.zeros(0, dtype=np.float32)
+                    if started is None:
+                        if not player.isPlaying():
+                            player.play()
+                        started = time.monotonic()
+                meter()
+            schedule(np.concatenate([pending, np.zeros(int(PLAY_RATE * tail), dtype=np.float32)]), last=True)
+            if started is None:
+                if not player.isPlaying():
+                    player.play()
+                started = time.monotonic()
+            end = started + len(heard) / PLAY_RATE + 3.0
+            while not done.is_set():
+                if should_stop():
+                    player.stop()
+                    player.play()
+                    return
+                meter()
+                done.wait(0.04)
+                if time.monotonic() > end:
+                    log.warning("voice-processing playback didn't report completion")
+                    break

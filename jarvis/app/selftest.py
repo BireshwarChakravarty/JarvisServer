@@ -173,12 +173,16 @@ def run() -> int:
         nv = q.QwenVoice("butler", state["cfg"].models_dir, max_rtf=99)
         try:
             rtf = nv.load()
-            t0 = time.time()
-            audio = nv.synth("Good evening, sir. Everything checks out.")
-            secs = len(audio) / nv.sample_rate
+            t0, first, chunks = time.time(), None, []
+            for c in nv.synth_stream("Good evening, sir. Everything checks out, and the house is quiet. "
+                                     "Shall I bring the lights up?"):
+                first = first or time.time() - t0
+                chunks.append(c)
+            secs = sum(len(c) for c in chunks) / nv.sample_rate
             if secs < 1.0:
                 raise RuntimeError(f"audio too short: {secs:.2f}s")
-            return f"{secs:.1f}s of audio in {time.time() - t0:.1f}s; {rtf:.2f}x real time on this machine"
+            return (f"streamed {secs:.1f}s of audio in {time.time() - t0:.1f}s, first sound after {first:.2f}s; "
+                    f"{rtf:.2f}x real time on this machine")
         finally:
             nv.close()
 

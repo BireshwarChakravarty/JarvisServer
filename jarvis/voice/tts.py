@@ -260,6 +260,33 @@ def shape_audio(audio: np.ndarray, sr: int, pause: float) -> np.ndarray:
     return np.concatenate([a, np.zeros(int(sr * pause), dtype=np.float32)])
 
 
+class _Feed:
+    """Audio for one passage, arriving while it is generated (streaming voices). Iterating yields each
+    chunk, or None every 50 ms while waiting, so a player can still notice a stop."""
+
+    _END = object()
+
+    def __init__(self) -> None:
+        self._q: queue.Queue = queue.Queue()
+
+    def put(self, chunk: np.ndarray) -> None:
+        self._q.put(np.asarray(chunk, dtype=np.float32).reshape(-1))
+
+    def close(self) -> None:
+        self._q.put(self._END)
+
+    def __iter__(self):
+        while True:
+            try:
+                item = self._q.get(timeout=0.05)
+            except queue.Empty:
+                yield None
+                continue
+            if item is self._END:
+                return
+            yield item
+
+
 # ═══════════════════════════════ the speaker ═════════════════════════════════
 class Speaker:
     def __init__(self, backend: TTSBackend, output_device: str | None = None) -> None:
@@ -443,17 +470,22 @@ class Speaker:
     # restarts the intonation every few words. The first sentence still goes alone so JARVIS starts
     # talking at once; whatever has queued up behind it while it was being voiced is merged.
     PHRASE_CHARS = 220
+    # A streaming voice starts playing within a fraction of a second whatever the length, so it takes
+    # everything that's waiting as one passage: the intonation then carries across sentences, the way
+    # a person's does, instead of starting afresh at every full stop.
+    PASSAGE_CHARS = 480
 
-    def _take_phrase(self, gen: int, text: str) -> tuple[str, int]:
+    def _take_phrase(self, gen: int, text: str, limit: int | None = None) -> tuple[str, int]:
+        limit = limit or self.PHRASE_CHARS
         parts, n = [text], 1
-        while sum(len(p) for p in parts) < self.PHRASE_CHARS:
+        while sum(len(p) for p in parts) < limit:
             try:
                 g, nxt = self._text_q.get_nowait()
             except queue.Empty:
                 break
             if g != gen:
                 continue  # stale (interrupted); _gen moved on
-            if sum(len(p) for p in parts) + len(nxt) > self.PHRASE_CHARS * 1.4:
+            if sum(len(p) for p in parts) + len(nxt) > limit * 1.4:
                 self._text_q.queue.appendleft((g, nxt))  # too long to merge: keep it for next time
                 break
             parts.append(nxt)
@@ -468,6 +500,10 @@ class Speaker:
             if gen != self._gen:
                 continue
             count = 1
+            if getattr(self.backend, "streams", False):
+                text, count = self._take_phrase(gen, text, self.PASSAGE_CHARS)
+                self._stream_passage(gen, text, count)
+                continue
             if self._playing.is_set() or not self._audio_q.empty():   # merging can't delay the start
                 text, count = self._take_phrase(gen, text)
             try:
@@ -482,6 +518,26 @@ class Speaker:
             if gen != self._gen:
                 continue
             self._audio_q.put((gen, text, audio, self.backend.sample_rate, count))
+
+    def _stream_passage(self, gen: int, text: str, count: int) -> None:
+        """Generate a passage chunk by chunk, handing each to the player as soon as it exists."""
+        feed = _Feed()
+        self._audio_q.put((gen, text, feed, self.backend.sample_rate, count))
+        t0 = time.perf_counter()
+        stream = None
+        try:
+            stream = self.backend.synth_stream(speech_form(text))
+            for chunk in stream:
+                if gen != self._gen or getattr(self, "_closed", False):
+                    break                    # interrupted: stop generating at once
+                feed.put(chunk)
+            log.debug("streamed %d chars in %.0f ms", len(text), (time.perf_counter() - t0) * 1000)
+        except Exception as exc:
+            log.error("TTS failed: %s", exc)
+        finally:
+            if stream is not None and hasattr(stream, "close"):
+                stream.close()
+            feed.close()
 
     def _device_index(self):
         if not self.output_device or self._sd is None:
@@ -500,6 +556,18 @@ class Speaker:
             self._stop_play.clear()
             self._playing.set()
             self.current_text = text
+            if isinstance(audio, _Feed):
+                try:
+                    self._play_feed(audio, sr, gen, text)
+                except Exception as exc:
+                    log.error("audio playback failed: %s", exc)
+                    bus.emit("error", message=f"Audio output problem: {exc}")
+                finally:
+                    self._playing.clear()
+                    self.current_text = ""
+                    for _ in range(count):
+                        self._done_one(gen)
+                continue
             # duration lets the HUD pace subtitles to the actual audio, word for word
             bus.emit("speaking", text=text, duration=round(len(audio) / max(1, sr), 2))
             mark, self.turn_mark = self.turn_mark, None
@@ -523,6 +591,85 @@ class Speaker:
                 self.current_text = ""
                 for _ in range(count):
                     self._done_one(gen)
+
+    def _note_first_word(self) -> None:
+        mark, self.turn_mark = self.turn_mark, None
+        if mark and time.monotonic() - mark < 60:
+            gap = time.monotonic() - mark
+            log.info("first word %.2f s after you stopped (%s)", gap, self.backend.name)
+            bus.emit("latency", seconds=round(gap, 2), voice=self.backend.name)
+            self.latencies = (list(getattr(self, "latencies", [])) + [gap])[-50:]
+
+    def _play_feed(self, feed: _Feed, sr: int, gen: int, text: str) -> None:
+        """Play a passage that is still being generated, as one continuous stream."""
+        stop = lambda: self._stop_play.is_set() or gen != self._gen
+        gain = float(self.gain)
+        fade = int(sr * 0.006)
+        state = {"first": True}
+
+        def chunks():
+            for c in feed:
+                if c is not None and len(c):
+                    c = np.clip(c * gain, -1, 1)
+                    if state["first"]:
+                        state["first"] = False
+                        f = min(fade, len(c) // 2)
+                        if f > 0:
+                            c[:f] *= np.linspace(0, 1, f, dtype=np.float32)
+                        # subtitles are paced from an estimate (about fifteen characters a second)
+                        bus.emit("speaking", text=text, duration=round(max(1.0, len(text) / 15.0), 2))
+                        self._note_first_word()
+                yield c
+
+        pause = breath_after(text)
+        sink = self.route
+        if sink is not None:
+            # the phone plays whole phrases: gather the passage, then send it
+            audio = [c for c in chunks() if c is not None and not stop()]
+            if stop():
+                return
+            whole = np.concatenate(audio) if audio else np.zeros(1, np.float32)
+            if self._send_elsewhere(sink, whole, sr, text, gen):
+                return
+            self._play(whole, sr, gen, pause=pause)
+            return
+        vio = self.voiceio
+        if vio is not None and vio.running and hasattr(vio, "play_stream"):
+            vio.play_stream(chunks(), sr, should_stop=stop, tail=pause,
+                            on_level=lambda v: bus.emit("level", source="tts", value=min(1.0, v * 6)))
+            return
+        block = int(sr * 0.04)
+        if self._sd is None:
+            for c in chunks():          # headless: keep the timing, so the rest behaves the same
+                if stop():
+                    return
+                if c is not None:
+                    for i in range(0, len(c), block):
+                        if stop():
+                            return
+                        bus.emit("level", source="tts", value=float(min(1.0, np.sqrt(np.mean(c[i:i + block] ** 2)) * 6)))
+            return
+        with self._sd.OutputStream(samplerate=sr, channels=1, dtype="float32",
+                                   device=self._device_index(), blocksize=block) as stream:
+            for c in chunks():
+                if stop():
+                    return
+                if c is None:
+                    continue
+                for i in range(0, len(c), block):
+                    if stop():
+                        return
+                    piece = c[i:i + block]
+                    bus.emit("level", source="tts", value=min(1.0, float(np.sqrt(np.mean(piece ** 2))) * 6))
+                    stream.write(piece.reshape(-1, 1))
+            stream.write(np.zeros((int(sr * pause), 1), dtype=np.float32))
+            try:
+                lat = float(stream.latency)
+            except Exception:
+                lat = 0.0
+            end = time.monotonic() + min(0.6, max(0.0, lat))
+            while time.monotonic() < end and not stop():
+                time.sleep(0.02)
 
     def _send_elsewhere(self, sink, audio: np.ndarray, sr: int, text: str, gen: int) -> bool:
         """Hand the phrase to another device, then keep time as if it were playing here, so

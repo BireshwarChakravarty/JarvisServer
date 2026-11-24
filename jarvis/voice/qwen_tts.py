@@ -97,6 +97,8 @@ class QwenVoice:
 
     name = "qwen3"
     sample_rate = 24000
+    streams = True              # speaks whole passages, playing while it generates (see Speaker)
+    STREAM_INTERVAL = 0.4       # seconds of speech per chunk: small enough to start at once
 
     def __init__(self, voice: str, models_dir: Path, max_rtf: float = MAX_RTF, tier: str = "small") -> None:
         if voice not in HUMAN_VOICES:
@@ -156,10 +158,15 @@ class QwenVoice:
             raise box["error"]
         return box.get("value")
 
+    def _chunks(self, text: str):
+        """Streamed generation: the reference recording is encoded once (cached by the model) and never
+        decoded again, unlike a non-streamed call, which decodes it with every sentence."""
+        for r in self.model.generate(text=text, ref_audio=str(self.ref), ref_text=REF_TEXT, lang_code="english",
+                                     stream=True, streaming_interval=self.STREAM_INTERVAL, split_pattern=""):
+            yield np.asarray(r.audio, dtype=np.float32).reshape(-1)
+
     def _generate(self, text: str) -> np.ndarray:
-        chunks = [np.asarray(r.audio, dtype=np.float32).reshape(-1)
-                  for r in self.model.generate(text=text, ref_audio=str(self.ref), ref_text=REF_TEXT,
-                                               lang_code="english")]
+        chunks = list(self._chunks(text))
         return np.concatenate(chunks) if chunks else np.zeros(1, dtype=np.float32)
 
     # ── public ─────────────────────────────────────────────────────────────
@@ -178,8 +185,9 @@ class QwenVoice:
             if not measure:
                 return 0.0
             rtfs = []
-            for line in ("Right. Two meetings this afternoon, and it's drizzling.", "Done. The lights are off.",
-                         "Pepper's message says the board call moved to Thursday."):
+            for line in ("Right. Two meetings this afternoon, the first at half past two, and it's drizzling.",
+                         "Done. The lights are off, and the door's locked for the night.",
+                         "Pepper's message says the board call moved to Thursday. Shall I draft a reply?"):
                 t0 = time.perf_counter()
                 audio = self._generate(line)
                 rtfs.append((time.perf_counter() - t0) / max(len(audio) / self.sample_rate, 0.1))
@@ -194,6 +202,45 @@ class QwenVoice:
 
     def synth(self, text: str) -> np.ndarray:
         return self._call(lambda: self._generate(text))
+
+    def synth_stream(self, text: str):
+        """Yield the passage's audio chunk by chunk while it is generated (on the model's thread)."""
+        out: queue.Queue = queue.Queue()
+        end = object()
+        failed: list = []
+        abandon = threading.Event()        # the listener stopped (he was interrupted): stop generating
+
+        def work():
+            try:
+                for c in self._chunks(text):
+                    if abandon.is_set():
+                        break
+                    out.put(c)
+            except BaseException as exc:          # handed back to the caller below
+                failed.append(exc)
+            finally:
+                out.put(end)
+        if self._thread is None or not self._thread.is_alive():
+            self._thread = threading.Thread(target=self._run, daemon=True, name="qwen-tts")
+            self._thread.start()
+        self._jobs.put((work, {}, threading.Event()))
+        deadline = time.monotonic() + 120
+        try:
+            while True:
+                try:
+                    item = out.get(timeout=0.5)
+                except queue.Empty:
+                    if time.monotonic() > deadline:
+                        raise TimeoutError("the voice took too long") from None
+                    continue
+                if item is end:
+                    if failed:
+                        raise failed[0]
+                    return
+                deadline = time.monotonic() + 120
+                yield item
+        finally:
+            abandon.set()
 
     def synth_later(self, text: str) -> np.ndarray:
         """Pre-rendering: waits behind anything he's about to say live."""

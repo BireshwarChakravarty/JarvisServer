@@ -185,3 +185,59 @@ def test_speech_upsampled_for_the_player_keeps_its_pitch_and_timing():
     out = to_play_rate(tone(440, 22050, 1.0), 22050)
     assert abs(len(out) - 24000) <= 1 and abs(dominant(out[2000:-2000], 24000) - 440) < 3
     assert np.argmax(np.abs(out) > 0.1) < 50                    # no added delay at the start
+
+
+class FakePlayer:
+    """Stands in for AVAudioPlayerNode: 'plays' scheduled buffers in real time on a thread."""
+
+    def __init__(self):
+        self.scheduled, self.playing, self.stops = [], False, 0
+
+    def scheduleBuffer_completionHandler_(self, buf, done):
+        self.scheduled.append(len(buf))
+        if done is not None:
+            total = sum(self.scheduled) / 24000
+
+            import threading
+            threading.Timer(min(total, 0.3), done).start()
+
+    def isPlaying(self):
+        return self.playing
+
+    def play(self):
+        self.playing = True
+
+    def stop(self):
+        self.stops += 1
+
+
+def _engine(monkeypatch):
+    import threading
+
+    from jarvis.voice import apple_io
+
+    monkeypatch.setattr(apple_io, "make_buffer", lambda fmt, a: np.asarray(a))
+    vio = apple_io.VoiceIO.__new__(apple_io.VoiceIO)
+    vio.player, vio.play_format, vio._play_lock, vio._gen = FakePlayer(), object(), threading.Lock(), 0
+    return vio
+
+
+def test_streamed_speech_is_scheduled_as_it_arrives_and_completes(monkeypatch):
+    vio = _engine(monkeypatch)
+    chunks = [np.full(4800, 0.2, np.float32), None, np.full(4800, 0.2, np.float32), np.full(2400, 0.2, np.float32)]
+    levels = []
+    vio.play_stream(iter(chunks), 24000, should_stop=lambda: False, on_level=levels.append, tail=0.1)
+    assert sum(vio.player.scheduled) == 4800 * 2 + 2400 + 2400          # every sample, plus the breath after
+    assert vio.player.playing and vio.player.stops == 0
+
+
+def test_a_stop_while_streaming_drops_the_rest(monkeypatch):
+    vio = _engine(monkeypatch)
+    stop = {"now": False}
+
+    def chunks():
+        yield np.full(12000, 0.2, np.float32)
+        stop["now"] = True
+        yield np.full(12000, 0.2, np.float32)
+    vio.play_stream(chunks(), 24000, should_stop=lambda: stop["now"])
+    assert vio.player.stops == 1 and sum(vio.player.scheduled) == 12000
