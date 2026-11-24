@@ -50,7 +50,6 @@ class FaceEngine:
         self.recognizer = None
         self.known: dict[str, np.ndarray] = {}  # name -> (N, 128) normalised embeddings
         self.latest: list[Face] = []
-        self.frame_size = (0, 0)
         self._last = 0.0
         self._lock = threading.Lock()
         self.available = False
@@ -150,7 +149,6 @@ class FaceEngine:
             faces.append(face)
         with self._lock:
             self.latest = faces
-            self.frame_size = small.shape[1], small.shape[0]
         bus.emit("faces", w=small.shape[1], h=small.shape[0], faces=[
             {"box": f.box, "name": f.name, "sim": round(f.similarity, 2)} for f in faces
         ])

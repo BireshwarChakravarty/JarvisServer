@@ -165,9 +165,6 @@ class ModelManager:
                 log.info("removed %s (%.1f GB): no longer used", name, size / 1e9)
         return removed
 
-    def all_ready(self) -> bool:
-        return all(self.ready(g.key) for g in self.groups if self._shown(g))
-
     # ── downloading ──────────────────────────────────────────────────────
     def ensure(self, key: str) -> bool:
         """Blocking: download every missing asset of a group. Returns True when ready."""

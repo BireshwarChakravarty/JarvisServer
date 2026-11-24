@@ -51,7 +51,9 @@ HUMAN_VOICES = {                # chosen by ear from the voice lab's candidates
 }
 DEFAULT_VOICE = "butler"
 
-MAX_RTF = 0.9                   # it must speak faster than this fraction of real time to be used
+# It must generate at least this fast (time taken / audio length) to be used. It streams with a head
+# start sized to its measured speed (Speaker._head_start), so just under real time is fine.
+MAX_RTF = 1.0
 
 
 def tiers_for(voice: str) -> list[str]:

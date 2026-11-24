@@ -78,3 +78,15 @@ def test_a_stop_ends_generation_too():
     time.sleep(0.5)
     assert v.chunks_made <= made + 1                      # no more generation after the stop
     assert not sp.speaking
+
+
+def test_the_head_start_fits_the_voices_speed():
+    v = StreamingVoice()
+    sp = Speaker(v)
+    passage = "x" * 150                                   # about ten seconds of speech
+    v.rtf = 0.4
+    assert sp._head_start(passage) == 0.35                # comfortably faster than speech: start at once
+    v.rtf = 0.95                                          # just under real time (the M6 measured 0.94)
+    assert 0.35 < sp._head_start(passage) < 2.5           # a moment in hand, then it never runs dry
+    v.rtf = None
+    assert sp._head_start(passage) == 0.35

@@ -6,8 +6,7 @@ on:
   push:
     branches: [claude/eager-newton-yifemd, main]
     paths-ignore: ["**.md", "docs/**", "scripts/voice_lab.py", ".github/workflows/voice-lab.yml", "scripts/ears_lab.py",
-                   ".github/workflows/ears-lab.yml", "scripts/speed_lab.py", ".github/workflows/speed-lab.yml",
-                   "scripts/mood_lab.py", ".github/workflows/mood-lab.yml"]
+                   ".github/workflows/ears-lab.yml", "scripts/speed_lab.py", ".github/workflows/speed-lab.yml"]
   workflow_dispatch:
     inputs:
       publish:

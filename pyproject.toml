@@ -222,6 +222,11 @@ cleanup_paths = [
   "**/app_packages/**/*.a",
   "**/app_packages/**/*.h",
   "**/app_packages/**/tests/**",
+  # pulled in by dependencies but never loaded by JARVIS (checked by the self-test's module list)
+  "**/app_packages/sympy/**",
+  "**/app_packages/mpmath/**",
+  "**/app_packages/PyObjCTest/**",
+  "**/app_packages/hf_xet/**",
 ]
 permission.microphone = "JARVIS listens for “Hey Jarvis” and your voice commands. Audio is processed on this Mac."
 permission.camera = "JARVIS recognises you, greets you when you sit down, reads your hand gestures and answers “what am I holding?”."

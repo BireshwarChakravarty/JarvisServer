@@ -145,12 +145,5 @@ end tell''', timeout=30)
     return "Opened in Mail."
 
 
-def scripts() -> dict[str, str]:
-    """Every AppleScript this module runs, for the in-app self-test to compile."""
-    return {"fetch": _FETCH.format(days=3, limit=40),
-            "read": 'tell application "Mail" to return content of (first message of inbox whose message id is "x")',
-            "open": 'tell application "Mail" to open (first message of inbox whose message id is "x")'}
-
-
 def available() -> bool:
     return IS_MAC

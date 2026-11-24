@@ -19,7 +19,6 @@ class Camera:
         self.width, self.height = width, height
         self._cap = None
         self._frame: np.ndarray | None = None
-        self._frame_ts = 0.0
         self._lock = threading.Lock()
         self._running = False
         self._thread: threading.Thread | None = None
@@ -90,7 +89,6 @@ class Camera:
             frame = frame[:, ::-1].copy()  # mirror, like a selfie view
             with self._lock:
                 self._frame = frame
-                self._frame_ts = time.time()
                 self._seq += 1
             self._new.set()
             time.sleep(max(0.0, interval - (time.monotonic() - t0)))

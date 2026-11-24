@@ -128,8 +128,15 @@ def test_too_slow_means_classic_said_once(cfg, monkeypatch):
     assert len(said) == 1 and len(loads) == 1           # remembered: not timed or said again
 
 
+def test_just_under_real_time_is_used(cfg, monkeypatch):
+    app, said, loads = _app(cfg, monkeypatch, {"small": 0.94})                 # what the M6 measured
+    asyncio.run(app.upgrade_voice())
+    assert app.speaker.backend.name == "qwen3" and "0.94x" in app.capabilities["natural_voice"] and not said
+    app.speaker.backend.close()
+
+
 def test_you_can_have_it_anyway(cfg, monkeypatch):
-    app, said, loads = _app(cfg, monkeypatch, {"small": 0.95}, force=True)
+    app, said, loads = _app(cfg, monkeypatch, {"small": 1.15}, force=True)
     asyncio.run(app.upgrade_voice())
     assert app.speaker.backend.name == "qwen3" and "forced on" in app.capabilities["natural_voice"] and not said
     app.speaker.backend.close()

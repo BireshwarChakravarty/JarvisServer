@@ -342,25 +342,11 @@ def send_imessage(recipient: str, text: str) -> str:
     return f"Message sent to {recipient}."
 
 
-def unread_messages_count() -> int | None:
-    return None  # Messages exposes no unread count via AppleScript
-
-
 # ═════════════════════════════════ Notes & Mail ══════════════════════════════
 def create_note(title: str, body: str) -> str:
     html = "<h1>" + title + "</h1>" + "".join(f"<p>{line}</p>" for line in body.splitlines())
     osascript(f'tell application "Notes" to make new note at default account with properties {{body:{q(html)}}}')
     return f"Note '{title}' saved."
-
-
-def mail_unread() -> int | None:
-    try:
-        running = osascript('application "Mail" is running')
-        if running != "true":
-            return None
-        return int(osascript('tell application "Mail" to get unread count of inbox') or 0)
-    except Exception:
-        return None
 
 
 # ═════════════════════════════════ Music ═════════════════════════════════════

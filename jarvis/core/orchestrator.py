@@ -107,7 +107,6 @@ class Jarvis:
         self.voice_id = None
         self.live = None          # Gemini Live: natural speech-to-speech conversation (jarvis/voice/live.py)
         # state
-        self.standby = False          # mic muted by voice command
         self.capabilities: dict[str, Any] = {}
         self._listen_now = asyncio.Event()
         self._interrupt = asyncio.Event()
@@ -1223,7 +1222,6 @@ class Jarvis:
             if cancel.is_set() or (self.speaker and self.speaker.speaking):
                 return
             line = self.filler_line(text, slow)
-            self._last_filler = line
             self.speaker.enqueue(line)
             bus.emit("filler", text=line)
 

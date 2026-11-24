@@ -614,6 +614,18 @@ class Speaker:
             bus.emit("latency", seconds=round(gap, 2), voice=self.backend.name)
             self.latencies = (list(getattr(self, "latencies", [])) + [gap])[-50:]
 
+    def _head_start(self, text: str) -> float:
+        """Seconds of speech to have in hand before the first sound, so the voice never runs dry.
+
+        A voice generating at `rtf` (time taken / audio length) keeps up after a head start of
+        T·(1 − 1/rtf) for a passage of T seconds. A small margin covers a busy moment on the Mac."""
+        rtf = getattr(self.backend, "rtf", None)
+        if not rtf:
+            return 0.35
+        seconds = max(1.0, len(text or "") / 15.0)                      # about fifteen characters a second
+        rtf = float(rtf) * 1.15
+        return float(min(6.0, max(0.35, seconds * (1 - 1 / rtf) + 0.2 if rtf > 1 else 0.35)))
+
     def _play_feed(self, feed: _Feed, sr: int, gen: int, text: str) -> None:
         """Play a passage that is still being generated, as one continuous stream."""
         stop = lambda: self._stop_play.is_set() or gen != self._gen
@@ -647,9 +659,10 @@ class Speaker:
                 return
             self._play(whole, sr, gen, pause=pause)
             return
+        head = self._head_start(text)
         vio = self.voiceio
         if vio is not None and vio.running and hasattr(vio, "play_stream"):
-            vio.play_stream(chunks(), sr, should_stop=stop, tail=pause,
+            vio.play_stream(chunks(), sr, should_stop=stop, tail=pause, prebuffer=head,
                             on_level=lambda v: bus.emit("level", source="tts", value=min(1.0, v * 6)))
             return
         block = int(sr * 0.04)
@@ -665,17 +678,26 @@ class Speaker:
             return
         with self._sd.OutputStream(samplerate=sr, channels=1, dtype="float32",
                                    device=self._device_index(), blocksize=block) as stream:
+            held: list = []              # the head start, before the first sound
+            started = False
             for c in chunks():
                 if stop():
                     return
                 if c is None:
                     continue
+                if not started:
+                    held.append(c)
+                    if sum(len(x) for x in held) < sr * head:
+                        continue
+                    c, held, started = np.concatenate(held), [], True
                 for i in range(0, len(c), block):
                     if stop():
                         return
                     piece = c[i:i + block]
                     bus.emit("level", source="tts", value=min(1.0, float(np.sqrt(np.mean(piece ** 2))) * 6))
                     stream.write(piece.reshape(-1, 1))
+            if held:                     # a passage shorter than the head start
+                stream.write(np.concatenate(held).reshape(-1, 1))
             stream.write(np.zeros((int(sr * pause), 1), dtype=np.float32))
             try:
                 lat = float(stream.latency)

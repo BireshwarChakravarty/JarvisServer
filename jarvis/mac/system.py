@@ -3,7 +3,6 @@
 on other platforms so the rest of JARVIS can be developed and tested anywhere."""
 from __future__ import annotations
 
-import json
 import logging
 import platform
 import shlex
@@ -294,10 +293,3 @@ def system_profile() -> dict:
     return info
 
 
-def jxa(script: str) -> object:
-    """Run JavaScript for Automation and parse a JSON result."""
-    out = osascript(script, language="JavaScript")
-    try:
-        return json.loads(out)
-    except json.JSONDecodeError:
-        return out
