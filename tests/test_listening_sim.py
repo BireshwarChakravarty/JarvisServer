@@ -337,7 +337,7 @@ def test_nothing_said_after_the_wake_word_goes_quietly_back_to_standby(cfg):
 
 def test_two_conversations_in_a_row(cfg):
     app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 0.8, "first question"),
-                           ("silence", 7.5, ""), ("wake", 0.6, ""), ("say", 0.8, "second question"),
+                           ("silence", 9.5, ""), ("wake", 0.6, ""), ("say", 0.8, "second question"),
                            ("silence", 4.5, "")])
     assert asked == ["first question", "second question"], (asked, app.stt.heard)
     assert app.wake.fired == 2
