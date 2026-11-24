@@ -25,6 +25,7 @@ smart home and terminal. Everything shows on a live, holographic HUD.
 |---|---|
 | 🌅 **Greets you at login** | A greeting that fits the time of day ("Good morning, sir… burning the midnight oil again?") plus a spoken briefing of weather, your next meetings, overdue reminders, unread mail and headlines. Then *"What shall we tackle first?"*, and he listens with no wake word needed. |
 | 🔁 **Notices you're back** | Unlock the Mac or simply sit down in front of the camera after time away, and he welcomes you back. The first return of the day gets the full briefing. |
+| 🗣️ **Natural conversation** | With a free Gemini key, conversations after "Hey Jarvis" run through Google's **Gemini Live**: speech to speech, so he sounds human, hears your tone, and stops the moment you talk. His tools and your Claude plan still do the work. Offline or out of free quota, he uses his on-device voice. |
 | 🎙️ **Hands-free voice** | Wake word "Hey Jarvis" (openWakeWord), or hold **Right ⌥** to talk. Whisper (small.en) transcribes on your Apple GPU. His **natural voice** (Qwen3-TTS on your Mac, free and offline) speaks in an original voice designed for him: **Butler** (default), **Gentleman**, or the Irish **Friday** and **Friday Calm**. It downloads once (1.7 GB, only if you choose a natural voice); until then, and on a Mac too slow for it, the **Classic** voice (Kokoro: **JARVIS** or **Lewis**) speaks. He keeps listening while you pause to think ("remind me to… call the bank"), and if an answer is slow he says a short word instead of leaving silence. |
 | ✋ **Interrupt anytime** | Just start talking: he stops within about half a second and your words become the next request ("mm-hm" doesn't stop him). Or say "Jarvis", raise an open palm, or press Esc. After each answer he keeps listening for a few seconds, so follow-ups don't need the wake word. |
 | 👁️ **Sees** | "What am I holding?", "How do I look?", "What's on my screen?", "Read this error": camera frames and screenshots go straight to Claude's vision. |
@@ -209,11 +210,11 @@ Either way, JARVIS opens straight into a **guided setup**. Nothing else is done 
 |---|---|
 | Welcome | JARVIS introduces himself. If he isn't in Applications yet he offers to move himself. His voice and hearing start downloading in the background (about 900 MB, once). |
 | You | Your name, how he should address you (sir / ma'am / boss / your name), and your city, with autocomplete. |
-| Intelligence | Paste an Anthropic API key (there's a button that opens the right page). He checks it with a live call and stores it in your **Keychain**. |
+| Intelligence | Your **Claude** (Pro or Max) or **ChatGPT** (Plus or Pro) plan: Install, Sign in, Test. Or an Anthropic API key, checked and kept in your **Keychain**. |
 | Senses | One **Allow all** button triggers each macOS permission dialog in turn: microphone, camera, calendars, reminders, contacts, app control. Status updates live. Screen recording and Accessibility are optional. |
 | Recognition | Pick your camera (a Mac mini has none built in), then a live view learns your face in about 5 seconds. |
 | Listening | Pick your microphone, then say “Hey Jarvis”. He confirms he heard you. |
-| Voice | Tap a voice to hear it: JARVIS (recommended), George, Fable, Lewis, Emma, or an Apple Premium voice you've downloaded. |
+| Voice & look | **Natural conversation (Gemini Live)**: paste a free Gemini key, pick the voice (Charon, Orus, Algieba, Alnilam, Sulafat, Algenib) and accent. The on-device voices (Butler, Gentleman, Friday, Friday Calm; Classic JARVIS and Lewis) speak whenever Gemini isn't available. Theme and clock. |
 | Ready | Start at login (on by default), lock-when-away, sentry mode. **Launch JARVIS** and the HUD takes over. |
 
 Change any of it later from **Settings** (the gear on the HUD, or the menu-bar icon). Closing the window keeps JARVIS

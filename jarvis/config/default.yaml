@@ -59,6 +59,10 @@ voice:
     backend: auto          # auto | faster-whisper | mlx
     model: "small.en"      # small.en is fast and accurate; medium.en is more accurate, slower
     language: "en"
+  live:                    # natural conversation through Gemini Live (needs a free Gemini key, set in Settings)
+    enabled: true
+    voice: Charon          # Charon, Orus, Algieba, Alnilam, Sulafat, Algenib (or any of Google's 30 voices)
+    accent: british        # british | irish | american | neutral
   tts:
     backend: auto          # auto | kokoro-onnx | kokoro-mlx | say
     voice: "butler"         # natural voices (Qwen3-TTS): butler | gentleman | friday | friday_calm; Classic (Kokoro): jarvis | lewis

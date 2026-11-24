@@ -66,7 +66,7 @@ def check(j) -> list[dict]:
         pass
     errors = recent_errors(Path(cfg.home) / "jarvis.log")
     add("error log", errors < 25, f"{errors} errors logged in the last day",
-        "say 'send me the log' or look at jarvis.log")
+        "open jarvis.log in JARVIS's folder (Library › Application Support › JARVIS)")
     return out
 
 
