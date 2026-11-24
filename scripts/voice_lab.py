@@ -21,24 +21,24 @@ OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "voice-lab")
 OUT.mkdir(parents=True, exist_ok=True)
 
 DESIGNER = "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit"
-SPEAKERS = ["mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit", "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-4bit",
-            "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit"]
+# The app's natural voice models (the larger first): samples are rendered with the one he'll use.
+SPEAKERS = ["mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit", "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-4bit"]
 
 # What the reference recording says (the cloning model is given this transcript with it).
 REF_TEXT = ("Good evening, sir. I've taken the liberty of moving your three o'clock to tomorrow morning. "
             "The weather, I'm pleased to say, looks rather promising for the weekend.")
 
+# Round 2: a FRIDAY-like voice. Original voices designed from written descriptions only: no recording of
+# any real person is used. (Round 1 designed Butler and Gentleman, which the app ships; see git history.)
 CANDIDATES = {
-    "butler": "A refined middle-aged English butler with a Received Pronunciation accent. Calm, dry and quietly "
-              "witty; warm but restrained. Unhurried, precise diction, a smooth baritone. A trusted gentleman's "
-              "valet speaking softly to his employer.",
-    "oxford": "An educated British man in his forties with a soft Oxford accent. Measured and composed, with a "
-              "subtle dry humour in the tone. Velvety mid-low voice, relaxed pace, natural pauses and breaths.",
-    "assistant": "A calm, articulate British male voice, mid-range pitch, crisp consonants and gentle warmth. "
-                 "Effortlessly polite, with faint amusement behind the words. Natural, conversational, never "
-                 "robotic.",
-    "gentleman": "A distinguished English gentleman with a deep, warm voice and a London RP accent. Unflappable "
-                 "and kind, speaking at an easy pace like a person in conversation, not a narrator.",
+    "friday": "A woman in her early thirties with a soft, natural Irish accent. Warm, quick and quietly "
+              "confident: an efficient, friendly colleague with a light, playful edge. Clear mid-range voice, "
+              "relaxed conversational pace, never like a narrator.",
+    "friday_bright": "A bright, energetic young Irish woman with a lilting Dublin accent. Crisp and upbeat, "
+                     "quick-witted and a little cheeky, speaking briskly but clearly, like someone on top of "
+                     "everything and enjoying it.",
+    "friday_calm": "A calm, composed Irish woman in her thirties with a gentle, low-key accent. Smooth, warm and "
+                   "dry-humoured; unflappable and reassuring, speaking at an easy pace with natural pauses.",
 }
 
 LINES = [
@@ -95,8 +95,8 @@ def main() -> None:
         load_s = time.perf_counter() - t
         runs = []
         for name in CANDIDATES:
-            if short != SPEAKERS[0].split("/")[-1] and name != "butler":
-                continue                      # timing only for the others: one voice is enough
+            if short != SPEAKERS[0].split("/")[-1] and name != "friday":
+                continue                      # timing only for the lighter model: one voice is enough
             for i, line in enumerate(LINES):
                 t = time.perf_counter()
                 first = None
