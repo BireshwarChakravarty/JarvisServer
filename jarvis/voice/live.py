@@ -36,14 +36,9 @@ MODELS = ["gemini-3.8-live", "gemini-3.1-flash-live-preview"]   # newest first; 
 IN_RATE, OUT_RATE = 16000, 24000
 KEY_ENV = "GEMINI_API_KEY"
 DEFAULT_VOICE = "Charon"
-VOICES = {   # Google's voices (all 30 work); these suit JARVIS
-    "Charon": "Informative", "Orus": "Firm", "Algieba": "Smooth", "Iapetus": "Clear", "Sadaltager": "Knowledgeable",
-    "Gacrux": "Mature", "Rasalgethi": "Informative", "Algenib": "Gravelly", "Achird": "Friendly",
-    "Alnilam": "Firm", "Schedar": "Even", "Enceladus": "Breathy", "Fenrir": "Excitable", "Umbriel": "Easy-going",
-    "Zubenelgenubi": "Casual", "Puck": "Upbeat", "Kore": "Firm", "Aoede": "Breezy", "Sulafat": "Warm",
-    "Despina": "Smooth", "Leda": "Youthful", "Vindemiatrix": "Gentle", "Achernar": "Soft",
-    "Callirrhoe": "Easy-going", "Erinome": "Clear", "Autonoe": "Bright", "Laomedeia": "Upbeat",
-    "Pulcherrima": "Forward", "Zephyr": "Bright", "Sadachbia": "Lively",
+VOICES = {   # Google's voices, the ones chosen by ear for JARVIS (any of Google's 30 can be set in config.yaml)
+    "Charon": "Informative", "Orus": "Firm", "Algieba": "Smooth", "Alnilam": "Firm", "Sulafat": "Warm",
+    "Algenib": "Gravelly",
 }
 ACCENTS = {
     "british": "a refined, warm British accent (Received Pronunciation), like a trusted English butler",

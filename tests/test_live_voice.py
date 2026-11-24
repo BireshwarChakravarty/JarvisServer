@@ -230,7 +230,7 @@ def test_settings_choose_the_voice_and_accent(cfg, monkeypatch):
     _, c = make_client(cfg)
     st = c.get("/api/setup/live").json()
     assert st["installed"] and st["has_key"] and st["voice"] == live_mod.DEFAULT_VOICE and st["accent"] == "british"
-    assert any(v["id"] == "Kore" for v in st["voices"])
+    assert [v["id"] for v in st["voices"]] == ["Charon", "Orus", "Algieba", "Alnilam", "Sulafat", "Algenib"]
     assert c.post("/api/setup/live", json={"voice": "Orus", "accent": "irish"}).json()["ok"]
     assert "voice: Orus" in cfg.user_config_path.read_text()
     assert c.post("/api/setup/live", json={"voice": "Nobody"}).status_code == 400
