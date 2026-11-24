@@ -34,12 +34,15 @@ def is_apple_silicon() -> bool:
 
 class Transcriber:
     def __init__(self, backend: str = "auto", model: str = "small.en", language: str = "en",
-                 vocabulary: list[str] | None = None, models_dir=None) -> None:
+                 vocabulary: list[str] | None = None, models_dir=None, device: str = "auto") -> None:
         self.models_dir = models_dir
+        self.device = device            # auto (GPU on Apple Silicon when it works) | mps | cpu
+        self.device_used = "cpu"
         self.backend = backend
         self.model_name = model
         self.language = language or None
-        self.prompt = ", ".join(["Jarvis"] + (vocabulary or [])) + "."
+        # words he's often asked about, so the recogniser expects them ("inbox", not "emboss")
+        self.prompt = ", ".join(["Jarvis"] + [v for v in (vocabulary or []) if v] + VOCABULARY) + "."
         self._impl = None
         self._lock = threading.Lock()
         self._busy = threading.Lock()   # one transcription at a time: the Mac's mic and a phone can overlap
@@ -69,8 +72,7 @@ class Transcriber:
                         import os
 
                         threads = max(2, min(8, (os.cpu_count() or 4) - 2))
-                        self._impl = ("fw", WhisperModel(size, device="cpu", compute_type="int8",
-                                                         cpu_threads=threads))
+                        self._impl = ("fw", self._whisper(WhisperModel, size, threads))
                     self.name = name
                     break
                 except Exception as exc:
@@ -79,6 +81,21 @@ class Transcriber:
                 raise RuntimeError("No speech-to-text backend available. pip install 'jarvis-mac[voice,apple]'")
             log.info("STT backend: %s", self.name)
             return self.name
+
+    def _whisper(self, WhisperModel, size: str, threads: int):
+        """On Apple Silicon, the GPU (CTranslate2's Metal backend) when it works here, else the CPU."""
+        # the GPU only for models the ears lab found accurate there (large-v3-turbo came out garbled)
+        gpu_ok = self.device == "mps" or self.model_name in GPU_PROVEN
+        if self.device in ("auto", "mps") and gpu_ok and is_apple_silicon():
+            try:
+                m = WhisperModel(size, device="mps", compute_type="float16")
+                list(m.transcribe(np.zeros(16000, np.float32), language="en")[0])   # proves it runs
+                self.device_used = "gpu"
+                return m
+            except Exception as exc:
+                log.info("speech recognition on the GPU unavailable (%s): using the CPU", exc)
+        self.device_used = "cpu"
+        return WhisperModel(size, device="cpu", compute_type="int8", cpu_threads=threads)
 
     def _local_model(self) -> str | None:
         if self.models_dir is None:
@@ -117,7 +134,8 @@ class Transcriber:
             self.last_confidence = _confidence([sg.get("avg_logprob") for sg in kept])
         else:
             segments, _ = impl.transcribe(
-                audio, language=self.language, beam_size=1,
+                # on the GPU there's time for a more careful search (three candidate readings, not one)
+                audio, language=self.language, beam_size=3 if self.device_used == "gpu" else 1,
                 # the audio is already trimmed to your speech: skip the extra VAD pass on short turns
                 vad_filter=len(audio) > 16000 * 20, without_timestamps=True,
                 initial_prompt=self.prompt, condition_on_previous_text=False,
@@ -152,6 +170,9 @@ def clean_transcript(text: str) -> str:
         return ""
     return text
 
+
+GPU_PROVEN = {"tiny.en", "base.en", "small.en"}      # scripts/ears_lab.py: same accuracy, 2.4x faster
+VOCABULARY = ["WhatsApp", "inbox", "email", "Mailspring", "calendar", "reminder", "Spotify"]
 
 WAKE_PATTERN = re.compile(r"\b(hey|hi|ok|okay|yo)?[\s,]*(jarvis|jarvi|javis|jervis|jarvas)\b[\s,.!?]*", re.IGNORECASE)
 

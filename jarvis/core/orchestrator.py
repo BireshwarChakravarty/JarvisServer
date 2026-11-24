@@ -180,7 +180,7 @@ class Jarvis:
                              models_dir=cfg.models_dir)
         self.stt = Transcriber(cfg.get("voice.stt.backend", "auto"), cfg.get("voice.stt.model", "small.en"),
                                cfg.get("voice.stt.language", "en"), [cfg.get("owner.name", "")],
-                               models_dir=cfg.models_dir)
+                               models_dir=cfg.models_dir, device=cfg.get("voice.stt.device", "auto"))
         backend, wake_ok, stt_name = await asyncio.gather(
             tts_task, asyncio.to_thread(self.wake.load), asyncio.to_thread(self._load_stt))
         self.voiceio = await asyncio.to_thread(self._start_echo_cancellation)

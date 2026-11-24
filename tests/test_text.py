@@ -69,3 +69,33 @@ def test_a_long_first_sentence_starts_on_its_first_clause():
     long_sir = "Here is a rather long answer that keeps going for a good while, sir, so there is time to cut in."
     assert first_clause(long_sir) == ["Here is a rather long answer that keeps going for a good while, sir,",
                                       "so there is time to cut in."]    # not before "sir", but after it
+
+
+def test_the_recogniser_expects_jarvis_words_and_uses_the_gpu_only_where_proven(monkeypatch):
+    from jarvis.voice import stt
+
+    t = stt.Transcriber("auto", "small.en", "en", ["Bireshwar"])
+    assert t.prompt.startswith("Jarvis, Bireshwar,") and "inbox" in t.prompt and "WhatsApp" in t.prompt
+    made = []
+
+    class FakeModel:
+        def __init__(self, size, device="cpu", compute_type="int8", cpu_threads=0):
+            made.append(device)
+
+        def transcribe(self, audio, **k):
+            return iter([]), None
+    monkeypatch.setattr(stt, "is_apple_silicon", lambda: True)
+    t._whisper(FakeModel, "small.en", 4)
+    assert made[-1] == "mps" and t.device_used == "gpu"
+    turbo = stt.Transcriber("auto", "large-v3-turbo", "en")
+    turbo._whisper(FakeModel, "large-v3-turbo", 4)
+    assert made[-1] == "cpu" and turbo.device_used == "cpu"        # garbled on the GPU in the lab
+
+    class NoGPU(FakeModel):
+        def __init__(self, size, device="cpu", **k):
+            if device == "mps":
+                raise RuntimeError("no Metal")
+            super().__init__(size, device)
+    t2 = stt.Transcriber("auto", "small.en", "en")
+    t2._whisper(NoGPU, "small.en", 4)
+    assert t2.device_used == "cpu"                                  # falls back cleanly

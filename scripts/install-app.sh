@@ -43,6 +43,7 @@ if [[ $FRESH == 1 ]]; then
     http://127.0.0.1:7777/api/setup/login-item >/dev/null 2>&1 || true
   osascript -e 'tell application "JARVIS" to quit' >/dev/null 2>&1 || true
   sleep 1; pkill -f "JARVIS.app/Contents/MacOS" >/dev/null 2>&1 || true
+  pkill -f "JARVIS-brain-workspace" >/dev/null 2>&1 || true             # its Claude Code / Codex helper, if left running
   rm -rf "$APP" "$HOME/Applications/JARVIS.app"
   rm -rf "$HOME/Library/Application Support/JARVIS" "$HOME/.jarvis"          # settings, faces, memory, models, logs
   for id in com.jarvisassistant.jarvis com.jarvis.assistant; do
@@ -68,6 +69,7 @@ if [[ $FRESH == 1 ]]; then
               whisper-small.en-mlx whisper-base.en-mlx whisper-tiny.en-mlx; do
     rm -rf "$HOME/.cache/huggingface/hub/models--mlx-community--$repo"
   done
+  rm -rf "$HOME/.cache/huggingface/hub/"models--mlx-community--Qwen3-TTS-* 2>/dev/null || true   # natural voice
   rm -rf "${TMPDIR:-/tmp}"/jarvis-* 2>/dev/null || true
   lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
   [[ -x "$lsregister" ]] && "$lsregister" -u "$APP" >/dev/null 2>&1 || true

@@ -215,6 +215,7 @@ def run() -> int:
         stt = Transcriber("auto", state["cfg"].get("voice.stt.model", "small.en"), "en", [],
                           models_dir=state["cfg"].models_dir)
         name = stt.load()
+        name = f"{name} on the {stt.device_used.upper() if stt.device_used == 'gpu' else 'CPU'}"
         audio, sr = state["speech"]
         t0 = time.time()
         text = stt.transcribe(resample(audio, sr))

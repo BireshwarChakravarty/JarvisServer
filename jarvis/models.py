@@ -36,7 +36,21 @@ class Group:
     optional: bool = False          # only fetched (and shown) when the feature that needs it is chosen
 
 
+# the larger, more accurate recognisers live in other repos and use a JSON vocabulary
+WHISPER_REPOS = {
+    "large-v3-turbo": ("mobiuslabsgmbh/faster-whisper-large-v3-turbo", {
+        "config.json": 2_263, "model.bin": 1_617_884_929, "preprocessor_config.json": 340,
+        "tokenizer.json": 2_710_337, "vocabulary.json": 1_068_114}),
+    "distil-large-v3": ("Systran/faster-distil-whisper-large-v3", {
+        "config.json": 2_690, "model.bin": 1_512_927_867, "preprocessor_config.json": 340,
+        "tokenizer.json": 2_480_617, "vocabulary.json": 1_068_114}),
+}
+
+
 def whisper_assets(model: str) -> list[Asset]:
+    if model in WHISPER_REPOS:
+        repo, files = WHISPER_REPOS[model]
+        return [Asset(f"whisper-{model}/{f}", [f"{HF}/{repo}/resolve/main/{f}"], size) for f, size in files.items()]
     repo = f"Systran/faster-whisper-{model}"
     sizes = {"tiny.en": 75_000_000, "base.en": 145_000_000, "small.en": 484_000_000,
              "medium.en": 1_530_000_000, "large-v3": 3_090_000_000}
