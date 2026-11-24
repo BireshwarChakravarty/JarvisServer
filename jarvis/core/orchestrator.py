@@ -1495,62 +1495,100 @@ class Jarvis:
             await asyncio.sleep((nxt - now).total_seconds())
 
     async def upgrade_voice(self) -> None:
-        """Switch to the natural voice (Qwen3-TTS) when it's chosen, downloaded, and keeps up with
-        real-time speech on this Mac. Until then, and if it can't, the Classic voice speaks."""
+        """Switch to the natural voice (Qwen3-TTS) when it's chosen and can keep up on this Mac.
+
+        Tried in order: the larger model, then the lighter one (downloaded only if needed), each timed
+        once per version after start-up has settled. "Use the natural voice even if it's a little slow"
+        (voice.tts.natural_force) skips the speed check. Until one passes, and if none can, the Classic
+        voice speaks, and Settings says which voice is on and why."""
         from jarvis.voice import qwen_tts as q
 
         voice = self.cfg.get("voice.tts.voice")
         if voice not in q.HUMAN_VOICES or self.speaker is None or not await asyncio.to_thread(q.supported):
             return
-        if getattr(self.speaker.backend, "name", "") == "qwen3" and getattr(self.speaker.backend, "voice", "") == voice:
+        b = self.speaker.backend
+        if getattr(b, "name", "") == "qwen3" and getattr(b, "voice", "") == voice:
             return
-        while not q.model_ready(self.cfg.models_dir):
-            await asyncio.sleep(30)                       # still downloading (Settings shows the progress)
-        from jarvis import version
-
-        max_rtf = float(self.cfg.get("voice.tts.natural_max_rtf", q.MAX_RTF))
-        key = f"natural_voice_speed:{version()}"           # decided once per version, so it doesn't flip-flop
-        known = self.memory.get(key) or {}
-        if known.get("rtf") is not None and known["rtf"] > max_rtf:
-            self.capabilities["natural_voice"] = f"too slow here ({known['rtf']:.2f}x real time)"
-            return                                        # measured before: stay on Classic, quietly
-        # time it only once start-up has settled (models loading at the same time made it read slow)
-        await asyncio.sleep(float(self.cfg.get("voice.tts.natural_settle_seconds", 45)) if not known else 0)
-        while self._turn_active:
-            await asyncio.sleep(1)
-        nv = q.QwenVoice(voice, self.cfg.models_dir, max_rtf=max_rtf)
+        if getattr(self, "_voice_upgrading", False):      # already on it (e.g. the switch was flicked)
+            return
+        self._voice_upgrading = True
         try:
-            rtf = await asyncio.to_thread(nv.load, not known)
-            if known:
-                rtf = float(known["rtf"])
-            else:
+            await self._upgrade_voice(voice)
+        finally:
+            self._voice_upgrading = False
+
+    async def _upgrade_voice(self, voice: str) -> None:
+        from jarvis import version
+        from jarvis.voice import qwen_tts as q
+
+        force = bool(self.cfg.get("voice.tts.natural_force", False))
+        max_rtf = float(self.cfg.get("voice.tts.natural_max_rtf", q.MAX_RTF))
+        settled = False
+        tried = []
+        for tier in ("large", "small"):
+            key = f"natural_voice_speed:{version()}:{tier}"
+            known = self.memory.get(key) or {}
+            if known.get("rtf") is not None and known["rtf"] > max_rtf and not force:
+                tried.append((tier, known["rtf"]))
+                continue                                  # measured before: too slow here
+            self.capabilities["natural_voice"] = f"getting the {tier} model ready"
+            if tier == "large":
+                while not q.model_ready(self.cfg.models_dir, "large"):
+                    await asyncio.sleep(30)               # downloading with everything else (Settings shows it)
+            elif not q.model_ready(self.cfg.models_dir, "small"):
+                from jarvis.models import ModelManager
+
+                mm = ModelManager(self.cfg.models_dir)
+                mm.want("human_small")
+                if not await asyncio.to_thread(mm.ensure, "human_small"):
+                    self.capabilities["natural_voice"] = "the lighter model couldn't download; using Classic"
+                    break
+            if not known and not settled:
+                # time it once start-up has settled (models loading at the same time made it read slow)
+                await asyncio.sleep(float(self.cfg.get("voice.tts.natural_settle_seconds", 45)))
+                settled = True
+            while self._turn_active:
+                await asyncio.sleep(1)
+            nv = q.QwenVoice(voice, self.cfg.models_dir, max_rtf=99.0 if force else max_rtf, tier=tier)
+            try:
+                rtf = await asyncio.to_thread(nv.load, not known)
+                rtf = float(known["rtf"]) if known else rtf
+                if not known:
+                    self.memory.set(key, {"rtf": round(rtf, 3)})
+                if rtf > max_rtf and not force:
+                    raise q.TooSlow(f"{rtf:.2f}x real time")
+            except q.TooSlow:
+                rtf = float(nv.rtf or (known or {}).get("rtf") or 9.0)
                 self.memory.set(key, {"rtf": round(rtf, 3)})
-        except q.TooSlow as exc:
-            self.memory.set(key, {"rtf": round(float(nv.rtf or 9.0), 3)})
-            nv.close()
-            log.warning("natural voice too slow on this Mac (%s): keeping Classic", exc)
-            self.capabilities["natural_voice"] = f"too slow here ({exc})"
-            if not self.memory.get("natural_voice_slow_told"):
-                self.memory.set("natural_voice_slow_told", True)
-                await self.announce("My natural voice is a touch too slow on this Mac, so I'll keep the classic one "
-                                    "for now. Everything else works the same.", "normal")
+                nv.close()
+                log.warning("natural voice (%s model) too slow on this Mac (%.2fx real time)", tier, rtf)
+                tried.append((tier, rtf))
+                continue
+            except Exception as exc:
+                nv.close()
+                log.warning("natural voice (%s model) unavailable: %s", tier, exc)
+                tried.append((tier, None))
+                continue
+            if self.cfg.get("voice.tts.voice") != voice:  # changed while it loaded
+                nv.close()
+                return
+            old, self.speaker.backend = self.speaker.backend, nv
+            self.speaker._cache = {}
+            if self.cfg.get("voice.spoken_acks", True):
+                self.speaker.prepare(self.ack_phrases())
+            if getattr(old, "name", "") == "qwen3":
+                old.close()
+            label = q.HUMAN_VOICES[voice]["label"]
+            how = "forced on" if force and rtf > max_rtf else f"{rtf:.2f}x real time"
+            self.capabilities.update(tts="qwen3", natural_voice=f"{label} on the {tier} model ({how})")
+            self.boot(f"Voice: {label} (natural, {tier} model)", True)
             return
-        except Exception as exc:
-            nv.close()
-            log.warning("natural voice unavailable: %s", exc)
-            self.capabilities["natural_voice"] = f"unavailable ({exc})"
-            return
-        if self.cfg.get("voice.tts.voice") != voice:      # changed while it loaded
-            nv.close()
-            return
-        old, self.speaker.backend = self.speaker.backend, nv
-        self.speaker._cache = {}
-        if self.cfg.get("voice.spoken_acks", True):
-            self.speaker.prepare(self.ack_phrases())
-        if getattr(old, "name", "") == "qwen3":
-            old.close()
-        self.capabilities.update(tts="qwen3", natural_voice=f"{q.HUMAN_VOICES[voice]['label']}, {rtf:.2f}x real time")
-        self.boot(f"Voice: {q.HUMAN_VOICES[voice]['label']} (natural)", True)
+        speeds = ", ".join(f"{t} model {r:.2f}x" for t, r in tried if r) or "not measured"
+        self.capabilities["natural_voice"] = f"too slow on this Mac ({speeds} real time); using Classic"
+        if not self.memory.get(f"natural_voice_told:{version()}"):
+            self.memory.set(f"natural_voice_told:{version()}", True)
+            await self.announce("My natural voice can't quite keep up on this Mac, so I'm using the classic one. "
+                                "You can switch it on anyway in Settings.", "normal")
 
     CALL_APPS = {"FaceTime", "zoom.us", "Webex", "Cisco Webex Meetings", "Microsoft Teams", "Skype"}
 

@@ -77,47 +77,59 @@ def test_timing_decides(monkeypatch, tmp_path):
             nv.close()
 
 
-def test_upgrade_switches_only_when_ready_and_fast(cfg, monkeypatch, tmp_path):
+def _app(cfg, monkeypatch, speeds, force=False):
+    """A JARVIS whose natural voice measures `speeds` = {tier: real-time factor} on this 'Mac'."""
     from jarvis.core.orchestrator import Jarvis
 
     app = Jarvis(cfg, headless=True)
     tts = app.cfg.data.setdefault("voice", {}).setdefault("tts", {})
-    tts.update(voice="butler", natural_settle_seconds=0)
+    tts.update(voice="butler", natural_settle_seconds=0, natural_force=force)
     app.speaker = SimpleNamespace(backend=SimpleNamespace(name="kokoro-onnx"), _cache={}, prepare=lambda t: None)
     monkeypatch.setattr(q, "supported", lambda: True)
-    monkeypatch.setattr(q, "model_ready", lambda d: True)
+    monkeypatch.setattr(q, "model_ready", lambda d, tier="large": True)
     said, loads = [], []
 
     async def announce(text, priority="normal"):
         said.append(text)
     app.announce = announce
 
-    class Slow(q.QwenVoice):
+    class Timed(q.QwenVoice):
         def load(self, measure=True):
-            loads.append(measure)
-            self.rtf = 1.4
-            raise q.TooSlow("1.40x real time")
-    monkeypatch.setattr(q, "QwenVoice", Slow)
+            loads.append((self.tier, measure))
+            self.rtf = speeds[self.tier]
+            if self.rtf > self.max_rtf:
+                raise q.TooSlow(f"{self.rtf:.2f}x real time")
+            return self.rtf
+    monkeypatch.setattr(q, "QwenVoice", Timed)
+    return app, said, loads
+
+
+def test_the_lighter_model_takes_over_when_the_larger_is_too_slow(cfg, monkeypatch):
+    app, said, loads = _app(cfg, monkeypatch, {"large": 0.94, "small": 0.62})     # the real Mac's numbers
     asyncio.run(app.upgrade_voice())
-    assert app.speaker.backend.name == "kokoro-onnx" and said and "too slow" in said[0]
-    asyncio.run(app.upgrade_voice())                  # next start, same version: decided already
-    assert loads == [True] and len(said) == 1          # not loaded or timed again, not said again
-
-    from jarvis import version
-
-    app.memory.set(f"natural_voice_speed:{version()}", None)   # a new version: measured afresh
-
-    class Fast(q.QwenVoice):
-        def load(self, measure=True):
-            loads.append(measure)
-            return 0.6
-    monkeypatch.setattr(q, "QwenVoice", Fast)
-    asyncio.run(app.upgrade_voice())
-    assert app.speaker.backend.name == "qwen3" and app.capabilities["tts"] == "qwen3"
+    assert app.speaker.backend.name == "qwen3" and app.speaker.backend.tier == "small"
+    assert "small model" in app.capabilities["natural_voice"] and not said
     app.speaker.backend.close()
     app.speaker.backend = SimpleNamespace(name="kokoro-onnx")
-    asyncio.run(app.upgrade_voice())                  # known fast: loads without timing again
-    assert loads[-1] is False and app.speaker.backend.name == "qwen3"
+    asyncio.run(app.upgrade_voice())                   # next start: no re-timing, straight to the small one
+    assert loads[-1] == ("small", False) and app.speaker.backend.tier == "small"
+    app.speaker.backend.close()
+
+
+def test_both_too_slow_means_classic_said_once(cfg, monkeypatch):
+    app, said, loads = _app(cfg, monkeypatch, {"large": 1.3, "small": 1.1})
+    asyncio.run(app.upgrade_voice())
+    assert app.speaker.backend.name == "kokoro-onnx" and len(said) == 1 and "Settings" in said[0]
+    assert "too slow" in app.capabilities["natural_voice"]
+    asyncio.run(app.upgrade_voice())
+    assert len(said) == 1 and len(loads) == 2           # remembered: not timed or said again
+
+
+def test_you_can_have_it_anyway(cfg, monkeypatch):
+    app, said, loads = _app(cfg, monkeypatch, {"large": 0.95, "small": 0.95}, force=True)
+    asyncio.run(app.upgrade_voice())
+    assert app.speaker.backend.name == "qwen3" and app.speaker.backend.tier == "large"
+    assert "forced on" in app.capabilities["natural_voice"] and not said
     app.speaker.backend.close()
 
 

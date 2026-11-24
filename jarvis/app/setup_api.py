@@ -450,6 +450,7 @@ def make_router(sup) -> APIRouter:
                         for k, v in qwen_tts.HUMAN_VOICES.items()] if natural_ok else [],
             "natural_ready": sup.models.ready("human"),
             "natural_status": (getattr(j, "capabilities", {}) or {}).get("natural_voice") if j else None,
+            "natural_force": bool(sup.cfg.get("voice.tts.natural_force", False)),
             "presets": [{"id": k, "label": v["label"], "about": v["about"]} for k, v in VOICE_PRESETS.items()],
             "mac": [{"id": f"mac:{n}", "label": n, "about": "Apple voice, built into macOS"} for n in good or british[:4]],
             "mac_best": best_mac_voice(installed) if installed else None,
@@ -479,6 +480,18 @@ def make_router(sup) -> APIRouter:
             return JSONResponse({"ok": False, "error": "unknown voice"}, status_code=400)
         _write_user_config(sup.cfg, {"voice": {"tts": tts}})
         return {"ok": True, "current": _current_voice(sup.cfg)}
+
+    @r.post("/api/setup/natural-force")
+    async def natural_force(body: dict = Body(...)):
+        """Use the natural voice even if this Mac runs it a little slower than real time."""
+        on = bool(body.get("enabled"))
+        _write_user_config(sup.cfg, {"voice": {"tts": {"natural_force": on}}})
+        j = sup.jarvis
+        if j is not None:
+            j.cfg.data.setdefault("voice", {}).setdefault("tts", {})["natural_force"] = on
+            if on:
+                spawn(j.upgrade_voice())
+        return {"ok": True, "enabled": on}
 
     @r.post("/api/setup/hand-control")
     async def hand_control(body: dict = Body(...)):

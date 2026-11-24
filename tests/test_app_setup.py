@@ -179,3 +179,11 @@ def test_settings_are_saved_all_or_nothing(tmp_path, monkeypatch):
     cfg = load_config()
     _write_user_config(cfg, {"owner": {"name": "Tony"}})
     assert "Tony" in (tmp_path / "config.yaml").read_text() and not (tmp_path / "config.yaml.tmp").exists()
+
+
+def test_natural_voice_override_switch(cfg):
+    sup, c = make_client(cfg)
+    assert c.get("/api/setup/voices").json()["natural_force"] is False
+    assert c.post("/api/setup/natural-force", json={"enabled": True}).json() == {"ok": True, "enabled": True}
+    assert "natural_force: true" in cfg.user_config_path.read_text()
+    assert c.get("/api/setup/voices").json()["natural_force"] is True

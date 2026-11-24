@@ -75,8 +75,12 @@ def groups(stt_model: str = "small.en") -> list[Group]:
             Asset("voices-v1.0.bin", [f"{KOKORO}/voices-v1.0.bin"], 28_214_398),
         ]),
         Group("human", "Natural voice", "His natural, human-sounding voice (Qwen3-TTS, about 2.3 GB)", [
-            Asset(f"{qwen.DIRNAME}/{f}", [f"{HF}/{qwen.REPO}/resolve/main/{f}"], size)
-            for f, size in qwen.FILES.items()], optional=True),
+            Asset(f"{qwen.TIERS['large']['dir']}/{f}", [f"{HF}/{qwen.TIERS['large']['repo']}/resolve/main/{f}"], size)
+            for f, size in qwen.TIERS["large"]["files"].items()], optional=True),
+        Group("human_small", "Natural voice (lighter)",
+              "The same voice on a lighter model, for a Mac the larger one is too slow on (about 1.7 GB)", [
+            Asset(f"{qwen.TIERS['small']['dir']}/{f}", [f"{HF}/{qwen.TIERS['small']['repo']}/resolve/main/{f}"], size)
+            for f, size in qwen.TIERS["small"]["files"].items()], optional=True),
         Group("ears", "Speech recognition",
               "Understands what you say (Whisper), when you've finished (Smart Turn) and that it's you (Voice ID)",
               whisper_assets(stt_model) + [

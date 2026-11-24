@@ -476,9 +476,13 @@
     markVoice();
     $("voice-hint").innerHTML = (v.natural || []).length && v.natural.some((o) => o.id === v.current) && !v.natural_ready
       ? "Downloading the natural voice (about 2.3 GB). I'll use the Classic voice until it's ready, then switch by myself."
-      : v.natural_status && /slow/.test(v.natural_status) ? "The natural voices are a touch too slow on this Mac, so I'm using the Classic voice."
+      : v.natural_status && /slow/.test(v.natural_status) && !v.natural_force ? "The natural voice can't quite keep up on this Mac, so I'm using Classic. Switch it on anyway below."
       : !v.neural_ready ? "My neural voices are still downloading; the Apple voices work right away."
       : v.mac_has_premium ? "" : 'Prefer an Apple voice? Download a free Premium one (Jamie is excellent) in <a href="#" id="get-voices">Spoken Content settings</a>, then come back.';
+    const nat = (v.natural || []).length > 0;
+    $("natural-row").hidden = !nat;
+    $("opt-natural-force").checked = !!v.natural_force;
+    if (v.natural_status) $("natural-status").textContent = `Now: ${v.natural_status}.`;
     const gv = $("get-voices"); if (gv) gv.onclick = (e) => { e.preventDefault(); api("/api/setup/open-voice-settings", {}).catch(() => {}); };
   }
   function markVoice() {
@@ -507,6 +511,10 @@
     } catch (e) { $("speech-err").textContent = e.message; }
   }
   $("speech-next").onclick = nextStep;
+  $("opt-natural-force").onchange = async () => {
+    try { await api("/api/setup/natural-force", { enabled: $("opt-natural-force").checked }); } catch (e) {}
+    setTimeout(loadVoices, 1500);
+  };
   // Hand control: a live switch (nothing saved; it always starts off)
   const HAND_D = "Every gesture, only while this is on. Ask me any time: “hand control on”. The pointer is separate: say “air mouse”.";
   $("opt-hand").onchange = async () => {

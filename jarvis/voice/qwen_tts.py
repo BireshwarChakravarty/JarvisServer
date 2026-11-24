@@ -22,15 +22,23 @@ import numpy as np
 
 log = logging.getLogger("jarvis.qwen_tts")
 
-REPO = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit"
-DIRNAME = "qwen3-tts-1.7b-base-4bit"
-FILES = {                       # what the model needs, with sizes (bytes) for download progress
+_COMMON = {
     "config.json": 5_522, "generation_config.json": 245, "merges.txt": 1_671_839,
-    "model.safetensors": 1_649_238_423, "model.safetensors.index.json": 78_070,
     "preprocessor_config.json": 127, "tokenizer_config.json": 7_344, "vocab.json": 2_776_833,
     "speech_tokenizer/config.json": 2_336, "speech_tokenizer/configuration.json": 76,
     "speech_tokenizer/model.safetensors": 682_293_092, "speech_tokenizer/preprocessor_config.json": 234,
 }
+# Two sizes of the same model, both speaking the same designed voices. The larger sounds a touch better;
+# the smaller is about 40% lighter, for a Mac where the larger can't keep up with real-time speech.
+TIERS = {
+    "large": {"repo": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit", "dir": "qwen3-tts-1.7b-base-4bit",
+              "group": "human", "files": {**_COMMON, "model.safetensors": 1_649_238_423,
+                                         "model.safetensors.index.json": 78_070}},
+    "small": {"repo": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-4bit", "dir": "qwen3-tts-0.6b-base-4bit",
+              "group": "human_small", "files": {**_COMMON, "model.safetensors": 1_024_490_700,
+                                               "model.safetensors.index.json": 77_731}},
+}
+REPO, DIRNAME, FILES = TIERS["large"]["repo"], TIERS["large"]["dir"], TIERS["large"]["files"]
 
 # The words every reference recording says (the model is given them alongside the audio).
 REF_TEXT = ("Good evening, sir. I've taken the liberty of moving your three o'clock to tomorrow morning. "
@@ -47,13 +55,13 @@ DEFAULT_VOICE = "butler"
 MAX_RTF = 0.9                   # it must speak faster than this fraction of real time to be used
 
 
-def model_dir(models_dir: Path) -> Path:
-    return Path(models_dir) / DIRNAME
+def model_dir(models_dir: Path, tier: str = "large") -> Path:
+    return Path(models_dir) / TIERS[tier]["dir"]
 
 
-def model_ready(models_dir: Path) -> bool:
-    d = model_dir(models_dir)
-    return all((d / f).exists() for f in FILES)
+def model_ready(models_dir: Path, tier: str = "large") -> bool:
+    d = model_dir(models_dir, tier)
+    return all((d / f).exists() for f in TIERS[tier]["files"])
 
 
 def supported() -> bool:
@@ -81,12 +89,13 @@ class QwenVoice:
     name = "qwen3"
     sample_rate = 24000
 
-    def __init__(self, voice: str, models_dir: Path, max_rtf: float = MAX_RTF) -> None:
+    def __init__(self, voice: str, models_dir: Path, max_rtf: float = MAX_RTF, tier: str = "large") -> None:
         if voice not in HUMAN_VOICES:
             raise ValueError(f"unknown voice {voice!r}")
         self.voice = voice
+        self.tier = tier
         self.ref = VOICES_DIR / f"{voice}.wav"
-        self.dir = model_dir(models_dir)
+        self.dir = model_dir(models_dir, tier)
         self.max_rtf = max_rtf
         self.rtf: float | None = None
         self._jobs: queue.Queue = queue.Queue()       # live speech: always first
