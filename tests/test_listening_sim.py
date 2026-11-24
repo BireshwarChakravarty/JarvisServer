@@ -84,8 +84,18 @@ class FakeWake:
             self.run = 0
         return False
 
+    last_score = 0.0
+
     def reset(self):
         self.run = 0
+
+
+class NearMissWake(FakeWake):
+    """Apple's processed audio: "Hey Jarvis" scores 0.3, never past the bar."""
+
+    def process(self, frame, threshold=None):
+        self.last_score = 0.3 if int(np.abs(frame).max()) == WAKE_AMP else 0.0
+        return False
 
 
 class FakeSTT:
@@ -639,8 +649,12 @@ def _talk_over(amp, seconds, after=1.0):
     return extra
 
 
-def _echo_cancelled(app, words=None):
+def _echo_cancelled(app, words=None, voice_id=True):
+    from types import SimpleNamespace
+
     app.mic.echo_cancelled = True           # Apple's voice processing keeps his voice out of the mic
+    if voice_id:                            # "learn my voice" done: Voice ID recognises you
+        app.voice_id = SimpleNamespace(active=True, check=lambda audio, learn=True: ("you", 0.8))
     for a, w in (words or {}).items():
         app.stt.words[a] = w
 
@@ -671,6 +685,39 @@ def test_a_quick_mm_hm_doesnt_stop_him(cfg):
     assert not stops
 
 
+def test_without_voice_id_his_own_echo_never_interrupts_him(cfg):
+    """No Voice ID: nothing tells your voice from his echo, so talking over him needs "Jarvis"
+    (this was a real bug: he stopped himself and transcribed his own voice)."""
+    OVER = 6121
+    stops = []
+
+    def setup(a):
+        _echo_cancelled(a, {OVER: "jeroonanak"}, voice_id=False)
+        real = a.interrupt
+        a.interrupt = lambda: (stops.append(1), real())[1]
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.0, "tell me something"),
+                           ("silence", 7.0, "")], replies={"tell me something": LONG}, echo=False,
+                     extra=_talk_over(OVER, 1.3), setup=setup)
+    assert not stops and asked[0] == "tell me something" and "jeroonanak" not in asked, (asked, app.stt.heard)
+
+
+def test_a_voice_that_isnt_clearly_yours_doesnt_interrupt(cfg):
+    from types import SimpleNamespace
+
+    OVER = 6121
+    stops = []
+
+    def setup(a):
+        _echo_cancelled(a, {OVER: "on the news tonight"})
+        a.voice_id = SimpleNamespace(active=True, check=lambda audio, learn=True: ("unsure", 0.4))
+        real = a.interrupt
+        a.interrupt = lambda: (stops.append(1), real())[1]
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("say", 1.0, "tell me something"),
+                           ("silence", 7.0, "")], replies={"tell me something": LONG}, echo=False,
+                     extra=_talk_over(OVER, 1.5), setup=setup)
+    assert not stops, (asked, app.stt.heard)
+
+
 def test_without_echo_cancellation_talking_over_him_needs_the_wake_word(cfg):
     """His own voice is in the mic then: only a clear "Hey Jarvis" may interrupt, never just sound."""
     OVER = 6121
@@ -678,3 +725,33 @@ def test_without_echo_cancellation_talking_over_him_needs_the_wake_word(cfg):
                            ("silence", 7.0, "")], replies={"tell me something": LONG},
                      extra=_talk_over(OVER, 1.3), setup=lambda a: a.stt.words.__setitem__(OVER, "noise"))
     assert asked[0] == "tell me something" and "noise" not in asked[1:2], (asked, app.stt.heard)
+
+
+def test_a_near_miss_wake_word_gets_a_second_chance(cfg):
+    """The detector only nearly hears "Hey Jarvis": JARVIS reads the last seconds, finds the name, and
+    the request that follows is still heard in full."""
+    def setup(app):
+        app.wake = NearMissWake()
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("wake", 0.6, ""), ("silence", 0.4, ""),
+                           ("say", 1.2, "what's the weather like"), ("silence", 4.5, "")], setup=setup)
+    assert asked == ["what's the weather like"], (asked, app.stt.heard)
+
+
+def test_a_near_miss_on_other_words_stays_asleep(cfg):
+    """Something that merely sounds a bit like it ("hey, Travis"): checked, and ignored."""
+    checked = []
+
+    class Close(FakeWake):
+        def process(self, frame, threshold=None):
+            loud = int(np.abs(frame).max())
+            self.last_score = 0.3 if loud > 1000 and loud != WAKE_AMP else 0.0   # any speech nearly scores
+            return False
+
+    def setup(app):
+        app.wake = Close()
+        real = app.stt.transcribe
+        app.stt.transcribe = lambda audio: (checked.append(1), real(audio))[1]
+    app, asked = sim(cfg, [("silence", 0.4, ""), ("say", 0.8, "hey travis"), ("silence", 1.0, ""),
+                           ("say", 1.0, "pass the salt"), ("silence", 3.0, "")], setup=setup)
+    assert checked, "the near-miss was checked"
+    assert asked == [], (asked, app.stt.heard)

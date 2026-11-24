@@ -506,7 +506,7 @@ class Speaker:
             # duration lets the HUD pace subtitles to the actual audio, word for word
             bus.emit("speaking", text=text, duration=round(len(audio) / max(1, sr), 2))
             mark, self.turn_mark = self.turn_mark, None
-            if mark:
+            if mark and time.monotonic() - mark < 60:
                 gap = time.monotonic() - mark
                 log.info("first word %.2f s after you stopped (%s)", gap, self.backend.name)
                 bus.emit("latency", seconds=round(gap, 2), voice=self.backend.name)

@@ -44,7 +44,7 @@ HUMAN_VOICES = {                # chosen by ear from the voice lab's candidates
 }
 DEFAULT_VOICE = "butler"
 
-MAX_RTF = 0.85                  # it must speak faster than this fraction of real time to be used
+MAX_RTF = 0.9                   # it must speak faster than this fraction of real time to be used
 
 
 def model_dir(models_dir: Path) -> Path:
@@ -145,8 +145,9 @@ class QwenVoice:
         return np.concatenate(chunks) if chunks else np.zeros(1, dtype=np.float32)
 
     # ── public ─────────────────────────────────────────────────────────────
-    def load(self) -> float:
-        """Load, warm up and time it on this Mac. Returns the real-time factor; raises TooSlow."""
+    def load(self, measure: bool = True) -> float:
+        """Load, warm up and (unless already known) time it on this Mac: the median of three phrases,
+        so one slow moment doesn't decide. Returns the real-time factor; raises TooSlow."""
         if not self.ref.exists():
             raise FileNotFoundError(self.ref)
 
@@ -156,14 +157,18 @@ class QwenVoice:
             self.model = load_model(self.dir)
             self.sample_rate = int(getattr(self.model, "sample_rate", 24000) or 24000)
             self._generate("Good evening.")                   # first run compiles: not timed
-            took = spoken = 0.0
-            for line in ("Right. Two meetings this afternoon, and it's drizzling.", "Done. The lights are off."):
+            if not measure:
+                return 0.0
+            rtfs = []
+            for line in ("Right. Two meetings this afternoon, and it's drizzling.", "Done. The lights are off.",
+                         "Pepper's message says the board call moved to Thursday."):
                 t0 = time.perf_counter()
                 audio = self._generate(line)
-                took += time.perf_counter() - t0
-                spoken += len(audio) / self.sample_rate
-            return took / max(spoken, 0.1)
+                rtfs.append((time.perf_counter() - t0) / max(len(audio) / self.sample_rate, 0.1))
+            return sorted(rtfs)[1]
         self.rtf = float(self._call(work, timeout=600))
+        if not measure:
+            return self.rtf
         log.info("natural voice %s: %.2fx real time on this Mac", self.voice, self.rtf)
         if self.rtf > self.max_rtf:
             raise TooSlow(f"{self.rtf:.2f}x real time")

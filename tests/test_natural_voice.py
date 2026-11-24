@@ -81,29 +81,43 @@ def test_upgrade_switches_only_when_ready_and_fast(cfg, monkeypatch, tmp_path):
     from jarvis.core.orchestrator import Jarvis
 
     app = Jarvis(cfg, headless=True)
-    app.cfg.data.setdefault("voice", {}).setdefault("tts", {})["voice"] = "butler"
+    tts = app.cfg.data.setdefault("voice", {}).setdefault("tts", {})
+    tts.update(voice="butler", natural_settle_seconds=0)
     app.speaker = SimpleNamespace(backend=SimpleNamespace(name="kokoro-onnx"), _cache={}, prepare=lambda t: None)
     monkeypatch.setattr(q, "supported", lambda: True)
     monkeypatch.setattr(q, "model_ready", lambda d: True)
-    said = []
+    said, loads = [], []
 
     async def announce(text, priority="normal"):
         said.append(text)
     app.announce = announce
 
     class Slow(q.QwenVoice):
-        def load(self):
+        def load(self, measure=True):
+            loads.append(measure)
+            self.rtf = 1.4
             raise q.TooSlow("1.40x real time")
     monkeypatch.setattr(q, "QwenVoice", Slow)
     asyncio.run(app.upgrade_voice())
     assert app.speaker.backend.name == "kokoro-onnx" and said and "too slow" in said[0]
+    asyncio.run(app.upgrade_voice())                  # next start, same version: decided already
+    assert loads == [True] and len(said) == 1          # not loaded or timed again, not said again
+
+    from jarvis import version
+
+    app.memory.set(f"natural_voice_speed:{version()}", None)   # a new version: measured afresh
 
     class Fast(q.QwenVoice):
-        def load(self):
-            return 0.4
+        def load(self, measure=True):
+            loads.append(measure)
+            return 0.6
     monkeypatch.setattr(q, "QwenVoice", Fast)
     asyncio.run(app.upgrade_voice())
     assert app.speaker.backend.name == "qwen3" and app.capabilities["tts"] == "qwen3"
+    app.speaker.backend.close()
+    app.speaker.backend = SimpleNamespace(name="kokoro-onnx")
+    asyncio.run(app.upgrade_voice())                  # known fast: loads without timing again
+    assert loads[-1] is False and app.speaker.backend.name == "qwen3"
     app.speaker.backend.close()
 
 

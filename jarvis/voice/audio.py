@@ -172,6 +172,7 @@ class WakeWord:
         self._model = None
         self._cooldown_until = 0.0
         self.available = False
+        self.last_score = 0.0           # the latest frame's score (for near-miss checks and diagnostics)
 
     def load(self) -> bool:
         try:
@@ -224,7 +225,8 @@ class WakeWord:
         if self._model is None:
             return False
         scores = self._model.predict(frame)
-        score = max(scores.values()) if scores else 0.0
+        score = float(max(scores.values())) if scores else 0.0
+        self.last_score = score
         now = time.monotonic()
         if score >= (threshold if threshold is not None else self.threshold) and now >= self._cooldown_until:
             self._cooldown_until = now + 1.5

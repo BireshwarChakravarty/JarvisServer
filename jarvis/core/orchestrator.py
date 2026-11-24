@@ -466,6 +466,14 @@ class Jarvis:
                 log.exception("voice loop error")
                 await asyncio.sleep(1)
 
+    def _wake_threshold(self) -> float:
+        """How sure the detector must be. Apple's echo-cancelled audio scores "Hey Jarvis" a little lower
+        than raw audio, so it gets its own (slightly lower) bar."""
+        base = float(self.cfg.get("voice.wake_threshold", 0.5))
+        if self.echo_cancelled:
+            return float(self.cfg.get("voice.wake_threshold_echo_cancelled", min(base, 0.4)))
+        return base
+
     def standby_blocks(self) -> bool:
         return self.mic is None or self.mic.muted
 
@@ -477,6 +485,8 @@ class Jarvis:
         from jarvis.voice.stt import strip_wake_phrase
 
         recent: collections.deque = collections.deque(maxlen=8)     # the last ~0.64 s of audio
+        heard: collections.deque = collections.deque(maxlen=30)     # the last ~2.4 s, for a near-miss check
+        near_best, near_at, checked_at = 0.0, 0.0, 0.0
         self._wake_preroll = None
         # forget a press left over from a conversation that has ended, but not one made just now
         # (a ✌️ or mic tap that lands as he goes back to waiting must still count)
@@ -500,9 +510,33 @@ class Jarvis:
                 except TimeoutError:
                     continue
                 recent.append(frame)
+                heard.append(frame)
                 if self.vad is not None and self.vad.is_speech(frame):
                     self._room_speech_at = time.monotonic()     # people talking: announcements wait
-                if self.wake.process(frame):
+                woke = self.wake.process(frame, threshold=self._wake_threshold())
+                score, now = self.wake.last_score, time.monotonic()
+                if not woke and score >= float(self.cfg.get("voice.wake_near_miss", 0.12)):
+                    near_best, near_at = max(near_best, score), now
+                elif (not woke and near_best and now - near_at > 0.3 and now - checked_at > 2.0
+                      and self.stt is not None):
+                    # Second chance: the detector nearly heard "Hey Jarvis" (Apple's echo-cancelled audio
+                    # can score a little low). Read the last couple of seconds and look for the name.
+                    checked_at, best = now, near_best
+                    near_best = 0.0
+                    clip = np.concatenate(list(heard)).astype(np.float32) / 32768.0
+                    text = await asyncio.to_thread(self.stt.transcribe, clip)
+                    said, _ = strip_wake_phrase(text)
+                    log.info("wake near-miss %.2f (needs %.2f): heard %r → %s", best, self._wake_threshold(),
+                             text[:60], "wake" if said else "not the wake word")
+                    if said and self.claim_voice("mac"):
+                        bus.emit("wake", score=round(best, 3), second_chance=True)
+                        self._wake_preroll = None           # what you said since is still queued
+                        if self.cfg.get("voice.spoken_acks", True):
+                            self._ack_if_pause = True       # as for a normal wake: "Sir?" only if you pause
+                        else:
+                            self.speaker.play_tone("wake")
+                        return None
+                if woke:
                     # the detector decides a moment after "Hey Jarvis" ends: keep what was said meanwhile
                     self._wake_preroll = list(recent)
                     if not self.claim_voice("mac"):
@@ -845,17 +879,21 @@ class Jarvis:
         """While JARVIS thinks/talks, watch for you to interrupt: just start talking (when echo
         cancellation keeps his own voice out of the mic), say "Hey Jarvis", or ✋.
 
-        Talking over him works like it does with a person: he stops within about half a second and
-        what you've started saying becomes your next request. "Mm-hm", "yeah", a cough (anything
-        under about 0.6 s of speech) doesn't stop him; with Voice ID set up, only your voice does."""
+        Talking over him works like it does with a person: he stops within about a second and what
+        you've started saying becomes your next request. It needs Voice ID ("learn my voice"): without
+        it, nothing tells your voice from the bit of his own that the echo canceller lets through, and
+        he'd stop himself mid-sentence and listen to his own echo. Speech must be clearly yours, loud
+        and sustained; "mm-hm", "yeah", a cough don't stop him. Replies going to the phone aren't
+        interrupted from the Mac's microphone."""
         from jarvis.voice.audio import FRAME, SAMPLE_RATE, frame_rms
 
         self._interrupt.clear()
         barge = bool(self.cfg.get("voice.barge_in", True)) and self.wake is not None and self.wake.available
+        vid = self.voice_id
         talk = (bool(self.cfg.get("voice.barge_in_by_voice", True)) and self.echo_cancelled
-                and self.vad is not None)
-        need = float(self.cfg.get("voice.barge_in_seconds", 0.6))
-        floor = max(0.008, your_level * 0.4) if your_level else 0.01
+                and self.vad is not None and vid is not None and vid.active)
+        need = float(self.cfg.get("voice.barge_in_seconds", 0.9))
+        floor = max(0.02, your_level * 0.6) if your_level else 0.03
         frame_s = FRAME / SAMPLE_RATE
         run: list = []                      # your speech so far while he talks (with short gaps)
         spoken, gap = 0.0, 0.0
@@ -873,7 +911,7 @@ class Jarvis:
             if not (self.speaker.speaking or guiding):
                 run, spoken, gap = [], 0.0, 0.0
                 continue                # thinking: a false "Hey Jarvis" here would throw your request away
-            if talk and self.speaker.speaking:
+            if talk and self.speaker.speaking and getattr(self.speaker, "route", None) is None:
                 if self.vad.is_speech(frame) and frame_rms(frame) >= floor:
                     run.append(frame)
                     spoken, gap = spoken + frame_s, 0.0
@@ -908,17 +946,17 @@ class Jarvis:
         return "done"
 
     async def _interrupting_is_you(self, frames: list) -> bool:
-        """With Voice ID set up, only your voice may talk over him (not the TV, not a guest)."""
+        """Only your voice, recognised by Voice ID, may talk over him (not the TV, a guest or his echo)."""
         vid = self.voice_id
         if vid is None or not vid.active:
-            return True
+            return False
         audio = np.concatenate(frames).astype(np.float32) / 32768.0
         try:
             kind, score = await asyncio.to_thread(vid.check, audio, False)
         except Exception:
             return True
-        if kind == "not_you":
-            log.info("someone else talked over him (%.2f): carrying on", score)
+        if kind != "you":
+            log.info("talked over him, but not clearly you (%s %.2f): carrying on", kind, score)
             return False
         return True
 
@@ -1097,6 +1135,8 @@ class Jarvis:
     async def _request_worker(self) -> None:
         while True:
             text, source, route, done = await self._requests.get()
+            if self.speaker is not None:
+                self.speaker.turn_mark = None              # the reply time is measured for your voice at the Mac only
             try:
                 if self.speaker:
                     await self.speaker.wait_done(timeout=60)
@@ -1466,10 +1506,27 @@ class Jarvis:
             return
         while not q.model_ready(self.cfg.models_dir):
             await asyncio.sleep(30)                       # still downloading (Settings shows the progress)
-        nv = q.QwenVoice(voice, self.cfg.models_dir, max_rtf=float(self.cfg.get("voice.tts.natural_max_rtf", q.MAX_RTF)))
+        from jarvis import version
+
+        max_rtf = float(self.cfg.get("voice.tts.natural_max_rtf", q.MAX_RTF))
+        key = f"natural_voice_speed:{version()}"           # decided once per version, so it doesn't flip-flop
+        known = self.memory.get(key) or {}
+        if known.get("rtf") is not None and known["rtf"] > max_rtf:
+            self.capabilities["natural_voice"] = f"too slow here ({known['rtf']:.2f}x real time)"
+            return                                        # measured before: stay on Classic, quietly
+        # time it only once start-up has settled (models loading at the same time made it read slow)
+        await asyncio.sleep(float(self.cfg.get("voice.tts.natural_settle_seconds", 45)) if not known else 0)
+        while self._turn_active:
+            await asyncio.sleep(1)
+        nv = q.QwenVoice(voice, self.cfg.models_dir, max_rtf=max_rtf)
         try:
-            rtf = await asyncio.to_thread(nv.load)
+            rtf = await asyncio.to_thread(nv.load, not known)
+            if known:
+                rtf = float(known["rtf"])
+            else:
+                self.memory.set(key, {"rtf": round(rtf, 3)})
         except q.TooSlow as exc:
+            self.memory.set(key, {"rtf": round(float(nv.rtf or 9.0), 3)})
             nv.close()
             log.warning("natural voice too slow on this Mac (%s): keeping Classic", exc)
             self.capabilities["natural_voice"] = f"too slow here ({exc})"
