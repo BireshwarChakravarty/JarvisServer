@@ -313,6 +313,11 @@ async def record_utterance(
     how loud you were when you asked, so a TV can't even start a recording.
     """
     frames: list[np.ndarray] = list(preroll or [])
+    if min_level and frames:
+        # audio heard before this listen (his voice fading, you already talking) is held to the same
+        # bar: a TV or someone across the room at the end of it isn't you
+        loud = [i for i, f in enumerate(frames) if frame_rms(f) >= min_level]
+        frames = frames[:loud[-1] + 1] if loud else []
     ring: collections.deque = collections.deque(maxlen=6)  # ~0.5 s pre-roll
     started = bool(in_speech and frames)
     silence = 0.0

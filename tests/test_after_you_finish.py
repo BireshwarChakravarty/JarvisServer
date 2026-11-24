@@ -54,6 +54,16 @@ def test_a_follow_up_floor_ignores_the_room_entirely():
     assert audio is not None
 
 
+def test_the_room_in_audio_heard_before_a_follow_up_isnt_you():
+    """His voice fading, then the TV, captured before the follow-up began (a slow Mac): only the loud
+    part is kept, and the TV never reaches speech recognition."""
+    pre = tone(2203, 4) + tone(900, 8)
+    audio, _ = record(silence(16), preroll=pre, in_speech=True, min_level=0.04)
+    assert audio is not None and np.max(np.abs(audio[4 * FRAME:])) == 0
+    audio, _ = record(silence(30), preroll=tone(900, 8), in_speech=True, min_level=0.04)
+    assert audio is None                                              # nothing loud enough: nobody spoke
+
+
 def test_level_is_how_loud_the_voice_was():
     a = np.concatenate(tone(6000, 10) + silence(3)).astype(np.float32) / 32768
     assert 0.12 < level(a) < 0.14 and level(None) == 0.0
