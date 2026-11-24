@@ -474,7 +474,7 @@
     v.presets.forEach((o) => add(o, "neural"));
     markVoice();
     $("voice-hint").innerHTML = (v.natural || []).length && v.natural.some((o) => o.id === v.current) && !v.natural_ready
-      ? "Downloading the natural voice (about 2.3 GB). I'll use the Classic voice until it's ready, then switch by myself."
+      ? "Downloading the natural voice (about 2 GB). I'll use the Classic voice until it's ready, then switch by myself."
       : v.natural_status && /slow/.test(v.natural_status) && !v.natural_force ? "The natural voice can't quite keep up on this Mac, so I'm using Classic. Switch it on anyway below."
       : !v.neural_ready ? "The Classic voices are still downloading; they'll be ready in a minute."
       : "";

@@ -48,10 +48,24 @@ VOICES_DIR = Path(__file__).with_name("voices")
 HUMAN_VOICES = {                # chosen by ear from the voice lab's candidates
     "butler": {"label": "Butler", "about": "Refined English butler: calm, dry, quietly witty"},
     "gentleman": {"label": "Gentleman", "about": "Deep, warm, unflappable English gentleman"},
+    # FRIDAY-style: original Irish voices designed from descriptions (scripts/voice_lab.py, round 2).
+    # "Friday" was chosen as the lighter model speaks it, so that's the only model it uses.
+    "friday": {"label": "Friday", "about": "Soft Irish accent: warm, quick, a light playful edge", "tiers": ["small"]},
+    "friday_calm": {"label": "Friday Calm", "about": "Composed Irish voice: smooth, unflappable, dry humour"},
 }
 DEFAULT_VOICE = "butler"
 
 MAX_RTF = 0.9                   # it must speak faster than this fraction of real time to be used
+
+
+def tiers_for(voice: str) -> list[str]:
+    """The models a voice may use, in the order to try them."""
+    return list(HUMAN_VOICES.get(voice, {}).get("tiers", ["large", "small"]))
+
+
+def group_for(voice: str) -> str:
+    """The download group of the model a voice tries first."""
+    return TIERS[tiers_for(voice)[0]]["group"]
 
 
 def model_dir(models_dir: Path, tier: str = "large") -> Path:

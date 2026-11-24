@@ -1525,22 +1525,24 @@ class Jarvis:
         max_rtf = float(self.cfg.get("voice.tts.natural_max_rtf", q.MAX_RTF))
         settled = False
         tried = []
-        for tier in ("large", "small"):
+        tiers = q.tiers_for(voice)
+        for tier in tiers:
             key = f"natural_voice_speed:{version()}:{tier}"
             known = self.memory.get(key) or {}
             if known.get("rtf") is not None and known["rtf"] > max_rtf and not force:
                 tried.append((tier, known["rtf"]))
                 continue                                  # measured before: too slow here
             self.capabilities["natural_voice"] = f"getting the {tier} model ready"
-            if tier == "large":
-                while not q.model_ready(self.cfg.models_dir, "large"):
+            if tier == tiers[0]:
+                while not q.model_ready(self.cfg.models_dir, tier):
                     await asyncio.sleep(30)               # downloading with everything else (Settings shows it)
-            elif not q.model_ready(self.cfg.models_dir, "small"):
+            elif not q.model_ready(self.cfg.models_dir, tier):
                 from jarvis.models import ModelManager
 
+                group = q.TIERS[tier]["group"]
                 mm = ModelManager(self.cfg.models_dir)
-                mm.want("human_small")
-                if not await asyncio.to_thread(mm.ensure, "human_small"):
+                mm.want(group)
+                if not await asyncio.to_thread(mm.ensure, group):
                     self.capabilities["natural_voice"] = "the lighter model couldn't download; using Classic"
                     break
             if not known and not settled:

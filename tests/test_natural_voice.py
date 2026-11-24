@@ -77,13 +77,13 @@ def test_timing_decides(monkeypatch, tmp_path):
             nv.close()
 
 
-def _app(cfg, monkeypatch, speeds, force=False):
+def _app(cfg, monkeypatch, speeds, force=False, voice="butler"):
     """A JARVIS whose natural voice measures `speeds` = {tier: real-time factor} on this 'Mac'."""
     from jarvis.core.orchestrator import Jarvis
 
     app = Jarvis(cfg, headless=True)
     tts = app.cfg.data.setdefault("voice", {}).setdefault("tts", {})
-    tts.update(voice="butler", natural_settle_seconds=0, natural_force=force)
+    tts.update(voice=voice, natural_settle_seconds=0, natural_force=force)
     app.speaker = SimpleNamespace(backend=SimpleNamespace(name="kokoro-onnx"), _cache={}, prepare=lambda t: None)
     monkeypatch.setattr(q, "supported", lambda: True)
     monkeypatch.setattr(q, "model_ready", lambda d, tier="large": True)
@@ -113,6 +113,15 @@ def test_the_lighter_model_takes_over_when_the_larger_is_too_slow(cfg, monkeypat
     app.speaker.backend = SimpleNamespace(name="kokoro-onnx")
     asyncio.run(app.upgrade_voice())                   # next start: no re-timing, straight to the small one
     assert loads[-1] == ("small", False) and app.speaker.backend.tier == "small"
+    app.speaker.backend.close()
+
+
+def test_friday_speaks_only_through_the_lighter_model(cfg, monkeypatch):
+    app, said, loads = _app(cfg, monkeypatch, {"small": 0.62}, voice="friday")    # as it was chosen
+    asyncio.run(app.upgrade_voice())
+    assert [t for t, _ in loads] == ["small"] and app.speaker.backend.voice == "friday"
+    assert q.group_for("friday") == "human_small" and q.group_for("friday_calm") == "human"
+    assert (q.VOICES_DIR / "friday.wav").exists() and (q.VOICES_DIR / "friday_calm.wav").exists()
     app.speaker.backend.close()
 
 

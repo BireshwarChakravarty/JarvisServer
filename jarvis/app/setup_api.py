@@ -442,7 +442,8 @@ def make_router(sup) -> APIRouter:
             # the natural voices: an instant sample plays in the page; the model downloads when one is chosen
             "natural": [{"id": k, "label": v["label"], "about": v["about"], "sample": f"/static/voices/{k}.mp3"}
                         for k, v in qwen_tts.HUMAN_VOICES.items()] if natural_ok else [],
-            "natural_ready": sup.models.ready("human"),
+            "natural_ready": sup.models.ready(qwen_tts.group_for(_current_voice(sup.cfg))
+                                              if _current_voice(sup.cfg) in qwen_tts.HUMAN_VOICES else "human"),
             "natural_status": (getattr(j, "capabilities", {}) or {}).get("natural_voice") if j else None,
             "natural_force": bool(sup.cfg.get("voice.tts.natural_force", False)),
             "presets": [{"id": k, "label": v["label"], "about": v["about"]} for k, v in VOICE_PRESETS.items()],
@@ -456,13 +457,13 @@ def make_router(sup) -> APIRouter:
         vid = str(body.get("voice") or "")
         if vid in qwen_tts.HUMAN_VOICES:
             _write_user_config(sup.cfg, {"voice": {"tts": {"backend": "auto", "voice": vid}}})
-            sup.models.want("human")
+            sup.models.want(qwen_tts.group_for(vid))
             sup.start_downloads()                         # fetches the natural voice if it isn't here yet
             j = sup.jarvis
             if j is not None:
                 j.cfg.data.setdefault("voice", {}).setdefault("tts", {})["voice"] = vid
                 spawn(j.upgrade_voice())                  # switches as soon as it's ready
-            return {"ok": True, "current": vid, "natural": True, "ready": sup.models.ready("human")}
+            return {"ok": True, "current": vid, "natural": True, "ready": sup.models.ready(qwen_tts.group_for(vid))}
         if vid in VOICE_PRESETS:
             tts = {"backend": "auto", "voice": vid}
         else:
