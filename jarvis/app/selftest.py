@@ -186,6 +186,23 @@ def run() -> int:
         finally:
             nv.close()
 
+    @check("natural conversation: Gemini Live is bundled and a session can be prepared (no network)")
+    def _():
+        from types import SimpleNamespace
+
+        from jarvis.tools.registry import registry
+        from jarvis.voice import live
+
+        if not live.installed():
+            raise RuntimeError("google-genai isn't in the app")
+        fake = SimpleNamespace(cfg=state["cfg"], capabilities={})
+        lv = live.LiveVoice(fake)
+        cfg = lv._config({"time": "now"})
+        n = len(cfg.tools[0].function_declarations)
+        if n < len(list(registry.active())) + 2:
+            raise RuntimeError(f"only {n} tools declared")
+        return f"{n} tools offered to Gemini; voice {cfg.speech_config.voice_config.prebuilt_voice_config.voice_name}"
+
     @check("voice: macOS 'say' fallback", required=False)
     def _():
         from jarvis.voice.tts import MacSay
