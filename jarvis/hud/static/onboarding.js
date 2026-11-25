@@ -561,6 +561,18 @@
     preview.onerror = () => { $("live-err").textContent = "No sample for this voice yet: turn it on and say “Hey Jarvis” to hear it."; };
     preview.play().catch(() => {});
   };
+  $("live-test").onclick = async () => {
+    $("live-err").textContent = "";
+    $("live-status").textContent = "Testing a real Gemini Live conversation…";
+    busy($("live-test"), true);
+    try {
+      const r = await api("/api/setup/live-test", {});
+      $("live-status").textContent = r.ok
+        ? `Working: ${r.model}, first sound after ${r.first_sound_s} s.`
+        : `Not working: ${r.error}.`;
+    } catch (e) { $("live-status").textContent = `Not working: ${e.message}.`; }
+    busy($("live-test"), false);
+  };
   $("get-gemini-key").onclick = (e) => { e.preventDefault(); api("/api/setup/open-url", { url: "https://aistudio.google.com/apikey" }).catch(() => {}); };
   $("opt-natural-force").onchange = async () => {
     try { await api("/api/setup/natural-force", { enabled: $("opt-natural-force").checked }); } catch (e) {}

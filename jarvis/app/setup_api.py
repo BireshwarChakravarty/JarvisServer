@@ -534,6 +534,23 @@ def make_router(sup) -> APIRouter:
             j.capabilities["live_voice"] = "on"
         return {"ok": True, "stored_in": where}
 
+    @r.post("/api/setup/live-test")
+    async def live_test():
+        """A real, short Gemini Live exchange: says exactly what worked or what didn't."""
+        from jarvis.voice import live
+
+        if not live.installed():
+            return {"ok": False, "error": "Gemini Live isn't included in this build"}
+        if not await asyncio.to_thread(live.api_key):
+            return {"ok": False, "error": "add your Gemini key first"}
+        j = sup.jarvis
+        lv = getattr(j, "live", None) if j is not None else None
+        if lv is None:
+            from types import SimpleNamespace
+
+            lv = live.LiveVoice(SimpleNamespace(cfg=sup.cfg, capabilities={}))
+        return await lv.test()
+
     @r.post("/api/setup/live")
     async def live_settings(body: dict = Body(...)):
         from jarvis.voice import live

@@ -155,6 +155,7 @@ class LiveVoice:
         self.model_index = 0
         self.pending: dict[str, tuple[str, dict, str]] = {}   # approval token -> (tool, args, action)
         self.last_error = ""
+        self.level = "full"                        # the session setup Google accepted (see LEVELS)
 
     # ── availability ──────────────────────────────────────────────────────────────────────────────────
     def ready(self) -> bool:
@@ -166,27 +167,58 @@ class LiveVoice:
         log.warning("Gemini Live unavailable (%s): using the on-device voice for a few minutes", why)
         self.j.capabilities["live_voice"] = f"unavailable ({why}); on-device voice for now"
 
-    def _config(self, context: dict | None):
+    # Session setups from richest to plainest. If Google refuses one (a field a model doesn't take), the
+    # next is tried, and the one that works is remembered.
+    LEVELS = ("full", "basic", "plain")
+
+    def _config(self, context: dict | None, level: str = "full"):
         from google.genai import types
 
         voice = str(self.cfg.get("voice.live.voice", DEFAULT_VOICE))
-        tools = [types.Tool(function_declarations=declarations(self._tools()))]
-        aad = types.AutomaticActivityDetection(
-            silence_duration_ms=int(float(self.cfg.get("voice.live.silence_ms", 700))),
-            prefix_padding_ms=200)
-        return types.LiveConnectConfig(
+        decls = declarations(self._tools())
+        if level == "plain":
+            for d in decls:
+                d.behavior = None                 # hand-offs answered in turn rather than in the background
+        cfg = dict(
             response_modalities=["AUDIO"],
             speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(
                 prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice))),
             system_instruction=instructions(self.cfg, context),
-            tools=tools,
+            tools=[types.Tool(function_declarations=decls)],
             input_audio_transcription={},
             output_audio_transcription={},
-            realtime_input_config=types.RealtimeInputConfig(automatic_activity_detection=aad),
-            session_resumption=types.SessionResumptionConfig(handle=self.resume_handle),
-            context_window_compression=types.ContextWindowCompressionConfig(
-                trigger_tokens=24000, sliding_window=types.SlidingWindow(target_tokens=12000)),
         )
+        if level == "full":
+            aad = types.AutomaticActivityDetection(
+                silence_duration_ms=int(float(self.cfg.get("voice.live.silence_ms", 700))), prefix_padding_ms=200)
+            cfg.update(
+                realtime_input_config=types.RealtimeInputConfig(automatic_activity_detection=aad),
+                session_resumption=types.SessionResumptionConfig(handle=self.resume_handle),
+                context_window_compression=types.ContextWindowCompressionConfig(
+                    trigger_tokens=24000, sliding_window=types.SlidingWindow(target_tokens=12000)))
+        return types.LiveConnectConfig(**cfg)
+
+    async def _open(self, context: dict | None):
+        """Connect, trying each model and, if Google refuses a setup, the plainer ones. Returns an async
+        context manager for the session, plus (model, level); raises LiveError with a plain reason."""
+        last: LiveError | None = None
+        for i in range(self.model_index, len(MODELS)):
+            for level in self.LEVELS[self.LEVELS.index(self.level):]:
+                try:
+                    cm = self._client().aio.live.connect(model=MODELS[i], config=self._config(context, level))
+                    session = await cm.__aenter__()
+                except Exception as exc:
+                    last = describe(exc)
+                    log.warning("Gemini Live (%s, %s setup) refused: %s | %s", MODELS[i], level, last.reason,
+                                f"{type(exc).__name__}: {exc}"[:400])
+                    if last.kind == "setup":
+                        continue                  # try a plainer setup
+                    if last.kind == "model":
+                        break                     # try the next model
+                    raise last from None          # network, key or quota: another setup won't help
+                self.model_index, self.level = i, level
+                return cm, session, MODELS[i], level
+        raise last or LiveError("other", "couldn't connect")
 
     def _tools(self) -> list:
         from jarvis.tools.registry import registry
@@ -206,24 +238,63 @@ class LiveVoice:
             context = await self.j._live_context()
         except Exception:
             pass
-        last_err = ""
-        for i in range(self.model_index, len(MODELS)):
-            model = MODELS[i]
+        try:
+            cm, session, model, level = await self._open(context)
+        except LiveError as err:
+            self._failed(err.reason)
+            return False
+        self.j.capabilities["live_voice"] = f"on ({model}, {self.cfg.get('voice.live.voice', DEFAULT_VOICE)})"
+        try:
+            await self._talk(session, q, preroll or [])
+        except Exception as exc:
+            # the session was open: this conversation ends here, and the next one tries Gemini again
+            err = describe(exc)
+            log.warning("Gemini Live conversation ended early: %s | %s", err.reason, f"{type(exc).__name__}: {exc}"[:400])
+            if err.kind in ("quota", "key"):
+                self._failed(err.reason)
+        finally:
             try:
-                async with self._client().aio.live.connect(model=model, config=self._config(context)) as session:
-                    self.model_index = i
-                    self.j.capabilities["live_voice"] = f"on ({model}, {self.cfg.get('voice.live.voice', DEFAULT_VOICE)})"
-                    await self._talk(session, q, preroll or [])
-                    return True
-            except _Ended:
-                return True
-            except Exception as exc:
-                last_err = f"{type(exc).__name__}: {exc}"[:200]
-                log.info("Gemini Live %s didn't connect (%s)", model, last_err)
-                if _quota_or_auth(last_err):
-                    break                         # another model won't help with a key or quota problem
-        self._failed(_plain(last_err))
-        return False
+                await cm.__aexit__(None, None, None)
+            except Exception:
+                pass
+        return True
+
+    async def test(self) -> dict:
+        """One short real exchange, for Settings: connect, ask for a few words, time the first sound."""
+        from google.genai import types
+
+        t0 = time.monotonic()
+        try:
+            cm, session, model, level = await self._open({"now": "a quick test from Settings"})
+        except LiveError as err:
+            self._failed(err.reason)
+            return {"ok": False, "error": err.reason}
+        first = None
+        try:
+            await session.send_client_content(turns=types.Content(role="user", parts=[types.Part(
+                text="This is a connection test. Reply with just: Online and ready.")]), turn_complete=True)
+
+            async def wait():
+                nonlocal first
+                async for msg in session.receive():
+                    if msg.data and first is None:
+                        first = time.monotonic() - t0
+                    if msg.server_content and msg.server_content.turn_complete:
+                        return
+            await asyncio.wait_for(wait(), timeout=20)
+        except Exception as exc:
+            err = describe(exc)
+            return {"ok": False, "error": err.reason}
+        finally:
+            try:
+                await cm.__aexit__(None, None, None)
+            except Exception:
+                pass
+        if first is None:
+            return {"ok": False, "error": "Gemini connected but sent no audio"}
+        self.down_until = 0.0
+        self.j.capabilities["live_voice"] = f"on ({model}, {self.cfg.get('voice.live.voice', DEFAULT_VOICE)})"
+        return {"ok": True, "model": model, "setup": level, "first_sound_s": round(first, 2)}
 
     async def _talk(self, session, q: asyncio.Queue, preroll: list) -> None:
         from google.genai import types
@@ -277,49 +348,58 @@ class LiveVoice:
                 log.info("couldn't return %s's result: %s", call.name, exc)
 
         async def listen_to_him() -> None:
-            async for msg in session.receive():
-                if msg.session_resumption_update and msg.session_resumption_update.new_handle:
-                    self.resume_handle = msg.session_resumption_update.new_handle
-                if msg.go_away is not None:
-                    log.info("Gemini Live will close the connection soon: ending this conversation cleanly")
-                    state["end"] = True
-                if msg.tool_call and msg.tool_call.function_calls:
-                    bus.emit("state", state="thinking")
-                    for call in msg.tool_call.function_calls:
-                        running.add(t := asyncio.create_task(run_tool(call)))
-                        t.add_done_callback(running.discard)
-                sc = msg.server_content
-                if msg.data:
-                    if state["feed"] is None and speaker is not None:
-                        state["feed"] = speaker.stream_external(OUT_RATE)
-                        bus.emit("state", state="speaking")
-                    if state["feed"] is not None:
-                        state["feed"].put(np.frombuffer(msg.data, dtype=np.int16).astype(np.float32) / 32768.0)
-                    state["last_him"] = time.monotonic()
-                if sc is None:
-                    continue
-                if sc.input_transcription and sc.input_transcription.text:
-                    state["heard"].append(sc.input_transcription.text)
-                    state["last_you"] = time.monotonic()
-                if sc.output_transcription and sc.output_transcription.text:
-                    state["said"].append(sc.output_transcription.text)
-                if sc.interrupted:
-                    # you started talking: stop at once and drop what he was about to say
-                    if speaker is not None:
-                        speaker.stop()
-                    state["feed"] = None
-                    self._flush_said(state, cut=True)
-                    bus.emit("interrupted")
-                    bus.emit("state", state="listening")
-                if sc.turn_complete:
-                    finish_feed()
-                    self._flush_heard(state)
-                    self._flush_said(state)
-                    state["last_him"] = time.monotonic()
-                    if not state["end"]:
-                        bus.emit("state", state="listening", follow_up=True)
-                if state["end"]:
-                    return
+            while not state["end"]:
+                got = False
+                async for msg in session.receive():          # one answer (or tool call) at a time
+                    got = True
+                    if await on_message(msg):
+                        return
+                if not got:
+                    return                                  # the connection has closed
+
+        async def on_message(msg) -> bool:
+            """Handle one message from Gemini. True when the conversation should end."""
+            if msg.session_resumption_update and msg.session_resumption_update.new_handle:
+                self.resume_handle = msg.session_resumption_update.new_handle
+            if msg.go_away is not None:
+                log.info("Gemini Live will close the connection soon: ending this conversation cleanly")
+                state["end"] = True
+            if msg.tool_call and msg.tool_call.function_calls:
+                bus.emit("state", state="thinking")
+                for call in msg.tool_call.function_calls:
+                    running.add(t := asyncio.create_task(run_tool(call)))
+                    t.add_done_callback(running.discard)
+            sc = msg.server_content
+            if msg.data:
+                if state["feed"] is None and speaker is not None:
+                    state["feed"] = speaker.stream_external(OUT_RATE)
+                    bus.emit("state", state="speaking")
+                if state["feed"] is not None:
+                    state["feed"].put(np.frombuffer(msg.data, dtype=np.int16).astype(np.float32) / 32768.0)
+                state["last_him"] = time.monotonic()
+            if sc is None:
+                return False
+            if sc.input_transcription and sc.input_transcription.text:
+                state["heard"].append(sc.input_transcription.text)
+                state["last_you"] = time.monotonic()
+            if sc.output_transcription and sc.output_transcription.text:
+                state["said"].append(sc.output_transcription.text)
+            if sc.interrupted:
+                # you started talking: stop at once and drop what he was about to say
+                if speaker is not None:
+                    speaker.stop()
+                state["feed"] = None
+                self._flush_said(state, cut=True)
+                bus.emit("interrupted")
+                bus.emit("state", state="listening")
+            if sc.turn_complete:
+                finish_feed()
+                self._flush_heard(state)
+                self._flush_said(state)
+                state["last_him"] = time.monotonic()
+                if not state["end"]:
+                    bus.emit("state", state="listening", follow_up=True)
+            return bool(state["end"])
 
         async def watch_idle() -> None:
             started = time.monotonic()
@@ -468,22 +548,49 @@ class LiveVoice:
         return True
 
 
-class _Ended(Exception):
-    pass
+class LiveError(Exception):
+    """Why Gemini Live couldn't be used, in words for Settings. kind: network | key | quota | model | setup | other."""
+
+    def __init__(self, kind: str, reason: str) -> None:
+        super().__init__(reason)
+        self.kind, self.reason = kind, reason
 
 
-def _quota_or_auth(err: str) -> bool:
-    e = err.lower()
-    return any(s in e for s in ("api key", "api_key", "permission", "401", "403", "429", "quota", "exhausted"))
+def describe(exc: BaseException) -> LiveError:
+    """Turn whatever went wrong into what it means, never a guess like "no internet" for everything."""
+    import socket
+    import ssl
 
-
-def _plain(err: str) -> str:
-    e = err.lower()
-    if "429" in e or "quota" in e or "exhausted" in e:
-        return "free quota used up for now"
-    if "api key" in e or "api_key" in e or "401" in e or "403" in e:
-        return "the Gemini key was refused"
-    if "name or service" in e or "connect" in e or "timed out" in e or "network" in e:
-        return "no internet connection"
-    return err or "couldn't connect"
-
+    if isinstance(exc, LiveError):
+        return exc
+    text = f"{exc}"
+    low = f"{type(exc).__name__}: {text}".lower()
+    code = getattr(exc, "code", None) or getattr(getattr(exc, "response", None), "status_code", None)
+    try:
+        code = int(code) if code is not None else None
+    except (TypeError, ValueError):
+        code = None
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if status is None and type(exc).__name__ == "InvalidStatus":
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+    if code == 429 or "resource_exhausted" in low or "quota" in low:
+        return LiveError("quota", "Google's free allowance is used up for now")
+    if code in (401, 403) or status in (401, 403) or "api key" in low or "api_key" in low or "permission" in low:
+        return LiveError("key", "Google refused the Gemini key")
+    if code == 404 or status == 404 or ("not found" in low and "model" in low) or "is not supported" in low:
+        return LiveError("model", f"this Gemini Live model isn't available to the key ({text[:120]})")
+    if code in (1007, 1008, 400) or "invalid argument" in low or "invalid_argument" in low:
+        return LiveError("setup", f"Google refused the session setup ({text[:160]})")
+    if isinstance(exc, socket.gaierror) or "nodename nor servname" in low or "name or service not known" in low:
+        return LiveError("network", "can't find Google's server (no internet, or DNS is blocked)")
+    if isinstance(exc, ssl.SSLError) or "certificate" in low:
+        return LiveError("network", f"the secure connection to Google failed ({text[:120]})")
+    if isinstance(exc, (ConnectionRefusedError, ConnectionResetError)) or "reset by peer" in low:
+        return LiveError("network", "the connection to Google was blocked or reset (a firewall or VPN?)")
+    if isinstance(exc, (TimeoutError, asyncio.TimeoutError)) or "timed out" in low:
+        return LiveError("network", "Google didn't answer in time (a firewall or VPN may be blocking live connections)")
+    if isinstance(exc, OSError):
+        return LiveError("network", f"network error ({text[:120]})")
+    if code:
+        return LiveError("other", f"Google ended the session ({code}: {text[:140]})")
+    return LiveError("other", f"{type(exc).__name__}: {text[:160]}")

@@ -24,10 +24,12 @@ def content(**k):
 
 
 class FakeSession:
-    """Plays a script: each step waits until the mic has sent `after` chunks, then yields messages."""
+    """Plays a script like Google's library does: receive() yields one answer and stops after its
+    turn_complete; the next receive() carries on. Each step waits until the mic has sent `after` chunks."""
 
     def __init__(self, script):
-        self.script, self.audio_in, self.tool_responses, self.client_content = script, 0, [], []
+        self.audio_in, self.tool_responses, self.client_content = 0, [], []
+        self._steps = list(script)
 
     async def __aenter__(self):
         return self
@@ -45,13 +47,17 @@ class FakeSession:
         self.client_content.append(turns)
 
     async def receive(self):
-        for after, messages in self.script:
+        while not self._steps:
+            await asyncio.sleep(0.05)              # nothing more to say: the connection just stays open
+        while self._steps:
+            after, messages = self._steps[0]
             while self.audio_in < after:
                 await asyncio.sleep(0.01)
+            self._steps.pop(0)
             for m in (messages() if callable(messages) else messages):
                 yield m
-        while True:                       # the connection stays open; the idle watch ends the conversation
-            await asyncio.sleep(0.05)
+                if m.server_content is not None and getattr(m.server_content, "turn_complete", False):
+                    return                         # one answer per receive(), as the real library does
 
 
 class FakeSpeaker:
@@ -213,7 +219,7 @@ def test_when_gemini_cant_be_reached_the_local_voice_takes_over(cfg, monkeypatch
                     raise RuntimeError("429 RESOURCE_EXHAUSTED: quota")
     monkeypatch.setattr(lv, "_client", lambda: Broken)
     assert run(lv, mic_queue()) is False
-    assert not lv.ready() and "quota" in app.capabilities["live_voice"]
+    assert not lv.ready() and "allowance" in app.capabilities["live_voice"]
 
 
 def test_no_key_means_no_gemini(cfg, monkeypatch):
@@ -235,3 +241,62 @@ def test_settings_choose_the_voice_and_accent(cfg, monkeypatch):
     assert "voice: Orus" in cfg.user_config_path.read_text()
     assert c.post("/api/setup/live", json={"voice": "Nobody"}).status_code == 400
     assert c.post("/api/setup/live-key", json={"key": "short"}).status_code == 400       # never sent to Google
+
+
+def test_a_conversation_carries_on_past_the_first_answer(cfg, monkeypatch):
+    pcm = (np.ones(2400) * 1000).astype(np.int16).tobytes()
+    done = lambda: msg(server_content=content(turn_complete=True))
+    say = lambda text: msg(server_content=content(output_transcription=NS(text=text)))
+    script = [(2, [msg(data=pcm), say("First answer."), done()]),
+              (6, [msg(data=pcm), say("Second answer."), done()])]
+    app, lv, session, _ = make(cfg, monkeypatch, script)
+    from jarvis.events import bus
+    seen = []
+    monkeypatch.setattr(bus, "emit", lambda kind, **k: seen.append((kind, k)))
+    run(lv, mic_queue(4.0))
+    replies = [k["text"] for kind, k in seen if kind == "reply"]
+    assert replies == ["First answer.", "Second answer."], replies
+
+
+def test_a_refused_setup_is_retried_plainer_and_remembered(cfg, monkeypatch):
+    from google.genai import errors
+
+    app, lv, session, connects = make(cfg, monkeypatch, [])
+    levels = []
+
+    class Picky:
+        class aio:
+            class live:
+                @staticmethod
+                def connect(model, config):
+                    level = "full" if config.context_window_compression else "basic"
+                    levels.append(level)
+                    if level == "full":
+                        raise errors.APIError(1007, {"message": "Request contains an invalid argument."})
+                    return session
+    monkeypatch.setattr(lv, "_client", lambda: Picky)
+    assert run(lv, mic_queue(1.5)) is True
+    assert levels == ["full", "basic"] and lv.level == "basic"
+    run(lv, mic_queue(1.5))
+    assert levels[-1] == "basic"                         # remembered: not refused again
+
+
+@pytest.mark.parametrize("exc, kind, words", [
+    (TimeoutError("timed out during opening handshake"), "network", "didn't answer in time"),
+    (ConnectionResetError("reset"), "network", "blocked or reset"),
+    (OSError(8, "nodename nor servname provided"), "network", "can't find Google"),
+    (RuntimeError("429 RESOURCE_EXHAUSTED"), "quota", "allowance"),
+    (RuntimeError("API key not valid"), "key", "refused the Gemini key"),
+])
+def test_failures_are_described_as_what_they_are(exc, kind, words):
+    err = live_mod.describe(exc)
+    assert err.kind == kind and words in err.reason
+
+
+def test_settings_test_reports_a_real_exchange(cfg, monkeypatch):
+    pcm = (np.ones(2400) * 1000).astype(np.int16).tobytes()
+    script = [(0, [msg(data=pcm), msg(server_content=content(turn_complete=True))])]
+    app, lv, session, _ = make(cfg, monkeypatch, script)
+    r = asyncio.run(lv.test())
+    assert r["ok"] and r["model"] == live_mod.MODELS[0] and r["first_sound_s"] >= 0
+    assert session.client_content                          # it really asked Gemini to speak
