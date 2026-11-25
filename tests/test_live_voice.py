@@ -302,9 +302,11 @@ def test_settings_test_reports_a_real_exchange(cfg, monkeypatch):
     assert session.client_content                          # it really asked Gemini to speak
 
 
-def test_the_client_asks_for_the_api_version_that_has_live(cfg):
+def test_the_client_asks_for_the_api_version_that_has_live(cfg, monkeypatch):
     """google-genai 3.x defaults to v1, where Live doesn't exist (HTTP 404 on connect)."""
     from types import SimpleNamespace
+
+    monkeypatch.setenv("GEMINI_API_KEY", "x" * 39)
 
     lv = live_mod.LiveVoice(SimpleNamespace(cfg=cfg, capabilities={}))
     client = lv._client()
