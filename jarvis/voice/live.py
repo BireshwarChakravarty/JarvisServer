@@ -34,6 +34,7 @@ log = logging.getLogger("jarvis.live")
 
 MODELS = ["gemini-3.8-live", "gemini-3.1-flash-live-preview"]   # newest first; the next is tried on failure
 IN_RATE, OUT_RATE = 16000, 24000
+API_VERSION = "v1beta"      # the only API version that serves Live (google-genai 3.x defaults to v1)
 KEY_ENV = "GEMINI_API_KEY"
 DEFAULT_VOICE = "Charon"
 VOICES = {   # Google's voices, the ones chosen by ear for JARVIS (any of Google's 30 can be set in config.yaml)
@@ -227,8 +228,11 @@ class LiveVoice:
 
     def _client(self):
         from google import genai
+        from google.genai import types
 
-        return genai.Client(api_key=api_key())
+        # google-genai 3.x talks to API "v1" by default, which has no Live service (the connection is
+        # answered with 404); Google serves Live only on v1beta.
+        return genai.Client(api_key=api_key(), http_options=types.HttpOptions(api_version=API_VERSION))
 
     # ── a conversation ────────────────────────────────────────────────────────────────────────────────
     async def converse(self, q: asyncio.Queue, preroll: list | None = None) -> bool:

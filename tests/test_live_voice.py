@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("google.genai")
 
-from jarvis.voice import live as live_mod  # noqa: E402
+from jarvis.voice import live as live_mod
 
 
 def msg(**k):
@@ -300,3 +300,12 @@ def test_settings_test_reports_a_real_exchange(cfg, monkeypatch):
     r = asyncio.run(lv.test())
     assert r["ok"] and r["model"] == live_mod.MODELS[0] and r["first_sound_s"] >= 0
     assert session.client_content                          # it really asked Gemini to speak
+
+
+def test_the_client_asks_for_the_api_version_that_has_live(cfg):
+    """google-genai 3.x defaults to v1, where Live doesn't exist (HTTP 404 on connect)."""
+    from types import SimpleNamespace
+
+    lv = live_mod.LiveVoice(SimpleNamespace(cfg=cfg, capabilities={}))
+    client = lv._client()
+    assert client._api_client._http_options.api_version == "v1beta"

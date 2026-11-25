@@ -48,6 +48,13 @@ jobs:
           python -m pip install -e ".[dev]"
           python -m pytest -q -rs
 
+      # A real conversation with Google's Gemini Live, when the repository has the GEMINI_API_KEY secret.
+      - name: Gemini Live, for real
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          JARVIS_HOME: ${{ runner.temp }}/live-home
+        run: python scripts/live_check.py
+
       - name: Stamp the release number
         run: |
           V="$(scripts/version.sh)"
